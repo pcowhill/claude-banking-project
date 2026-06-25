@@ -108,5 +108,34 @@ dependencies · status · result/outcome · related commit/tag.
 | D-08 | Tests (unit/integration + e2e + verify) | Testing/QA | Shared transaction helpers unit-tested; backend endpoint access + filter integration tests; Playwright: overview → detail → transactions, pending/posted visible, search/filter, statements placeholder; `npm run verify` green | D-01..D-07 | Done | +13 shared +10 backend = **93** Vitest; `e2e/dashboard.spec.ts` (+8) = **22** e2e; verify green |
 | D-09 | Milestone handoff | Process Scribe | Update all handoff docs (report, review, next prompt, state/next, board, experiment log, changelog, quality report); annotated tag `v0.4.0` | D-01..D-08 | Done | This board + report/review/next-prompt + state/next/changelog/experiment-log/quality-report; version bumped to 0.4.0; tag `v0.4.0` |
 
-> Later milestones (v0.5.0–v1.0.0) are summarized in `ROADMAP.md` and will be
+## Milestone v0.5.0 — Operations simulator core  ▶️ In Progress
+
+> Approved to start by the human (see `feedback/FEEDBACK_v0.4_2026-06-25_1228.md` —
+> "Everything looks good so far. Keep moving forward toward the next milestone.").
+> **No re-scope.** This milestone turns the operations console's placeholders into a
+> live, WebSocket-driven workflow. The **risky shared areas** here are the shared
+> contract (`O-01`), the **Prisma schema/migration** (`O-02`, the first migration
+> since v0.2.0), the **routing** of the new ops endpoints (`O-06`), and the
+> **real-time** channel + socket RBAC (`O-05`). These are built **serially, first,
+> and reviewed**; the API + socket-event contract is **locked** before the operations
+> frontend (`O-07`/`O-08`) is built on it. **Money discipline is preserved:** operator
+> actions in v0.5.0 change request *workflow state* + write audit + push real-time
+> updates — they do **not** create ledger entries (money movement is v0.7.0). Balances
+> stay DERIVED; the simulation disclaimer stays visible; v0.2.0 auth / v0.3.0 site /
+> v0.4.0 dashboard are not regressed.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| O-01 | Ops contract (shared DTOs + socket events) | Backend/Shared | New `packages/shared/src/operations.ts`: action/priority/channel enums, `OperationsRequestDTO` + detail + `OperatorActionLogDTO` + `SimulatedEventDTO`, API request/response DTOs, socket-event names + payload types, and PURE helpers (`nextStatusForAction`, `isTerminalOpsStatus`, label/`OPS_QUEUES` helpers); dependency-free; unit-tested; **contract locked before UI** | v0.4.0 | In Progress | — |
+| O-02 | Schema flesh-out + migration | Backend/API (risky, serial) | Expand `OperationsRequest` (priority, detail, subjectName/email, lastActor\*/lastAction/lastActionNote, resolvedAt) + new `SimulatedEvent` model (channel/direction/kind/status/summary/detail/requestId) + relation; `migrate dev --name operations_core`; **additive only** — no change to money/auth tables; `db:reset` works | O-01 | Ready | — |
+| O-03 | Realistic seeded ops queue + initial simulated events | Backend/API | Extend the seed PLAN with a dated, varied set of **pending** ops requests (identity/MFA/password-reset/support/dispute/fraud/onboarding/deposit-review/ACH/external-acct) across the demo users + a few seeded simulated events; new invariants (known type/status/priority/channel); money + access invariants still pass; **no money created** | O-01,O-02 | Ready | — |
+| O-04 | Ops domain service + action state machine + audit | Backend/API (risky, serial) | `src/ops/requests.ts`: list (filter by status/type) + detail (with action history from `AuditLog`) + `applyOperatorAction` (validate transition via shared helper, persist, write `AuditLog` row, optionally spawn a simulated event) + `createSimulatedEvent`; mappers to DTOs; invalid transition / unknown id are typed errors | O-01,O-02 | Ready | — |
+| O-05 | Real-time: testable publisher + socket RBAC | Backend/API (risky, serial) | `src/ops/realtime.ts`: `OpsRealtime` interface + Socket.IO impl + recording double for tests; `attachRealtime` gains a handshake middleware that resolves the **ops** session cookie and joins operators to an `ops` room; ops events broadcast to that room ONLY (customers never receive them); `buildServer` decoration + `index.ts` wiring | O-01,O-04 | Ready | — |
+| O-06 | Ops routes (RBAC-gated) | Backend/API (risky, serial) | `/api/ops/requests` (list+counts), `/api/ops/requests/:id` (detail+history), `POST /api/ops/requests/:id/action` (approve/reject/hold/request_info + note → emits real-time), `POST /api/ops/simulate/event` (+ emits), `/api/ops/events` (feed); all `requireRole('ops_agent','admin')`; extend `/api/ops/summary` (queue counts) backward-compatibly | O-04,O-05 | Ready | — |
+| O-07 | Live operations console — queues + operator actions | Frontend Operations | Replace the placeholder queues with **live** data from `/api/ops/requests`; filter by status/type; approve/reject/hold/request-info with an optional note; a `useOpsSocket` hook (socket.io-client, `withCredentials`) applies `ops:request_changed` live; loading/empty/offline states; disclaimer visible | O-01,O-06 | Ready | — |
+| O-08 | Simulated external events + activity feed | Frontend Operations | A clearly-labelled **simulated** SMS/email/MFA/identity panel that POSTs `/api/ops/simulate/event` and shows the resulting event feed live (`ops:external_event`); an operator-action activity feed (audit) on request detail; never implies a real provider | O-01,O-06 | Ready | — |
+| O-09 | Tests (unit/integration + e2e) + verify | Testing/QA | Shared helpers unit-tested; backend integration: RBAC matrix (customer/joint 403; ops/admin 200), each action transition, invalid action 400, unknown id 404, audit row written, real-time publisher invoked (recording double), simulate event; Playwright operator journey (login → queue → action updates → simulated event); `npm run verify` green | O-01..O-08 | Ready | — |
+| O-10 | Security review + milestone handoff | Security Reviewer + Process Scribe | Read-only security/simulation-safety audit (ops RBAC on every route + socket room, no customer-private socket leakage, simulated labels, no secrets, ledger untouched); then update ALL handoff docs (report, review, next prompt, state/next, board, experiment log, changelog, quality report), bump version to 0.5.0, annotated tag `v0.5.0` | O-01..O-09 | Ready | — |
+
+> Later milestones (v0.6.0–v1.0.0) are summarized in `ROADMAP.md` and will be
 > decomposed into tasks here when they become the active milestone.
