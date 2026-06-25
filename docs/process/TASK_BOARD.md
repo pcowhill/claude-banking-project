@@ -3,6 +3,10 @@
 **This file is the source of truth for tasks.** GitHub Issues, if present, are a
 convenient mirror only — when they conflict with this file, trust this file.
 
+**GitHub Issues mirror (optional):** `#1` — Milestone v0.1.0 (closed/Done) ·
+`#2` — Milestone v0.2.0 (open/next). Task-level issues for v0.2.0 (A-01…A-10)
+may be created when that milestone becomes active.
+
 **Statuses:** Backlog · Ready · In Progress · In Review · Blocked · Done ·
 Deferred/Removed
 
