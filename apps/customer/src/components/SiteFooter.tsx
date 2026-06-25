@@ -1,16 +1,23 @@
 import { Link } from 'react-router-dom';
 import { APP_VERSION, BRAND, MILESTONE, MILESTONE_NAME } from '@simbank/shared';
 import { Logo } from './Logo';
+import { useAuth } from '../lib/auth-context';
 import { PRODUCT_NAV } from '../lib/nav';
 
-const companyLinks = [
-  { to: '/about', label: 'About Meridian' },
-  { to: '/about#security', label: 'Security' },
-  { to: '/open-account', label: 'Open an account' },
-  { to: '/login', label: 'Log in' },
-];
-
 export function SiteFooter() {
+  // When signed in, the "Open an account" / "Log in" footer links collapse to a
+  // single "Visit your Dashboard" — mirroring the CTAs elsewhere (task R-02).
+  const { user } = useAuth();
+  const companyLinks = [
+    { to: '/about', label: 'About Meridian' },
+    { to: '/about#security', label: 'Security' },
+    ...(user
+      ? [{ to: '/dashboard', label: 'Visit your Dashboard' }]
+      : [
+          { to: '/open-account', label: 'Open an account' },
+          { to: '/login', label: 'Log in' },
+        ]),
+  ];
   return (
     <footer className="mt-16 bg-brand-navy text-white">
       <div className="mx-auto max-w-6xl px-4 py-10">

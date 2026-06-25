@@ -1,12 +1,18 @@
 import type { PrismaClient } from '@prisma/client';
 import {
   deriveBalances,
+  filterTransactions,
+  toTransactionDTOs,
   type AccountRelationship,
   type AccountStatus,
   type AccountSummary,
   type AccountType,
   type LedgerDirection,
+  type LedgerOrigin,
   type LedgerStatus,
+  type RawLedgerRow,
+  type TransactionDTO,
+  type TransactionQuery,
 } from '@simbank/shared';
 
 /**
@@ -127,4 +133,63 @@ export async function listAccessibleAccounts(
   return [...accountById.entries()]
     .map(([id, account]) => toSummary(account, relationshipById.get(id) as AccountRelationship))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** A ledger row from Prisma, narrowed to what the transaction view needs. */
+interface LedgerEntryRow {
+  id: string;
+  accountId: string;
+  amountMinor: number;
+  direction: string;
+  status: string;
+  origin: string;
+  description: string;
+  postedAt: Date | null;
+  createdAt: Date;
+}
+
+/** Convert a persisted ledger row to the pure {@link RawLedgerRow} shape (ISO dates). */
+function toRawLedgerRow(entry: LedgerEntryRow): RawLedgerRow {
+  return {
+    id: entry.id,
+    accountId: entry.accountId,
+    amountMinor: entry.amountMinor,
+    direction: entry.direction as LedgerDirection,
+    status: entry.status as LedgerStatus,
+    origin: entry.origin as LedgerOrigin,
+    description: entry.description,
+    postedAt: entry.postedAt ? entry.postedAt.toISOString() : null,
+    createdAt: entry.createdAt.toISOString(),
+  };
+}
+
+/**
+ * The account header + its transaction history, scoped by the SAME access rules
+ * as a single-account read: `exists=false` → 404, `summary=null` (exists but no
+ * relationship) → 403, otherwise the caller sees the account and its rows.
+ *
+ * Transactions are derived (newest-first, signed amounts, running settled
+ * balance) by the shared `toTransactionDTOs`, then narrowed by an optional
+ * search/filter via the shared `filterTransactions` — one definition reused by
+ * the API and the frontend. Balances remain DERIVED; nothing is stored.
+ */
+export async function listAccountTransactions(
+  prisma: PrismaClient,
+  userId: string,
+  accountId: string,
+  query: TransactionQuery = {},
+): Promise<{ exists: boolean; summary: AccountSummary | null; transactions: TransactionDTO[] }> {
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    include: { ledgerEntries: true },
+  });
+  if (!account) return { exists: false, summary: null, transactions: [] };
+
+  const relationship = await getAccountRelationship(prisma, userId, accountId);
+  if (!relationship) return { exists: true, summary: null, transactions: [] };
+
+  const summary = toSummary(account, relationship);
+  const all = toTransactionDTOs(account.ledgerEntries.map(toRawLedgerRow));
+  const transactions = filterTransactions(all, query);
+  return { exists: true, summary, transactions };
 }

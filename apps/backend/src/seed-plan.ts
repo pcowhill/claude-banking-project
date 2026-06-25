@@ -23,6 +23,13 @@ export interface SeedLedgerEntry {
   status: LedgerStatus;
   origin: LedgerOrigin;
   description: string;
+  /**
+   * How many days before "seed time" this entry is dated (default 0 = today).
+   * The seed writer turns this into the entry's `createdAt`/`postedAt`, so the
+   * demo dashboard shows a realistic, statement-like history with a running
+   * balance — and the data stays fresh on every `db:reset`.
+   */
+  daysAgo?: number;
 }
 
 export interface SeedAccount {
@@ -99,69 +106,119 @@ export function buildSeedPlan(): SeedPlan {
     { userEmail: 'jordan.joint@example.com', accountKey: 'avery-checking', relationship: 'joint' },
   ];
 
-  const entries: SeedLedgerEntry[] = [
-    // --- Bank-originated funding (the ONLY way value enters the system) ------
-    {
-      accountKey: 'avery-checking',
-      amountMinor: toMinor(2500),
-      direction: 'credit',
-      status: 'posted',
-      origin: 'seed',
-      description: 'Opening deposit (seed funding)',
-    },
-    {
-      accountKey: 'avery-savings',
-      amountMinor: toMinor(5000),
-      direction: 'credit',
-      status: 'posted',
-      origin: 'seed',
-      description: 'Opening deposit (seed funding)',
-    },
-    // --- Posted everyday spending ------------------------------------------
-    {
-      accountKey: 'avery-checking',
-      amountMinor: toMinor(84.2),
-      direction: 'debit',
-      status: 'posted',
-      origin: 'payment',
-      description: 'Groceries — Simmons Market',
-    },
-    // --- A pending card hold (reduces available, not current) --------------
-    {
-      accountKey: 'avery-checking',
-      amountMinor: toMinor(25),
-      direction: 'debit',
-      status: 'pending',
-      origin: 'card',
-      description: 'Coffee Roasters (pending authorization)',
-    },
-    // --- Internal transfer checking -> savings (nets to zero system-wide) --
-    {
-      accountKey: 'avery-checking',
-      amountMinor: toMinor(200),
-      direction: 'debit',
-      status: 'posted',
-      origin: 'transfer',
-      description: 'Transfer to Goal Savings',
-    },
-    {
-      accountKey: 'avery-savings',
-      amountMinor: toMinor(200),
-      direction: 'credit',
-      status: 'posted',
-      origin: 'transfer',
-      description: 'Transfer from Everyday Checking',
-    },
-    // --- Bank-originated interest accrual ----------------------------------
-    {
-      accountKey: 'avery-savings',
-      amountMinor: toMinor(4.17),
-      direction: 'credit',
-      status: 'posted',
-      origin: 'interest',
-      description: 'Monthly interest (simulated)',
-    },
-  ];
+  // Entries are built with small paired helpers so amounts stay consistent and
+  // transfers always balance. `daysAgo` dates each entry so the dashboard shows
+  // ~3 months of statement-like history with a running balance. The money
+  // invariants below still hold: value enters ONLY via bank-originated events
+  // (seed/deposit/interest/fee), and every transfer posts both legs.
+  const CHECKING = 'avery-checking';
+  const SAVINGS = 'avery-savings';
+  const entries: SeedLedgerEntry[] = [];
+
+  const post = (
+    accountKey: string,
+    major: number,
+    direction: LedgerDirection,
+    origin: LedgerOrigin,
+    description: string,
+    daysAgo: number,
+  ): void => {
+    entries.push({ accountKey, amountMinor: toMinor(major), direction, status: 'posted', origin, description, daysAgo });
+  };
+  const credit = (accountKey: string, major: number, origin: LedgerOrigin, description: string, daysAgo: number): void =>
+    post(accountKey, major, 'credit', origin, description, daysAgo);
+  const debit = (accountKey: string, major: number, origin: LedgerOrigin, description: string, daysAgo: number): void =>
+    post(accountKey, major, 'debit', origin, description, daysAgo);
+  /** A balanced internal transfer: debit one account, credit the other, same amount + date. */
+  const transfer = (
+    fromKey: string,
+    toKey: string,
+    major: number,
+    daysAgo: number,
+    fromDescription: string,
+    toDescription: string,
+  ): void => {
+    debit(fromKey, major, 'transfer', fromDescription, daysAgo);
+    credit(toKey, major, 'transfer', toDescription, daysAgo);
+  };
+  const unsettled = (
+    accountKey: string,
+    major: number,
+    direction: LedgerDirection,
+    status: 'pending' | 'held',
+    origin: LedgerOrigin,
+    description: string,
+    daysAgo: number,
+  ): void => {
+    entries.push({ accountKey, amountMinor: toMinor(major), direction, status, origin, description, daysAgo });
+  };
+
+  // --- Opening (bank-originated seed funding) --------------------------------
+  credit(CHECKING, 2500, 'seed', 'Opening deposit (seed funding)', 90);
+  credit(SAVINGS, 5000, 'seed', 'Opening deposit (seed funding)', 90);
+
+  // --- Recurring payroll (simulated direct deposit) --------------------------
+  for (const d of [84, 70, 56, 42, 28, 14]) {
+    credit(CHECKING, 2400, 'deposit', 'Payroll — Northwind Traders (direct deposit)', d);
+  }
+
+  // --- Rent (monthly) --------------------------------------------------------
+  for (const d of [80, 50, 20]) {
+    debit(CHECKING, 1450, 'payment', 'Rent — Maple Court Apartments', d);
+  }
+
+  // --- Groceries (same merchant — good for search demos) ---------------------
+  debit(CHECKING, 84.2, 'payment', 'Groceries — Simmons Market', 78);
+  debit(CHECKING, 52.75, 'payment', 'Groceries — Simmons Market', 64);
+  debit(CHECKING, 118.4, 'payment', 'Groceries — Simmons Market', 47);
+  debit(CHECKING, 76.1, 'payment', 'Groceries — Simmons Market', 33);
+  debit(CHECKING, 94.3, 'payment', 'Groceries — Simmons Market', 19);
+  debit(CHECKING, 61.2, 'payment', 'Groceries — Simmons Market', 6);
+
+  // --- Utilities -------------------------------------------------------------
+  debit(CHECKING, 132.45, 'payment', 'City Power & Light', 76);
+  debit(CHECKING, 121.3, 'payment', 'City Power & Light', 46);
+  debit(CHECKING, 140.1, 'payment', 'City Power & Light', 16);
+  debit(CHECKING, 38.9, 'payment', 'Metro Water Services', 74);
+  debit(CHECKING, 41.2, 'payment', 'Metro Water Services', 44);
+  debit(CHECKING, 44.05, 'payment', 'Metro Water Services', 13);
+  debit(CHECKING, 60, 'payment', 'Cellular — RidgeMobile', 72);
+  debit(CHECKING, 60, 'payment', 'Cellular — RidgeMobile', 42);
+  debit(CHECKING, 60, 'payment', 'Cellular — RidgeMobile', 12);
+
+  // --- Subscriptions ---------------------------------------------------------
+  for (const d of [70, 40, 10]) debit(CHECKING, 15.99, 'payment', 'Streamflix subscription', d);
+  for (const d of [68, 38, 8]) debit(CHECKING, 9.99, 'payment', 'CloudTunes membership', d);
+
+  // --- Card spending (posted) ------------------------------------------------
+  debit(CHECKING, 5.25, 'card', 'Coffee Roasters', 60);
+  debit(CHECKING, 5.75, 'card', 'Coffee Roasters', 35);
+  debit(CHECKING, 6.1, 'card', 'Coffee Roasters', 9);
+  debit(CHECKING, 42.1, 'card', 'Trattoria Romana', 55);
+  debit(CHECKING, 38.75, 'card', 'Trattoria Romana', 25);
+  debit(CHECKING, 44.3, 'card', 'QuickFuel', 50);
+  debit(CHECKING, 48.9, 'card', 'QuickFuel', 22);
+  debit(CHECKING, 60, 'card', 'ATM withdrawal — Main & 3rd', 36);
+
+  // --- A simulated fee + a refund (both bank-originated) ----------------------
+  debit(CHECKING, 2, 'fee', 'Paper statement fee', 30);
+  credit(CHECKING, 12.4, 'deposit', 'Refund — Simmons Market', 26);
+
+  // --- Internal transfers (each posts BOTH legs → nets to zero) --------------
+  for (const d of [80, 50, 20]) {
+    transfer(CHECKING, SAVINGS, 200, d, 'Transfer to Goal Savings', 'Transfer from Everyday Checking');
+  }
+  transfer(SAVINGS, CHECKING, 150, 15, 'Transfer to Everyday Checking', 'Transfer from Goal Savings');
+
+  // --- Bank-originated interest accrual on savings ---------------------------
+  credit(SAVINGS, 4.17, 'interest', 'Monthly interest (simulated)', 60);
+  credit(SAVINGS, 4.19, 'interest', 'Monthly interest (simulated)', 30);
+  credit(SAVINGS, 4.21, 'interest', 'Monthly interest (simulated)', 2);
+
+  // --- Current pending / held activity (reduces AVAILABLE, not current) ------
+  unsettled(CHECKING, 5.75, 'debit', 'pending', 'card', 'Coffee Roasters (pending authorization)', 0);
+  unsettled(CHECKING, 320, 'credit', 'pending', 'deposit', 'Mobile check deposit (pending)', 1);
+  unsettled(CHECKING, 75, 'debit', 'held', 'card', 'Rental hold — DriveEasy Cars', 2);
 
   return { users, entries, access };
 }

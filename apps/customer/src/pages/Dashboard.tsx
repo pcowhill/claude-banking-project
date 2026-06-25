@@ -1,22 +1,23 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   formatMinor,
-  type AccountRelationship,
   type AccountSummary,
   type LoginEventDTO,
 } from '@simbank/shared';
 import { Card, CardDescription, CardTitle } from '../components/ui/Card';
 import { BackendStatusPill } from '../components/BackendStatusPill';
 import { cn } from '../lib/cn';
+import { accountTypeLabel, RELATIONSHIP_META } from '../lib/account-display';
 import { useAuth } from '../lib/auth-context';
 import { fetchAccounts, fetchLoginHistory } from '../lib/auth';
 
 /**
- * Authenticated dashboard. Replaces the v0.1.0 hardcoded sample with live data
- * from the backend: the user's accounts (balances DERIVED server-side from the
- * ledger) and their recent sign-in history. Each data section degrades
- * gracefully across loading / empty / offline states so the page stays honest
- * when the backend is down.
+ * Authenticated dashboard — the accounts OVERVIEW (v0.4.0, task D-04). Lists
+ * every account the user may see with ledger-DERIVED balances and a combined
+ * total, each linking into its detail + transaction history. Recent sign-in
+ * activity is retained from v0.2.0. Every section degrades across
+ * loading/empty/offline so the page stays honest when the backend is down.
  */
 
 /** Generic async-fetch state for the dashboard's two data sections. */
@@ -25,14 +26,6 @@ interface AsyncData<T> {
   /** null = request failed (backend offline or unauthorized). */
   data: T | null;
 }
-
-/** Human-readable label + badge tone for a relationship to an account. */
-const RELATIONSHIP_META: Record<AccountRelationship, { label: string; className: string }> = {
-  owner: { label: 'Owner', className: 'bg-brand-navy/10 text-brand-navy' },
-  joint: { label: 'Joint', className: 'bg-brand-teal/10 text-brand-teal-dark' },
-  authorized: { label: 'Authorized', className: 'bg-brand-gold/20 text-brand-ink' },
-  viewer: { label: 'View only', className: 'bg-slate-100 text-slate-500' },
-};
 
 /** Friendly description of a login attempt's outcome. */
 function describeLoginEvent(event: LoginEventDTO): string {
@@ -53,22 +46,22 @@ function describeLoginEvent(event: LoginEventDTO): string {
 function formatTimestamp(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function AccountCard({ account }: { account: AccountSummary }) {
+function AccountOverviewCard({ account }: { account: AccountSummary }) {
   const meta = RELATIONSHIP_META[account.relationship];
   const { balances } = account;
   return (
-    <Card>
+    <Link
+      to={`/accounts/${account.id}`}
+      className="group flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <CardTitle>{account.name}</CardTitle>
           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            {account.type.replace('_', ' ')}
+            {accountTypeLabel(account.type)}
           </span>
         </div>
         <span
@@ -83,27 +76,31 @@ function AccountCard({ account }: { account: AccountSummary }) {
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-500">Available</div>
-          <div className="text-2xl font-bold text-brand-navy">
+          <div className="text-2xl font-bold text-brand-navy tabular-nums">
             {formatMinor(balances.availableMinor, account.currency)}
           </div>
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-500">Current</div>
-          <div className="text-2xl font-semibold text-slate-700">
+          <div className="text-2xl font-semibold text-slate-700 tabular-nums">
             {formatMinor(balances.currentMinor, account.currency)}
           </div>
         </div>
       </div>
-      {balances.pendingDebitMinor > 0 && (
+      {balances.pendingDebitMinor + balances.heldMinor > 0 && (
         <CardDescription>
-          Includes {formatMinor(balances.pendingDebitMinor, account.currency)} in pending holds.
+          Includes {formatMinor(balances.pendingDebitMinor + balances.heldMinor, account.currency)}{' '}
+          pending/held.
         </CardDescription>
       )}
-    </Card>
+      <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-teal-dark group-hover:gap-2">
+        View transactions <span aria-hidden="true">→</span>
+      </span>
+    </Link>
   );
 }
 
-function AccountsSection({ state }: { state: AsyncData<AccountSummary[]> }) {
+function AccountsOverview({ state }: { state: AsyncData<AccountSummary[]> }) {
   if (state.loading) {
     return (
       <section className="mt-6 grid gap-4 md:grid-cols-2" aria-busy="true">
@@ -141,26 +138,44 @@ function AccountsSection({ state }: { state: AsyncData<AccountSummary[]> }) {
     );
   }
 
+  // Combined available across every account the user can see (single currency in
+  // the simulation today, so a plain sum is correct).
+  const currency = state.data[0]?.currency ?? 'USD';
+  const totalAvailable = state.data.reduce((sum, a) => sum + a.balances.availableMinor, 0);
+
   return (
-    <section className="mt-6 grid gap-4 md:grid-cols-2">
-      {state.data.map((account) => (
-        <AccountCard key={account.id} account={account} />
-      ))}
+    <section className="mt-6">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            Total available across your accounts
+          </div>
+          <div className="text-3xl font-bold text-brand-navy tabular-nums">
+            {formatMinor(totalAvailable, currency)}
+          </div>
+        </div>
+        <span className="text-xs text-slate-400">
+          {state.data.length} {state.data.length === 1 ? 'account' : 'accounts'}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {state.data.map((account) => (
+          <AccountOverviewCard key={account.id} account={account} />
+        ))}
+      </div>
     </section>
   );
 }
 
 function LoginHistorySection({ state }: { state: AsyncData<LoginEventDTO[]> }) {
   return (
-    <section className="mt-8">
+    <section className="mt-10">
       <h2 className="text-lg font-semibold text-brand-navy">Recent sign-in activity</h2>
       <Card className="mt-3 p-0">
         {state.loading ? (
           <div className="p-6 text-sm text-slate-500">Loading recent activity…</div>
         ) : state.data === null ? (
-          <div className="p-6 text-sm text-slate-500">
-            Sign-in history is unavailable right now.
-          </div>
+          <div className="p-6 text-sm text-slate-500">Sign-in history is unavailable right now.</div>
         ) : state.data.length === 0 ? (
           <div className="p-6 text-sm text-slate-500">No sign-in activity recorded yet.</div>
         ) : (
@@ -180,10 +195,7 @@ function LoginHistorySection({ state }: { state: AsyncData<LoginEventDTO[]> }) {
                     {event.ip && <div className="text-xs text-slate-400">from {event.ip}</div>}
                   </div>
                 </div>
-                <time
-                  className="shrink-0 text-xs text-slate-500"
-                  dateTime={event.createdAt}
-                >
+                <time className="shrink-0 text-xs text-slate-500" dateTime={event.createdAt}>
                   {formatTimestamp(event.createdAt)}
                 </time>
               </li>
@@ -197,14 +209,8 @@ function LoginHistorySection({ state }: { state: AsyncData<LoginEventDTO[]> }) {
 
 export function Dashboard() {
   const { user } = useAuth();
-  const [accounts, setAccounts] = useState<AsyncData<AccountSummary[]>>({
-    loading: true,
-    data: null,
-  });
-  const [history, setHistory] = useState<AsyncData<LoginEventDTO[]>>({
-    loading: true,
-    data: null,
-  });
+  const [accounts, setAccounts] = useState<AsyncData<AccountSummary[]>>({ loading: true, data: null });
+  const [history, setHistory] = useState<AsyncData<LoginEventDTO[]>>({ loading: true, data: null });
 
   useEffect(() => {
     let active = true;
@@ -227,7 +233,7 @@ export function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold text-brand-navy">Welcome back, {greetingName}</h1>
           <p className="text-sm text-slate-600">
-            Your simulated accounts and recent sign-in activity.
+            Your simulated accounts, balances, and recent activity.
           </p>
         </div>
         <BackendStatusPill />
@@ -238,17 +244,21 @@ export function Dashboard() {
         number. This is a simulation: no real money or accounts.
       </div>
 
-      <AccountsSection state={accounts} />
+      <AccountsOverview state={accounts} />
 
-      <LoginHistorySection state={history} />
-
+      {/* Quick links */}
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-brand-navy">Coming soon</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Link
+            to="/statements"
+            className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+          >
+            <div className="font-medium text-brand-navy">Statements &amp; documents</div>
+            <div className="mt-0.5 text-xs text-slate-500">Monthly statements (coming soon)</div>
+          </Link>
           {[
             ['Transfers', 'v0.7.0'],
             ['Bill pay', 'v0.7.0'],
-            ['Mobile deposit', 'v0.7.0'],
             ['Cards & fraud', 'v0.8.0'],
           ].map(([label, milestone]) => (
             <div
@@ -261,6 +271,8 @@ export function Dashboard() {
           ))}
         </div>
       </section>
+
+      <LoginHistorySection state={history} />
     </div>
   );
 }

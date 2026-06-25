@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../lib/cn';
+import { useAuth } from '../lib/auth-context';
+import { resolveCtas } from '../lib/cta';
 import { Button } from './ui/Button';
 import { ImagePlaceholder } from './ImagePlaceholder';
 
@@ -82,7 +84,9 @@ export function Section({
   id?: string;
 }) {
   return (
-    <section id={id} className={cn(sectionToneClasses[tone])}>
+    // `scroll-mt` keeps the sticky header from covering a section that is the
+    // target of a `#hash` deep-link (e.g. /about#security). See ScrollToTop.
+    <section id={id} className={cn(sectionToneClasses[tone], id && 'scroll-mt-24')}>
       <div className={cn('mx-auto max-w-6xl px-4 py-14 sm:py-16', className)}>{children}</div>
     </section>
   );
@@ -183,6 +187,11 @@ export function PageHero({
   image?: HeroImage;
   children?: ReactNode;
 }) {
+  // Signed-in visitors get the auth-entry CTAs ("Log in" / "Open an account")
+  // collapsed to a single "Visit your Dashboard" (task R-02); other CTAs (e.g.
+  // "Explore Savings") pass through unchanged.
+  const { user } = useAuth();
+  const resolvedCtas = resolveCtas(ctas ?? [], !!user);
   return (
     <section className="bg-gradient-to-b from-brand-mist to-white">
       <div
@@ -197,9 +206,9 @@ export function PageHero({
             {title}
           </h1>
           {lead && <p className="mt-4 max-w-xl text-lg text-slate-600">{lead}</p>}
-          {ctas && ctas.length > 0 && (
+          {resolvedCtas.length > 0 && (
             <div className="mt-8 flex flex-wrap gap-3">
-              {ctas.map((cta) => (
+              {resolvedCtas.map((cta) => (
                 <Link key={cta.to + cta.label} to={cta.to}>
                   <Button size="lg" variant={cta.variant ?? 'primary'}>
                     {cta.label}
@@ -317,6 +326,17 @@ export function CTASection({
   secondaryLabel?: string;
   secondaryTo?: string;
 }) {
+  // Auth-entry CTAs collapse to a single "Visit your Dashboard" when signed in
+  // (task R-02). CTAs pointing elsewhere (e.g. the Loans&CDs page's "See
+  // Savings"/"See Checking") are unaffected.
+  const { user } = useAuth();
+  const ctas = resolveCtas(
+    [
+      { to: primaryTo, label: primaryLabel, prominent: true },
+      { to: secondaryTo, label: secondaryLabel, prominent: false },
+    ],
+    !!user,
+  );
   return (
     <Section tone="navy">
       <div className="flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
@@ -325,20 +345,23 @@ export function CTASection({
           <p className="mt-2 text-white/75">{body}</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Link to={primaryTo}>
-            <Button size="lg" variant="secondary">
-              {primaryLabel}
-            </Button>
-          </Link>
-          <Link to={secondaryTo}>
-            <Button
-              size="lg"
-              variant="ghost"
-              className="border-white/30 bg-white/10 text-white hover:bg-white/20"
-            >
-              {secondaryLabel}
-            </Button>
-          </Link>
+          {ctas.map((cta) => (
+            <Link key={cta.to + cta.label} to={cta.to}>
+              {cta.prominent ? (
+                <Button size="lg" variant="secondary">
+                  {cta.label}
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="border-white/30 bg-white/10 text-white hover:bg-white/20"
+                >
+                  {cta.label}
+                </Button>
+              )}
+            </Link>
+          ))}
         </div>
       </div>
     </Section>
