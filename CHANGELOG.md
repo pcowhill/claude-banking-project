@@ -8,7 +8,54 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.2.0 — Auth, roles, and demo users** (not started).
+- Next milestone: **v0.3.0 — Public bank website and branding** (not started).
+
+## [0.2.0] — 2026-06-25 — Auth, roles, and demo users
+
+Real authentication, sessions, and role-based access control over the (still
+fully simulated) data. Customers and bank staff now sign in; what each role can
+see is enforced server-side. No real money, accounts, or integrations.
+
+### Added
+
+- **Password hashing** with **bcryptjs** (a real, pure-JS hashing library — no
+  custom crypto, no native build) plus a decoy-hash comparison to avoid
+  user-enumeration timing leaks.
+- **Server-side sessions**: an opaque cookie token whose **SHA-256 hash only** is
+  stored (`Session` table), httpOnly + `SameSite=Lax` cookie, and a sliding idle
+  timeout. Logout revokes the session.
+- **Account lockout**: temporary lock after repeated failed logins (5 attempts →
+  15-minute lock), with a fresh window after expiry.
+- **Role-based access control**: a new `AccountAccess` table (owner/joint/…)
+  scopes what each user sees. `GET /api/accounts` returns only accessible
+  accounts; `GET /api/accounts/:id` returns 403/404 otherwise. `/api/ops/summary`
+  is ops/admin-only; `/api/admin/users` is admin-only and never returns hashes.
+- **Login history & audit**: every attempt is recorded in a new `LoginEvent`
+  table (powering the customer's "recent sign-in activity"); notable events
+  (login, logout, lockout) also write `AuditLog` rows.
+- **Seeded demo users** for each role — customer (Avery), joint customer
+  (Jordan, granted only the shared checking), operations agent (Sam), and admin
+  (Riley) — with hashed, **non-secret** demo passwords documented in the README.
+- **Auth API**: `POST /api/auth/login`, `POST /api/auth/logout`,
+  `GET /api/auth/me`, `GET /api/auth/login-history`; `@fastify/cookie` wired in.
+- **Customer app**: real login (per-error messaging, click-to-fill demo logins),
+  a protected dashboard, session-aware nav, live accounts with server-derived
+  balances + relationship badges, and a recent-sign-in-activity card.
+- **Operations app**: a dark operator login that admits only `ops_agent`/`admin`
+  (a customer login is signed back out), operator identity + role in the header,
+  and a live operations-summary strip.
+- **Tests**: grew from 20 → **65** Vitest unit/integration tests (pure lockout/
+  token/password units; auth + RBAC integration via `app.inject` against an
+  isolated test DB) and from 3 → **8** Playwright e2e tests (customer + operator
+  login journeys, RBAC, protected-route redirect). New `auth_roles_sessions`
+  Prisma migration.
+
+### Notes
+
+- `npm run verify` passes; 65 unit/integration + 8 e2e green. Demo passwords are
+  intentionally non-secret (a simulation aid) and documented in `README.md`.
+- No new runtime audit advisories from the auth work; the prior dev-tooling
+  advisories remain tracked in `docs/process/QUALITY_REPORT.md`.
 
 ## [0.1.0] — 2026-06-25 — Project Foundation
 
