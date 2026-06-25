@@ -54,5 +54,6 @@ Each feedback file MUST contain these sections:
 | File | Milestone reviewed | Date | Summary |
 | --- | --- | --- | --- |
 | `feedback/FEEDBACK_v0.1_2026-06-25_0146.md` | v0.1.0 | 2026-06-25 | "Looking great so far… excited to see v0.2.0." Approves starting v0.2.0. No re-scope; proceed with planned auth milestone. |
+| `feedback/FEEDBACK_v0.2_2026-06-25_0306.md` | v0.2.0 | 2026-06-25 | "Everything seems to be going well." Reports a cross-app **session-bleed bug** (Ops login leaking into the customer dashboard after customer logout). Agreed + fixed as v0.3.0 task `W-00` (per-surface session cookies). Approves starting v0.3.0. |
 
 > When you add a feedback file, also add a row here.
