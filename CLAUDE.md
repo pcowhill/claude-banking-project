@@ -134,4 +134,4 @@ emulate the same plan → implement → test → review → scribe steps in sequ
 ---
 
 _Current milestone: see `docs/PROJECT_STATE.md`. As of this writing the project
-is at **v0.1.0 — Project Foundation** (complete)._
+is at **v0.2.0 — Auth, roles, and demo users** (complete); next is v0.3.0._

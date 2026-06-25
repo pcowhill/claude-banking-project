@@ -1,6 +1,8 @@
 import {
+  ACCOUNT_RELATIONSHIPS,
   BANK_ORIGINATED_ORIGINS,
   toMinor,
+  type AccountRelationship,
   type AccountType,
   type LedgerDirection,
   type LedgerOrigin,
@@ -33,12 +35,26 @@ export interface SeedUser {
   email: string;
   displayName: string;
   role: UserRole;
+  /**
+   * NON-SECRET demo password (SIMULATION ONLY). Stored in the repo on purpose so
+   * a reviewer can sign in to each role. The seed writer hashes it with bcrypt
+   * before it ever touches the database — the plaintext is never persisted.
+   */
+  password: string;
   accounts: SeedAccount[];
+}
+
+/** A non-owner access grant (joint customer / authorized user). */
+export interface SeedAccess {
+  userEmail: string;
+  accountKey: string;
+  relationship: AccountRelationship;
 }
 
 export interface SeedPlan {
   users: SeedUser[];
   entries: SeedLedgerEntry[];
+  access: SeedAccess[];
 }
 
 export function buildSeedPlan(): SeedPlan {
@@ -47,17 +63,40 @@ export function buildSeedPlan(): SeedPlan {
       email: 'avery.customer@example.com',
       displayName: 'Avery Customer',
       role: 'customer',
+      password: 'Customer123!',
       accounts: [
         { key: 'avery-checking', type: 'checking', name: 'Everyday Checking' },
         { key: 'avery-savings', type: 'savings', name: 'Goal Savings' },
       ],
     },
     {
+      email: 'jordan.joint@example.com',
+      displayName: 'Jordan Joint',
+      role: 'joint_customer',
+      password: 'Joint123!',
+      // No owned accounts — joint access to Avery's checking only (see `access`).
+      accounts: [],
+    },
+    {
       email: 'sam.operator@example.com',
       displayName: 'Sam Operator',
       role: 'ops_agent',
+      password: 'Operator123!',
       accounts: [],
     },
+    {
+      email: 'riley.admin@example.com',
+      displayName: 'Riley Admin',
+      role: 'admin',
+      password: 'Admin123!',
+      accounts: [],
+    },
+  ];
+
+  // Non-owner access grants. Jordan (joint customer) can see ONLY Avery's
+  // checking, NOT the savings — this is the data behind the RBAC ownership tests.
+  const access: SeedAccess[] = [
+    { userEmail: 'jordan.joint@example.com', accountKey: 'avery-checking', relationship: 'joint' },
   ];
 
   const entries: SeedLedgerEntry[] = [
@@ -124,7 +163,7 @@ export function buildSeedPlan(): SeedPlan {
     },
   ];
 
-  return { users, entries };
+  return { users, entries, access };
 }
 
 /**
@@ -157,5 +196,49 @@ export function assertSeedInvariants(plan: SeedPlan): void {
     throw new Error(
       `Seed invariant violated: a credit appeared from a non-bank, non-transfer origin '${unexplained.origin}'.`,
     );
+  }
+}
+
+/**
+ * Auth/access integrity invariants the seed must satisfy. Throws on violation.
+ * Keeps the demo-user + access-grant data internally consistent so the RBAC
+ * tests rest on a sound fixture.
+ *
+ *  1. Every user has a unique email and a non-empty demo password.
+ *  2. Every access grant references a declared user and a declared account key,
+ *     with a known relationship.
+ */
+export function assertSeedAccessIntegrity(plan: SeedPlan): void {
+  const emails = new Set<string>();
+  for (const user of plan.users) {
+    const email = user.email.toLowerCase();
+    if (emails.has(email)) {
+      throw new Error(`Seed invariant violated: duplicate user email '${user.email}'.`);
+    }
+    emails.add(email);
+    if (!user.password || user.password.length < 8) {
+      throw new Error(
+        `Seed invariant violated: user '${user.email}' is missing a (>=8 char) demo password.`,
+      );
+    }
+  }
+
+  const accountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+  for (const grant of plan.access) {
+    if (!emails.has(grant.userEmail.toLowerCase())) {
+      throw new Error(
+        `Seed invariant violated: access grant references unknown user '${grant.userEmail}'.`,
+      );
+    }
+    if (!accountKeys.has(grant.accountKey)) {
+      throw new Error(
+        `Seed invariant violated: access grant references unknown account key '${grant.accountKey}'.`,
+      );
+    }
+    if (!ACCOUNT_RELATIONSHIPS.includes(grant.relationship)) {
+      throw new Error(
+        `Seed invariant violated: access grant has unknown relationship '${grant.relationship}'.`,
+      );
+    }
   }
 }

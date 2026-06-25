@@ -18,17 +18,82 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// A person in the system. Real auth (hashing, sessions, RBAC) arrives in v0.2.0.
+/// A person in the system. Auth (hashing, sessions, RBAC) landed in v0.2.0.
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
   displayName String
   role        String   @default("customer") // see UserRole in @simbank/shared
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String   @default("active") // active | disabled
+  // SIMULATION: a bcrypt hash of a non-secret demo password. Never a real
+  // credential. Nullable so a user can exist before a password is set.
+  passwordHash      String?
+  passwordUpdatedAt DateTime?
+  // Lockout bookkeeping (see AUTH in @simbank/shared).
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  accounts  Account[]
-  auditLogs AuditLog[] @relation("ActorAudit")
+  accounts      Account[]
+  auditLogs     AuditLog[]      @relation("ActorAudit")
+  sessions      Session[]
+  accountAccess AccountAccess[]
+  loginEvents   LoginEvent[]
+}
+
+/// A server-side session. The opaque token lives ONLY in the user's httpOnly
+/// cookie; the database stores just its SHA-256 hash, so a DB leak cannot be
+/// replayed as a live session. Standard library hashing only — no custom crypto.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
+/// Grants a user access to an account beyond simple ownership. The primary
+/// owner is recorded on Account.userId AND gets an `owner` row here; joint
+/// customers / authorized users get `joint`/`authorized`/`viewer` rows. This is
+/// how "joint users see only authorized accounts" is enforced.
+model AccountAccess {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  relationship String   @default("owner") // see AccountRelationship in @simbank/shared
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, accountId])
+  @@index([accountId])
+}
+
+/// Append-only login history. One row per login ATTEMPT (success or failure),
+/// powering the customer's "recent sign-in activity" and the lockout counter.
+/// `userId` is null when the attempted email matches no user.
+model LoginEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String
+  success   Boolean
+  reason    String // see LoginReason in @simbank/shared
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 /// A banking product owned by a user (checking, savings, etc.).
@@ -45,6 +110,7 @@ model Account {
   updatedAt DateTime @updatedAt
 
   ledgerEntries LedgerEntry[]
+  access        AccountAccess[]
 
   @@index([userId])
 }

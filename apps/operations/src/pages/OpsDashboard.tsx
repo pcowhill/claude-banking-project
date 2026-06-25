@@ -1,11 +1,15 @@
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { useAuth } from '../lib/auth-context';
+import { useOpsSummary } from '../lib/useOpsSummary';
+import { cn } from '../lib/cn';
 
 /**
- * Operations dashboard SHELL. The queues, actions, simulation controls and
- * simulated external responses are placeholders here; they become live and
- * WebSocket-driven starting in v0.5.0. The structure intentionally mirrors the
- * real workflow so future milestones slot in without re-architecting.
+ * Operations dashboard SHELL. The live overview counts (v0.2.0) sit at the top;
+ * the queues, actions, simulation controls and simulated external responses are
+ * placeholders that become live and WebSocket-driven starting in v0.5.0. The
+ * structure intentionally mirrors the real workflow so future milestones slot in
+ * without re-architecting.
  */
 const queues = [
   { key: 'onboarding', label: 'Onboarding & identity', pending: 0, milestone: 'v0.6.0' },
@@ -37,16 +41,76 @@ const simulatedResponses = [
   { channel: 'Check image', detail: 'Accept / reject deposit' },
 ];
 
+/** One overview tile in the top strip. */
+function SummaryStat({
+  label,
+  value,
+  loading,
+  accent,
+}: {
+  label: string;
+  value: number | undefined;
+  loading: boolean;
+  accent?: boolean;
+}) {
+  return (
+    <Card className="flex flex-col gap-1 py-4">
+      <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+      <span
+        className={cn(
+          'text-2xl font-bold tabular-nums',
+          accent && value ? 'text-brand-gold-soft' : 'text-white',
+        )}
+      >
+        {loading ? '—' : (value ?? 0)}
+      </span>
+    </Card>
+  );
+}
+
+/** Live operations counts from `GET /api/ops/summary` (ops_agent / admin). */
+function OverviewStrip() {
+  const { loading, summary, error } = useOpsSummary();
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+        Platform overview
+      </h2>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryStat label="Customers & staff" value={summary?.users} loading={loading} />
+        <SummaryStat label="Accounts" value={summary?.accounts} loading={loading} />
+        <SummaryStat label="Pending requests" value={summary?.pendingRequests} loading={loading} />
+        <SummaryStat
+          label="Locked accounts"
+          value={summary?.lockedAccounts}
+          loading={loading}
+          accent
+        />
+      </div>
+      {error && (
+        <p className="mt-2 text-xs text-rose-300/80">{error}</p>
+      )}
+    </section>
+  );
+}
+
 export function OpsDashboard() {
+  const { user } = useAuth();
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-xl font-bold text-white">Operations overview</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Simulate the bank-side of every customer action. Actions below are placeholders for the
-          v0.1.0 foundation and light up in later milestones.
+          {user ? `Signed in as ${user.displayName}. ` : ''}Simulate the bank-side of every customer
+          action. The counts below are live; the queues and controls are placeholders that light up
+          in later milestones.
         </p>
       </div>
+
+      {/* Live platform counts (v0.2.0) */}
+      <OverviewStrip />
 
       {/* Request queues */}
       <section>

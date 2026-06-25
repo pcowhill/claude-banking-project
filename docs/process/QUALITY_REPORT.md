@@ -5,6 +5,68 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.2.0 — Auth, roles, and demo users — 2026-06-25
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, 0 errors.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **65 passed / 65**:
+  - `@simbank/shared`: `money.test.ts` (4), `ledger.test.ts` (6).
+  - `@simbank/backend`: `server.test.ts` (4), `seed-plan.test.ts` (12),
+    `auth/lockout.test.ts` (5), `auth/tokens.test.ts` (4),
+    `auth/password.test.ts` (5), `routes/auth.test.ts` (14),
+    `routes/rbac.test.ts` (11).
+- **Build** — backend (tsup) + customer (vite) + operations (vite) all build.
+
+### E2E (Playwright) ✅ PASS
+- **8 passed / 8**: customer marketing home + disclaimer, protected-dashboard
+  redirect, operator login surface (smoke); plus customer login → own accounts →
+  logout, invalid-credentials error, joint-user RBAC scoping, operator console
+  login, and customer-rejected-from-ops (auth journeys).
+- Backend integration tests run single-fork against an isolated `prisma db push`
+  SQLite test DB (never the dev DB; no cross-file races).
+
+### Database
+- `npm run db:reset` works (migrations `init` + `auth_roles_sessions` + seed).
+  Seed writes 4 users, 2 accounts, 7 ledger entries, 3 access grants and
+  self-checks the money + access invariants.
+
+### Security review (pre-gate, read-only) — ✅ No blockers
+A Security/Permissions audit confirmed password handling, session security,
+RBAC/ownership (no IDOR), the login flow (lockout, no user enumeration), and
+data-exposure controls are all sound and test-backed. Three **Low** hardening
+items were raised and are accepted as **tracked follow-ups** (none block v0.2.0):
+
+| ID | Item | Why deferred | Target |
+| --- | --- | --- | --- |
+| SEC-1 | Add a CSRF token (or `SameSite=Strict` session cookie) | `SameSite=Lax` + CORS allowlist adequately mitigate CSRF while all endpoints are reads/auth on localhost; revisit before real state-mutating endpoints | v0.7.0 (money movement) |
+| SEC-2 | Derive cookie `secure` flag from config/HTTPS instead of literal `false` | Correct for local HTTP; no deployment exists | v1.0.0 hardening |
+| SEC-3 | Add `@fastify/helmet` + IP-based rate limit on `/api/auth/login` | Per-account lockout already limits single-account stuffing; local sim | v1.0.0 hardening |
+
+### Dependency audit
+- **No new runtime advisories** introduced by the auth work (`bcryptjs` +
+  `@fastify/cookie`, both clean). The prior **dev/test-tooling advisories**
+  (vite, vitest, esbuild — dev-only, not shipped) are unchanged and remain
+  tracked in the v0.1.0 section below, for the v1.0.0 hardening pass.
+
+### Known limitations / deferred
+- **Frontend component unit tests** remain deferred; the auth UIs are covered by
+  build + the Playwright login journeys. Revisit at v0.4.0 (dashboard logic).
+- **MFA, password reset, device trust** are deferred within the auth theme to
+  later milestones (they pair with the operations queues in v0.5.0+).
+
+### Sandbox-only notes (do not affect users/CI)
+- Same as v0.1.0: Prisma engine local mirror and the opt-in
+  `PLAYWRIGHT_CHROMIUM_PATH` hook were used in the cloud sandbox; standard
+  installs / `npx playwright install` work elsewhere.
+
+### Overall
+**v0.2.0 meets the quality bar.** Gate green (65 + 8 tests), apps runnable with
+real auth, security review clean (no blockers), open items tracked honestly. No
+blockers.
+
+---
+
 ## v0.1.0 — Project Foundation — 2026-06-25
 
 ### Gate: `npm run verify` ✅ PASS

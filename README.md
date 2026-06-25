@@ -13,7 +13,7 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.1.0 — Project Foundation` (see `ROADMAP.md`).
+**Current milestone:** `v0.2.0 — Auth, roles, and demo users` (see `ROADMAP.md`).
 
 ## Tech stack
 
@@ -58,12 +58,34 @@ npm run dev
 > On WSL, the apps bind with host networking so `localhost:5173` / `:5174` work
 > from your Windows browser via WSL2 localhost forwarding.
 
-### What to look at in v0.1.0
+## Signing in (demo accounts)
 
-- The customer marketing home, placeholder **Log in** page, and **Dashboard**
-  shell (balances are *derived* from sample ledger entries, not hard-coded).
+Authentication is **real** as of v0.2.0 (passwords are bcrypt-hashed; sessions
+are httpOnly cookies) but it guards only fake, seeded demo data. The demo
+passwords below are **intentionally non-secret** so you can explore each role.
+Run `npm run db:reset` first to seed these users.
+
+| Role | Where to log in | Email | Password | Can see |
+| --- | --- | --- | --- | --- |
+| Customer | Customer app (`:5173`) | `avery.customer@example.com` | `Customer123!` | Both own accounts (checking + savings) |
+| Joint customer | Customer app (`:5173`) | `jordan.joint@example.com` | `Joint123!` | Only the **shared** checking account |
+| Operations agent | Operations console (`:5174`) | `sam.operator@example.com` | `Operator123!` | Operations summary; staff console |
+| Bank admin | Operations console (`:5174`) | `riley.admin@example.com` | `Admin123!` | Operations + admin user roster |
+
+Sign in repeatedly with the wrong password and the account temporarily locks
+(after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
+recorded; the customer dashboard shows recent sign-in activity.
+
+### What to look at in v0.2.0
+
+- **Customer login → dashboard:** sign in as Avery and see live accounts with
+  *derived* balances (from the ledger, not hard-coded), plus recent sign-in
+  activity. Sign in as Jordan (joint) to see only the shared checking account —
+  the role-based access control in action.
+- **Operations console login:** sign in as Sam (ops) or Riley (admin); a
+  customer login is rejected from the staff console.
 - The operations console with placeholder queues, scenario controls, and
-  simulated external-response panels.
+  simulated external-response panels (they light up in later milestones).
 - The always-on **simulation disclaimer** banner/footer in both apps.
 - A live "backend online / db ready" indicator (proves the API wiring).
 

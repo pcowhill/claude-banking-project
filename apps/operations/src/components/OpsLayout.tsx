@@ -1,8 +1,10 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { APP_VERSION, MILESTONE, MILESTONE_NAME } from '@simbank/shared';
 import { Logo } from './Logo';
+import { RoleBadge } from './RoleBadge';
 import { SimulationBanner } from './SimulationBanner';
 import { useApiStatus } from '../lib/useApiStatus';
+import { useAuth } from '../lib/auth-context';
 import { cn } from '../lib/cn';
 
 const navSections = [
@@ -30,6 +32,48 @@ function OpsStatus() {
   );
 }
 
+/** Signed-in operator identity + log out, shown in the header. */
+function OperatorMenu() {
+  const { user, logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  if (!user) return null;
+
+  async function handleLogout() {
+    setSigningOut(true);
+    try {
+      await logout();
+    } finally {
+      // On logout the app swaps back to the login screen; reset for safety in
+      // case this component is still mounted.
+      setSigningOut(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="hidden flex-col items-end leading-tight sm:flex">
+        <span className="text-sm font-semibold text-white">{user.displayName}</span>
+        <span className="text-[11px] text-slate-400">{user.email}</span>
+      </div>
+      <RoleBadge role={user.role} />
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={signingOut}
+        className={cn(
+          'rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-200 transition-colors',
+          'hover:bg-white/10',
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal focus-visible:ring-offset-2 focus-visible:ring-offset-brand-navy-deep',
+          'disabled:pointer-events-none disabled:opacity-40',
+        )}
+      >
+        {signingOut ? 'Signing out…' : 'Log out'}
+      </button>
+    </div>
+  );
+}
+
 export function OpsLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
@@ -42,7 +86,10 @@ export function OpsLayout({ children }: { children: ReactNode }) {
               Operations Simulator
             </span>
           </div>
-          <OpsStatus />
+          <div className="flex items-center gap-4">
+            <OpsStatus />
+            <OperatorMenu />
+          </div>
         </div>
       </header>
 
