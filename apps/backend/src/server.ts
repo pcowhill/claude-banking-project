@@ -28,6 +28,25 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(cookie);
   app.decorateRequest('user', null);
 
+  // Tolerate an EMPTY application/json body. Fastify's default JSON parser 400s on
+  // an empty body, which silently breaks legitimate bodyless POSTs that still send
+  // a JSON content-type (e.g. a best-effort logout) — the request would be rejected
+  // before the handler runs. Treat an empty body as `{}`; malformed JSON still 400s.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    const text = typeof body === 'string' ? body : '';
+    if (text.trim() === '') {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(text));
+    } catch {
+      const err = new Error('Request body is not valid JSON.') as Error & { statusCode?: number };
+      err.statusCode = 400;
+      done(err, undefined);
+    }
+  });
+
   await app.register(registerRoutes);
 
   return app;

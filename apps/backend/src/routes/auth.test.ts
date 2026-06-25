@@ -166,6 +166,21 @@ describe('auth routes', () => {
       expect(me2.statusCode).toBe(401);
     });
 
+    it('logout works even when the request declares an empty application/json body', async () => {
+      // Regression: a bodyless POST that sets Content-Type: application/json (as a
+      // best-effort browser logout does) must still revoke the session, not 400.
+      const { cookie } = await loginAs(app, DEMO.customer.email, DEMO.customer.password);
+      const out = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: { cookie: cookie!, 'content-type': 'application/json' },
+      });
+      expect(out.statusCode).toBe(200);
+
+      const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: cookie! } });
+      expect(me.statusCode).toBe(401);
+    });
+
     it('treats an expired session as logged out', async () => {
       const { value } = await loginAs(app, DEMO.customer.email, DEMO.customer.password);
       // Force the session to be already expired.
