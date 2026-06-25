@@ -27,3 +27,14 @@ explainable rules engine (no AI/ML), and a disciplined ledger underpins all
 money features — both reflected in the foundation rather than deferred.
 
 _Future changes will be appended below with date, what changed, and why._
+
+---
+
+## 2026-06-25 — v0.3.0 absorbed a bug fix (no scope change)
+
+No change to the milestone **structure or order**. Noted for the record: the
+v0.2.0 review reported a cross-app session-bleed bug; rather than defer it, the fix
+(`W-00`) was folded into **v0.3.0** alongside the website work (it is a small,
+well-scoped auth fix and a prerequisite for shipping a public site whose login
+entry points must behave correctly). The 10-milestone plan is unchanged; v0.3.0 is
+now complete and v0.4.0 (Customer banking dashboard) is next.

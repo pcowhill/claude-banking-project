@@ -8,7 +8,65 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.3.0 — Public bank website and branding** (not started).
+- Next milestone: **v0.4.0 — Customer banking dashboard** (not started).
+
+## [0.3.0] — 2026-06-25 — Public bank website and branding
+
+A polished, multi-page public marketing site for Meridian — built on the existing
+brand tokens and logo — plus a fix for the cross-app session-bleed bug reported in
+the v0.2.0 review. Still a local simulation: no real money, accounts, or
+integrations.
+
+### Fixed
+
+- **Cross-app session isolation (W-00).** The customer portal (`:5173`) and the
+  operations console (`:5174`) share one backend origin, and browser cookies are
+  not isolated by port, so a single shared session cookie let an operations login
+  bleed into the customer portal — after logging out of the customer app,
+  `/dashboard` showed the operator/admin instead of redirecting to the customer
+  login. Each surface now gets its own session cookie (`mer_session` for the
+  customer portal, `mer_ops_session` for the operations console), selected per
+  request by Origin (also matched by the ops port for LAN hosts). The two sessions
+  are now fully independent. No schema change; the cookie stays httpOnly and
+  browser-managed.
+- **Customer logout now actually revokes the session.** A second cause of the same
+  report: the customer logout sent a `POST` with `Content-Type: application/json`
+  but **no body**, so the backend rejected the empty JSON body with **400** and the
+  logout handler never ran (the session was never revoked or cleared). The client
+  no longer declares a JSON content-type on bodyless requests, and the backend now
+  tolerates an empty JSON body (treats it as `{}`; malformed JSON still 400s).
+
+### Added
+
+- **Public marketing pages**: a rebuilt **home page** (hero, value props, product
+  highlights, experience cards, security teaser, testimonial, CTA) plus
+  **`/checking`**, **`/savings`**, **`/cards`** (coming soon), **`/borrow`** (loans
+  & CDs, coming soon), **`/about`** (story, security `#security` anchor, roadmap),
+  and an **`/open-account`** onboarding placeholder that routes to the working
+  login (full onboarding lands in v0.6.0).
+- **Reusable marketing component kit** (`components/marketing.tsx`): `Section`,
+  `PageHero`, `SectionHeading`, `FeatureGrid`, `FAQ` (native `<details>`),
+  `RateTable` (clearly labelled simulated figures), `CTASection`, inline icon set,
+  and milestone tags — so every page stays visually consistent.
+- **Responsive header** with the full product nav, a sticky bar, an accessible
+  **mobile menu** (hamburger with `aria-expanded`/`aria-controls`), and a
+  **skip-to-content** link; **footer** rebuilt with real links to every page.
+- **Image system**: four new drop-in `ImagePlaceholder` slots (checking, savings,
+  borrow, about) wired across the pages; `assets/prompts/IMAGE_GENERATION_PROMPTS.md`
+  and the `public/images/` README extended to cover them (real files drop in with
+  no code change).
+- **Tests**: backend `session-isolation.test.ts` (4 tests) proving the per-surface
+  cookie fix, plus a regression test that a bodyless-JSON logout still revokes, and
+  Playwright `public-site.spec.ts` (5) + a browser-level `session-isolation.spec.ts`
+  (1) that drives both apps in one shared cookie jar. Suite now **70** Vitest
+  unit/integration + **14** Playwright e2e.
+
+### Notes
+
+- `npm run verify` passes (lint, typecheck, 70 tests, build). The simulation
+  disclaimer remains visible site-wide (banner on every page + footer notice).
+- No schema migration and no new runtime audit advisories; the prior dev-tooling
+  advisories remain tracked in `docs/process/QUALITY_REPORT.md`.
 
 ## [0.2.0] — 2026-06-25 — Auth, roles, and demo users
 

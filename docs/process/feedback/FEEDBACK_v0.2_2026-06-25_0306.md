@@ -103,3 +103,13 @@ None blocking. One non-blocking note the human may weigh in on at the next gate:
   Each surface still logs out independently. If the human would instead prefer a
   single mutually-exclusive session across both apps, that is a different product
   decision we can revisit; the current fix follows their stated expectation.
+
+## Implementation note (added at milestone end — the raw block above is unchanged)
+
+During implementation the bug turned out to have **two** root causes, not one. The
+shared-cookie cause (above) was the first; the second was that the customer
+**logout returned HTTP 400** (a bodyless `POST` declaring `Content-Type:
+application/json`, which the backend rejected before the handler ran), so the
+session was never actually revoked or cleared — masked because the client clears
+its own UI state best-effort. Both are fixed and regression-tested. Full analysis:
+`docs/process/HUMAN_REVIEW_v0.3.md` and `docs/process/MILESTONE_REPORT_v0.3.md`.

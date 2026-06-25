@@ -5,6 +5,68 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.3.0 — Public bank website and branding — 2026-06-25
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings** (nav model split into
+  `lib/nav.ts` so the presentational `marketing.tsx` stays component-only).
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **70 passed / 70** (65 + 5 new):
+  `routes/session-isolation.test.ts` (4) + an empty-body-logout regression test in
+  `routes/auth.test.ts`. All prior suites still green.
+- **Build** — backend (tsup) + customer (vite, now 71 modules) + operations all build.
+
+### E2E (Playwright) ✅ PASS
+- **14 passed / 14** (8 + 6 new): `public-site.spec.ts` (5 — home, full nav,
+  coming-soon framing, open-account→login, mobile menu) and `session-isolation.spec.ts`
+  (1 — both apps in one browser context; customer logout redirects `/dashboard` to
+  the customer login while the ops session stays intact).
+
+### Bug fixed this milestone (from the v0.2.0 review) — two root causes
+The reported cross-app session bleed had **two** causes, both fixed and tested:
+1. **Shared host-only session cookie** across both apps → **per-surface cookies**
+   (`mer_session` / `mer_ops_session`) chosen by request `Origin`.
+2. **Logout returned HTTP 400** (bodyless `POST` with `Content-Type: application/json`)
+   so it never revoked the session — a defect **masked** in v0.2.0 because no test
+   asserted server-side state after logout. Fixed in the client (no JSON content-type
+   when bodyless) and hardened the backend (tolerate empty JSON body). **Process
+   lesson:** test the *server effect* of logout (re-fetch a protected route), not
+   just the client UI — now covered by integration + browser-level tests.
+
+### Security review (pre-gate, read-only) — ✅ No blockers
+Session isolation verified (per-surface cookies; ops/admin routes still role-gated;
+default audience is the least-privileged customer). No secrets added; simulation
+disclaimer visible site-wide; all marketing rates/fees clearly labelled simulated.
+The three v0.2.0 **Low** follow-ups (SEC-1 CSRF, SEC-2 config-driven cookie `secure`,
+SEC-3 helmet + login rate-limit) remain accepted, tracked, and unchanged (targets
+v0.7.0 / v1.0.0). No schema change this milestone.
+
+### Dependency audit
+- **No new runtime advisories.** The website work added no runtime dependencies.
+  Prisma is now 5.22.0 (within the existing `^5.20.0` range; lockfile synced). The
+  prior **dev/test-tooling advisories** (vite, vitest, esbuild — dev-only) are
+  unchanged and remain tracked in the v0.1.0 section for the v1.0.0 hardening pass.
+
+### Known limitations / deferred
+- **Frontend component unit tests** remain deferred; the public site is covered by
+  build + the Playwright journeys.
+- **Marketing images are placeholders** (branded gradients) until real files are
+  dropped into `apps/customer/public/images/` (prompts provided for every slot).
+- **`/open-account`** is a placeholder routing to login; real onboarding is v0.6.0.
+
+### Sandbox-only notes (do not affect users/CI)
+- Prisma engines curl-mirrored (query-engine library + schema-engine for
+  `debian-openssl-3.0.x`) and Playwright pointed at the pre-installed Chromium —
+  same approach as Sessions 1–2; standard installs / `npx playwright install` work
+  elsewhere.
+
+### Overall
+**v0.3.0 meets the quality bar.** Gate green (70 + 14 tests, 0 lint warnings), the
+public site is polished/responsive/accessible with the disclaimer visible, and the
+reviewer-reported bug is fixed with regression coverage at two levels. No blockers.
+
+---
+
 ## v0.2.0 — Auth, roles, and demo users — 2026-06-25
 
 ### Gate: `npm run verify` ✅ PASS
