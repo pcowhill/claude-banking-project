@@ -15,7 +15,8 @@ async function main(): Promise<void> {
   const result = await applySeedPlan(prisma, buildSeedPlan());
   console.log(
     `Seed complete (SIMULATION — not real money): ${result.users} users, ` +
-      `${result.accounts} accounts, ${result.entries} ledger entries, ${result.grants} access grants.`,
+      `${result.accounts} accounts, ${result.entries} ledger entries, ${result.grants} access grants, ` +
+      `${result.opsRequests} ops requests, ${result.simulatedEvents} simulated events.`,
   );
 }
 

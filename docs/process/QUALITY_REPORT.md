@@ -5,6 +5,93 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.5.0 — Operations simulator core — 2026-06-25
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **145 passed / 145** (93 + 52 new):
+  `@simbank/shared` `operations.test.ts` (**18** — the action state machine,
+  terminal/transition rules, guards, labels, queue mapping, status counts);
+  `@simbank/backend` `routes/ops.test.ts` (**24** — RBAC matrix, queue/filters,
+  each action transition, invalid/404/409, audit rows, real-time emissions via a
+  recording publisher, simulated events, and a money-discipline assertion),
+  `realtime.test.ts` (**1** integration — real socket clients prove the ops-room
+  RBAC), and **9** new `seed-plan.test.ts` ops-integrity cases. All prior suites
+  still green.
+- **Build** — backend (tsup) + customer (vite) + operations (vite, 102 modules)
+  all build.
+
+### E2E (Playwright) ✅ PASS
+- **25 passed / 25** (22 + 3 new): `operations.spec.ts` — operator → live dashboard
+  (queue snapshot + recent events + Live indicator); action a queue item and see it
+  update; send a simulated event and see it appear live. All prior specs still green.
+
+### Schema migration (first since v0.2.0) — additive
+`operations_core` fleshes out `OperationsRequest` and adds `SimulatedEvent`. The
+generated SQL was reviewed: it rebuilds only `OperationsRequest` (preserving rows
+via `INSERT ... SELECT`) and creates `SimulatedEvent` — the money/auth tables
+(`User`, `Account`, `LedgerEntry`, `Session`, `AccountAccess`, `LoginEvent`,
+`AuditLog`, `SimulationClock`) are untouched.
+
+### Money discipline
+Operator actions change a request's **workflow status** + write an `AuditLog` row;
+they write **no** `LedgerEntry`. Asserted by `ops.test.ts` ("operator actions never
+create ledger entries"). Balances stay derived. Ledger effects of an approval arrive
+with money movement (v0.7.0).
+
+### Security review (pre-gate, read-only) — ✅ PASS
+The Security/Permissions reviewer verified: every `/api/ops/*` route is auth- +
+role-gated (customers/joint → 403, tested); ops events broadcast to the `ops` room
+only with default-deny join logic; operator actions write no ledger and everything
+is audited; inputs validated against shared enums with note/summary caps and a
+clamped `limit`; no real provider SDKs/URLs and events are labelled simulated in code
++ UI; no secrets (only NON-SECRET bcrypt-hashed demo passwords); v0.2.0 auth /
+v0.3.0 per-surface isolation / the `/api/admin/users` no-hash guarantee intact. Its
+one **Medium** (socket-room RBAC lacked an automated test) was **closed in this
+milestone** (`realtime.test.ts`, real clients). New **Low** tracked below.
+
+| ID | Item | Why deferred | Target |
+| --- | --- | --- | --- |
+| SEC-4 | Cap/sanitize an applicant `subjectName` at creation (consistent with `MAX_NOTE_LENGTH`) | In v0.5.0 the queue is seed-only, so subjects are bounded; the cap matters once onboarding intake becomes user-facing | v0.6.0 (onboarding) |
+
+(The prior **Low** follow-ups SEC-1 CSRF, SEC-2 config-driven cookie `secure`, SEC-3
+helmet + login rate-limit remain accepted and tracked. v0.5.0 **does** add
+state-mutating `POST` endpoints — operator actions + simulate-event — but they are
+role-gated to bank staff and `SameSite=Lax` + the CORS allowlist still mitigate CSRF
+on localhost; SEC-1 stays targeted at v0.7.0 when customer-facing money movement
+lands.)
+
+### Dependency audit
+- **No new runtime advisories.** v0.5.0 added no runtime dependencies (Socket.IO
+  was already present; `socket.io-client` is used by the apps and, new this
+  milestone, declared as a backend **devDependency** for the socket integration
+  test). The prior **dev/test-tooling advisories** (vite, vitest, esbuild — dev-only)
+  are unchanged and tracked in the v0.1.0 section for the v1.0.0 hardening pass.
+
+### Known limitations / deferred
+- **Operator actions are workflow-only** — no ledger effect until money movement
+  (v0.7.0). Deliberate and asserted.
+- **Simulated events are recorded, never sent** — no real provider, ever.
+- **Frontend component unit tests** remain deferred; the console is covered by build
+  + the Playwright operator journey + the backend/contract tests (+ the pure ops
+  logic is unit-tested in shared). Revisit at a UI-heavy milestone.
+
+### Sandbox-only notes (do not affect users/CI)
+- Prisma engines curl-mirrored (query-engine library + schema-engine for
+  `debian-openssl-3.0.x`) and Playwright pointed at the pre-installed Chromium —
+  same approach as Sessions 1–4. This session also created a real Prisma
+  **migration** through the mirrored schema engine; standard installs / `npx
+  playwright install` work elsewhere.
+
+### Overall
+**v0.5.0 meets the quality bar.** Gate green (145 + 25 tests, 0 lint warnings), the
+operations console is live and real-time with access-controlled sockets, money
+discipline preserved and asserted, security review PASS (its Medium closed
+in-milestone), open items tracked honestly. No blockers.
+
+---
+
 ## v0.4.0 — Customer banking dashboard — 2026-06-25
 
 ### Gate: `npm run verify` ✅ PASS

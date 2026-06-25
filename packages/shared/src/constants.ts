@@ -24,4 +24,24 @@ export const SOCKET_EVENTS = {
   welcome: 'sim:welcome',
   /** Server -> client periodic heartbeat carrying the simulation clock. */
   heartbeat: 'sim:heartbeat',
+  /**
+   * Server -> OPERATOR client: an operations request was created or updated
+   * (payload: `OpsRequestChangedPayload`). Emitted to the operators room only —
+   * customer clients never receive it (see `OPS_REALTIME_ROOM`).
+   */
+  opsRequestChanged: 'ops:request_changed',
+  /**
+   * Server -> OPERATOR client: a SIMULATED external event (SMS/email/MFA/identity)
+   * was generated (payload: `OpsExternalEventPayload`). Operators room only.
+   */
+  opsExternalEvent: 'ops:external_event',
 } as const;
+
+/**
+ * Socket.IO room that authenticated bank-staff (ops_agent / admin) consoles join
+ * on connect. Operations events are broadcast to THIS room only, so a customer
+ * portal socket — which shares the same Socket.IO server — never receives
+ * operator-facing data. Membership is decided server-side from the operations
+ * session cookie at handshake time (see `apps/backend/src/realtime.ts`).
+ */
+export const OPS_REALTIME_ROOM = 'ops';

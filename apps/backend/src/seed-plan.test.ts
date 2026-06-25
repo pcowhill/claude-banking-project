@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { BANK_ORIGINATED_ORIGINS, USER_ROLES } from '@simbank/shared';
-import { assertSeedAccessIntegrity, assertSeedInvariants, buildSeedPlan } from './seed-plan';
+import {
+  BANK_ORIGINATED_ORIGINS,
+  OPS_REQUEST_PRIORITIES,
+  OPS_REQUEST_STATUSES,
+  OPS_REQUEST_TYPES,
+  SIM_EVENT_CHANNELS,
+  USER_ROLES,
+} from '@simbank/shared';
+import {
+  assertSeedAccessIntegrity,
+  assertSeedInvariants,
+  assertSeedOpsIntegrity,
+  buildSeedPlan,
+} from './seed-plan';
 
 describe('seed plan invariants', () => {
   const plan = buildSeedPlan();
@@ -103,5 +115,71 @@ describe('seed plan auth & access (v0.2.0)', () => {
       relationship: 'joint',
     });
     expect(() => assertSeedAccessIntegrity(tampered)).toThrow(/unknown user/i);
+  });
+});
+
+describe('seed plan operations queue (v0.5.0)', () => {
+  const plan = buildSeedPlan();
+
+  it('seeds a non-trivial queue of work items', () => {
+    expect(plan.operationsRequests.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('uses only known types, statuses, and priorities', () => {
+    for (const request of plan.operationsRequests) {
+      expect(OPS_REQUEST_TYPES).toContain(request.type);
+      if (request.status) expect(OPS_REQUEST_STATUSES).toContain(request.status);
+      if (request.priority) expect(OPS_REQUEST_PRIORITIES).toContain(request.priority);
+    }
+  });
+
+  it('has unique request keys', () => {
+    const keys = plan.operationsRequests.map((r) => r.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('includes pending items so the console has actionable work', () => {
+    const pending = plan.operationsRequests.filter((r) => (r.status ?? 'pending') === 'pending');
+    expect(pending.length).toBeGreaterThan(0);
+  });
+
+  it('never seeds a terminal (approved/rejected) request — they are all actionable', () => {
+    for (const request of plan.operationsRequests) {
+      const status = request.status ?? 'pending';
+      expect(status === 'approved' || status === 'rejected').toBe(false);
+    }
+  });
+
+  it('seeds simulated events on known channels that link only to real request keys', () => {
+    const keys = new Set(plan.operationsRequests.map((r) => r.key));
+    for (const event of plan.simulatedEvents) {
+      expect(SIM_EVENT_CHANNELS).toContain(event.channel);
+      if (event.requestKey) expect(keys.has(event.requestKey)).toBe(true);
+    }
+  });
+
+  it('passes the ops-integrity invariants', () => {
+    expect(() => assertSeedOpsIntegrity(plan)).not.toThrow();
+  });
+
+  it('rejects a simulated event that references an unknown request key', () => {
+    const tampered = buildSeedPlan();
+    tampered.simulatedEvents.push({
+      channel: 'sms',
+      summary: 'orphan event',
+      requestKey: 'no-such-request',
+    });
+    expect(() => assertSeedOpsIntegrity(tampered)).toThrow(/unknown request key/i);
+  });
+
+  it('rejects an unknown request type', () => {
+    const tampered = buildSeedPlan();
+    tampered.operationsRequests.push({
+      key: 'bogus',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      type: 'teleport' as any,
+      summary: 'bogus request',
+    });
+    expect(() => assertSeedOpsIntegrity(tampered)).toThrow(/unknown ops request type/i);
   });
 });

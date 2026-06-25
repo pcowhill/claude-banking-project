@@ -6,6 +6,85 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 5 — v0.5.0 Operations simulator core — 2026-06-25
+
+**Goal:** Complete only `v0.5.0 — Operations simulator core` (live request queues,
+operator approve/reject/hold/request-info actions each audited, real-time updates
+over Socket.IO, simulated SMS/email/MFA/identity events). Human approved with
+"Everything looks good so far. Keep moving forward toward the next milestone." —
+saved verbatim, interpreted as approval to proceed (no re-scope).
+
+**Key decision — preserve money discipline by making actions workflow-only.** The
+biggest scoping call: an operator action in v0.5.0 changes a request's **status**
+and writes an audit row, but never posts to the ledger. Approving a "deposit" or
+"ACH" request does not move money — the ledger effects of an approval belong to
+money movement (v0.7.0). A test (`ops.test.ts` "operator actions never create
+ledger entries") enforces this, so the disciplined-ledger rule is kept by
+construction, not just intention. This also kept the milestone tightly scoped.
+
+**Execution mode (serialized risky areas = contract, schema/migration, routing,
+real-time + socket RBAC):**
+- `O-01` shared `operations.ts` contract (action state machine + DTOs + socket
+  payloads) written and unit-tested **first** to lock the contract before anything
+  built on it.
+- `O-02` Prisma schema flesh-out + the **first migration since v0.2.0**
+  (`operations_core`, additive — money/auth tables untouched), verified by reading
+  the generated SQL.
+- `O-03` seed (10-item dated queue + 4 simulated events + intake audit rows) with
+  new `assertSeedOpsIntegrity`; money + access invariants still pass.
+- `O-04` ops service (state machine + audit reuse + mappers) → `O-05` testable
+  `OpsRealtime` publisher + Socket.IO handshake RBAC (operators room) → `O-06`
+  RBAC-gated routes. Backend tests green, then a **live socket check** proved the
+  operator socket receives events while a customer socket does not.
+- Only then `O-07`/`O-08` the console (one `OpsDataProvider` = one socket + live
+  state), built against the locked contract.
+- `O-10` read-only security review ran before the gate.
+
+**Key decisions:**
+- **Socket RBAC by room, decided at the handshake.** Both apps share one Socket.IO
+  server, so ops events go to an `ops` room joined only by a valid `ops_agent`/
+  `admin` *operations* session (cookie resolved from the request Origin, reusing
+  the v0.3.0 per-surface cookie logic). Default-deny: customer/anonymous sockets
+  connect for welcome/heartbeat but never join the room.
+- **Testable real-time.** Routes emit through an injected `OpsRealtime` publisher
+  (no-op default / Socket.IO impl / recording double), so route tests assert
+  emissions via `app.inject` with no socket, and a separate integration test
+  exercises the real handshake/join path.
+- **One live data context on the client** owns a single socket + the in-memory
+  queue/feed; actions update optimistically and the socket echoes idempotently (by
+  id) and delivers other operators' changes.
+- **Reuse AuditLog + requireRole** rather than inventing new mechanisms — the audit
+  trail and RBAC primitives already existed.
+
+**Security review:** PASS (no Critical/High). Its one **Medium** — the socket-room
+RBAC, the most security-critical new code, had no automated test — was **closed in
+this milestone**: added `apps/backend/src/realtime.test.ts`, which boots
+`attachRealtime` on an ephemeral port and uses real `socket.io-client` connections
+to assert an operator joins + receives while customer/anonymous do not (all still
+get `welcome`). Two Lows: the detail route's 403 added to the RBAC test loop; a
+future `subjectName` cap tracked for v0.6.0 onboarding.
+
+**Surprises / environment friction (sandbox only — not a product issue):**
+- Same Prisma engine-download block as Sessions 1–4 (ECONNRESET to
+  `binaries.prisma.sh`). Resolved the documented way — `npm install
+  --ignore-scripts`, curl-mirror the query-engine library + schema-engine for
+  `debian-openssl-3.0.x`, point Prisma at them via `PRISMA_QUERY_ENGINE_LIBRARY` +
+  `PRISMA_SCHEMA_ENGINE_BINARY` (+ `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING`). Prisma
+  5.22.0, engine `605197351a3c8bdd595af2d2a9bc3025bca48ea2`. This session also
+  created a real **migration** through the mirrored schema engine (not just `db
+  push`), which worked fine.
+- Same Playwright/Chromium build mismatch — used the pre-installed Chromium
+  (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`) via `PLAYWRIGHT_CHROMIUM_PATH`.
+
+**Outcome:** `npm run verify` passes; **145** unit/integration (was 93) + **25**
+Playwright e2e (was 22) green. Additive `operations_core` migration; no new runtime
+audit advisories; security review PASS (its Medium closed in-milestone). Milestone
+complete; annotated tag `v0.5.0` created locally (tag push blocked by env policy —
+HTTP 403 — so the human pushes it on merge; see the milestone report). Session
+branch pushed. Stopped at the gate; did **not** start v0.6.0.
+
+---
+
 ## Session 4 — v0.4.0 Customer banking dashboard — 2026-06-25
 
 **Goal:** Complete only `v0.4.0 — Customer banking dashboard` (accounts overview,
