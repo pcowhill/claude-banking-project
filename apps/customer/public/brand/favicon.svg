@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="Meridian">
+  <circle cx="32" cy="32" r="30" fill="#0A2540"/>
+  <circle cx="32" cy="32" r="30" stroke="#0EA5A4" stroke-width="2"/>
+  <polygon points="32,9 27,32 32,32" fill="#FFFFFF"/>
+  <polygon points="32,9 37,32 32,32" fill="#F2C14E"/>
+  <polygon points="32,55 27,32 32,32" fill="#0B7E7D"/>
+  <polygon points="32,55 37,32 32,32" fill="#0EA5A4"/>
+  <circle cx="32" cy="32" r="3.5" fill="#E0A82E"/>
+</svg>
