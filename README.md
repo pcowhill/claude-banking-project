@@ -13,7 +13,7 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.3.0 — Public bank website and branding` (see `ROADMAP.md`).
+**Current milestone:** `v0.4.0 — Customer banking dashboard` (see `ROADMAP.md`).
 
 ## Tech stack
 
@@ -75,6 +75,25 @@ Run `npm run db:reset` first to seed these users.
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
+
+### New in v0.4.0 (customer banking dashboard)
+
+- **Sign in as Avery → the accounts overview** (`/dashboard`): a combined total and
+  a card per account (available + current, both **derived** from the ledger),
+  linking into each account.
+- **Open an account → transaction history** (`/accounts/:id`): ~3 months of seeded
+  activity with **pending vs posted** clearly separated, a **running balance** on
+  each posted row, and an instant **search** + **status/category filter**. Try
+  searching `Simmons` or filtering to **Pending**.
+- **Statements & documents** (`/statements`): a clearly-labelled placeholder (real
+  statements arrive in v0.9.0).
+- **Logged-in entry points:** while signed in, the public "Log in" / "Open an
+  account" buttons become **"Visit your Dashboard"**, and visiting `/login` shows an
+  "already signed in" page (dashboard link + log out).
+- **Navigation** now scrolls to the top of each page you visit, and the **Security**
+  link deep-links to the security section on the About page.
+- `npm run db:reset` seeds **56** dated ledger entries (all bank-originated or
+  balanced transfer legs — money never appears from nowhere).
 
 ### New in v0.3.0 (public website)
 

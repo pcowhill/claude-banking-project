@@ -1,9 +1,11 @@
 import type {
   AccountSummary,
+  AccountTransactionsResponse,
   ApiErrorResponse,
   AuthResponse,
   LoginEventDTO,
   SessionUser,
+  TransactionQuery,
 } from '@simbank/shared';
 import { API_URL } from './api';
 
@@ -125,5 +127,41 @@ export async function fetchAccounts(): Promise<AccountSummary[] | null> {
     return body?.accounts ?? [];
   } catch {
     return null;
+  }
+}
+
+/**
+ * Result of a transaction fetch. `status` lets the detail page tell apart "not
+ * found / no access" (404/403) from "offline" (status 0) so it can show the
+ * right message; `data` is present only on success.
+ */
+export interface TransactionsFetch {
+  /** HTTP status, or 0 when the backend was unreachable. */
+  status: number;
+  data: AccountTransactionsResponse | null;
+}
+
+/**
+ * GET /api/accounts/:id/transactions (with optional `?q=&group=&origin=`). The
+ * response includes the account header and its derived transactions. Never
+ * throws — network failures surface as `status: 0` so the UI can degrade.
+ */
+export async function fetchAccountTransactions(
+  accountId: string,
+  query: TransactionQuery = {},
+): Promise<TransactionsFetch> {
+  const params = new URLSearchParams();
+  if (query.q) params.set('q', query.q);
+  if (query.group) params.set('group', query.group);
+  if (query.origin) params.set('origin', query.origin);
+  const qs = params.toString();
+  const url = `${API_URL}/api/accounts/${encodeURIComponent(accountId)}/transactions${qs ? `?${qs}` : ''}`;
+  try {
+    const res = await fetch(url, jsonInit());
+    if (!res.ok) return { status: res.status, data: null };
+    const data = await readJson<AccountTransactionsResponse>(res);
+    return { status: res.status, data: data ?? null };
+  } catch {
+    return { status: 0, data: null };
   }
 }

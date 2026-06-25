@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { APP_VERSION } from '@simbank/shared';
 import { buildServer } from './server';
 
 describe('backend server', () => {
@@ -22,11 +23,12 @@ describe('backend server', () => {
     expect(typeof body.uptimeSeconds).toBe('number');
   });
 
-  it('GET /status reports version 0.3.0 and the simulation flag', async () => {
+  it('GET /status reports the platform version and the simulation flag', async () => {
     const res = await app.inject({ method: 'GET', url: '/status' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.version).toBe('0.3.0');
+    // Bind to the single source of truth so this doesn't break each version bump.
+    expect(body.version).toBe(APP_VERSION);
     expect(body.isSimulation).toBe(true);
     expect(['ok', 'degraded']).toContain(body.status);
   });

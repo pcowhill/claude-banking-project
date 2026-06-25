@@ -72,10 +72,13 @@ export async function applySeedPlan(
     });
   }
 
+  const DAY_MS = 24 * 60 * 60 * 1000;
   for (const e of plan.entries) {
     const accountId = accountIdByKey.get(e.accountKey);
     if (!accountId) throw new Error(`Seed references an unknown account key: ${e.accountKey}`);
     const isSettled = e.status === 'posted' || e.status === 'disputed';
+    // Date the entry relative to seed time so the demo shows realistic history.
+    const occurredAt = new Date(now.getTime() - (e.daysAgo ?? 0) * DAY_MS);
     await prisma.ledgerEntry.create({
       data: {
         accountId,
@@ -84,7 +87,8 @@ export async function applySeedPlan(
         status: e.status,
         origin: e.origin,
         description: e.description,
-        postedAt: isSettled ? now : null,
+        postedAt: isSettled ? occurredAt : null,
+        createdAt: occurredAt,
       },
     });
   }
@@ -100,7 +104,7 @@ export async function applySeedPlan(
       actorRole: 'admin',
       action: 'seed_database',
       entity: 'system',
-      reason: 'Demo seed (v0.2.0: demo users, hashed passwords, access grants)',
+      reason: 'Demo seed (v0.4.0: demo users + access grants + dated transaction history)',
     },
   });
 

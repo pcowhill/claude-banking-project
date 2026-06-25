@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { cn } from '../lib/cn';
@@ -10,6 +10,10 @@ import { useAuth } from '../lib/auth-context';
  * success redirects to the originally-requested protected page (or /dashboard).
  * Maps the backend error `code` to a specific, friendly message and keeps the
  * always-on simulation framing front and centre.
+ *
+ * If the visitor is ALREADY signed in (task R-02), the form is replaced with an
+ * "already logged in" panel — a link to the dashboard and a log-out button —
+ * rather than asking a logged-in user to log in again.
  */
 
 interface DemoLogin {
@@ -43,7 +47,7 @@ function messageForCode(code: string, fallback: string): string {
 }
 
 export function Login() {
-  const { login } = useAuth();
+  const { user, loading, login, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,6 +55,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Where to go after a successful sign-in (set by RequireAuth), defaulting to
   // the dashboard. Guard against open-redirects by only honouring local paths.
@@ -75,6 +80,65 @@ export function Login() {
     setEmail(demo.email);
     setPassword(demo.password);
     setError(null);
+  }
+
+  async function handleSignOut() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    await logout();
+    // Stay on /login: `user` becomes null, so the sign-in form renders below.
+    setLoggingOut(false);
+  }
+
+  // While the session is still hydrating, avoid flashing the form for someone
+  // who turns out to be already signed in.
+  if (loading) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center px-4 py-24 text-center">
+        <span
+          className="h-6 w-6 animate-spin rounded-full border-2 border-brand-mist border-t-brand-teal"
+          aria-hidden="true"
+        />
+        <p className="mt-4 text-sm text-slate-500">Checking your session…</p>
+      </div>
+    );
+  }
+
+  // Already signed in → offer the dashboard instead of a redundant login form.
+  if (user) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col px-4 py-16">
+        <h1 className="text-2xl font-bold text-brand-navy">You’re already signed in</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Signed in as <span className="font-semibold text-brand-navy">{user.displayName}</span> — no
+          need to log in again.
+        </p>
+
+        <Card className="mt-6 space-y-4">
+          <p className="text-sm text-slate-600">
+            Jump straight to your simulated accounts, or log out if you’d like to sign in as someone
+            else.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link to="/dashboard" className="sm:flex-1">
+              <Button className="w-full">Visit your Dashboard</Button>
+            </Link>
+            <Button
+              type="button"
+              variant="ghost"
+              className="sm:flex-1"
+              onClick={handleSignOut}
+              disabled={loggingOut}
+            >
+              {loggingOut ? 'Logging out…' : 'Log out'}
+            </Button>
+          </div>
+          <p className="rounded-lg bg-brand-gold/15 px-3 py-2 text-[11px] text-brand-ink">
+            Simulated session. Logging out here returns you to the sign-in form.
+          </p>
+        </Card>
+      </div>
+    );
   }
 
   return (

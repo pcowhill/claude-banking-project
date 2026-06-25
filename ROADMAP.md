@@ -10,9 +10,9 @@ Status legend: ✅ complete · ▶️ in progress · ⏳ planned
 | --- | --- | --- |
 | v0.1.0 | Project foundation | ✅ complete |
 | v0.2.0 | Auth, roles, and demo users | ✅ complete |
-| **v0.3.0** | Public bank website and branding | ✅ complete |
-| v0.4.0 | Customer banking dashboard | ⏳ planned (next) |
-| v0.5.0 | Operations simulator core | ⏳ planned |
+| v0.3.0 | Public bank website and branding | ✅ complete |
+| **v0.4.0** | Customer banking dashboard | ✅ complete |
+| v0.5.0 | Operations simulator core | ⏳ planned (next) |
 | v0.6.0 | Onboarding and account opening | ⏳ planned |
 | v0.7.0 | Money movement | ⏳ planned |
 | v0.8.0 | Cards, fraud, disputes | ⏳ planned |

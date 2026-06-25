@@ -51,8 +51,8 @@ interface Milestone {
 const roadmap: Milestone[] = [
   { tag: 'v0.1.0', name: 'Project foundation', status: 'done' },
   { tag: 'v0.2.0', name: 'Auth, roles, and demo users', status: 'done' },
-  { tag: 'v0.3.0', name: 'Public bank website and branding', status: 'current' },
-  { tag: 'v0.4.0', name: 'Customer banking dashboard', status: 'planned' },
+  { tag: 'v0.3.0', name: 'Public bank website and branding', status: 'done' },
+  { tag: 'v0.4.0', name: 'Customer banking dashboard', status: 'current' },
   { tag: 'v0.5.0', name: 'Operations simulator core', status: 'planned' },
   { tag: 'v0.6.0', name: 'Onboarding and account opening', status: 'planned' },
   { tag: 'v0.7.0', name: 'Money movement', status: 'planned' },

@@ -75,5 +75,38 @@ dependencies · status · result/outcome · related commit/tag.
 | W-08 | Tests (unit/integration + e2e + verify) | Testing/QA | Session-isolation integration tests; public-site Playwright smoke (marketing routes, nav, CTAs); `npm run verify` green | W-00..W-07 | Done | 65→**70** Vitest (session-isolation + empty-body-logout regression); 8→**14** e2e (`public-site.spec.ts` + browser-level `session-isolation.spec.ts`); verify green |
 | W-09 | Milestone handoff | Process Scribe | Update all handoff docs; annotated tag `v0.3.0` | W-00..W-08 | Done | This board + reports; tag `v0.3.0` |
 
-> Later milestones (v0.4.0–v1.0.0) are summarized in `ROADMAP.md` and will be
+## v0.3.0 review follow-ups (folded into the v0.4.0 session)  ✅ Done
+
+> From `feedback/FEEDBACK_v0.3_2026-06-25_1053.md` (human review of v0.3.0). Two
+> small, accepted public-site UX fixes. `R-01` touches client-side **routing** (a
+> risky shared area) so it is done first, serially, and covered by an e2e test.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| R-01 | Scroll-to-top on route change + hash deep-link | Frontend Customer | Every client-side navigation lands at the **top** of the destination page (header, footer, AND in-page CTAs alike — e.g. Loans&CDs "See Savings"/"See Checking"); a URL with a `#fragment` (e.g. the "Security" link → `/about#security`) scrolls that section into view allowing for the sticky header; back/forward restores sensibly; the protected dashboard is not regressed | v0.3.0 | Done | `components/ScrollToTop.tsx` mounted at the router root; hash → `scrollIntoView` with `scroll-mt-24` on `Section`; e2e in `dashboard.spec.ts` (scroll-to-top + `/about#security`) |
+| R-02 | Session-aware public CTAs + "already logged in" /login | Frontend Customer | When authenticated, public CTAs that say "Log in"/"Open an account" instead read **"Visit your Dashboard"** and route to `/dashboard`; visiting `/login` while authenticated shows an **already-logged-in** panel (dashboard link + log-out button) instead of the form; logged-out behavior unchanged; auth/protected route not regressed | v0.3.0 | Done | `lib/cta.ts` (`resolveCtas`, deduped); `Login` authed branch (panel + log-out); `PageHero`/`CTASection`/`SiteFooter` session-aware; e2e in `dashboard.spec.ts` |
+
+## Milestone v0.4.0 — Customer banking dashboard  ✅ Done (tag `v0.4.0`)
+
+> Approved to start by the human (see `feedback/FEEDBACK_v0.3_2026-06-25_1053.md`).
+> **No Prisma schema migration is needed** — the existing append-only `LedgerEntry`
+> model already carries transaction `status` (pending/posted/…) and `origin`, so a
+> transaction *is* a ledger entry. The **API contract (`D-01`) and the seed/endpoint
+> (`D-02`/`D-03`) are the risky shared area** (routing + the data every screen reads):
+> they are built first, serially, with invariants + tests, and the contract is locked
+> before the dashboard UI (`D-04…D-07`) is built on it. Balances stay DERIVED.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| D-01 | Transaction API contract (shared DTOs) | Backend/Shared | `TransactionDTO` (id, accountId, amountMinor, direction, status, origin, description, postedAt/createdAt, running? ) + list response + filter/search query shape, in `@simbank/shared`; pure, dependency-free; documents pending-vs-posted | v0.3.0 | Done | `packages/shared/src/transactions.ts`: `TransactionDTO`, `AccountTransactionsResponse`, `TransactionQuery`, `toTransactionDTOs`, `filterTransactions`, `groupForStatus`, `originLabel`, `signedMinor`; **13** unit tests |
+| D-02 | Realistic seeded transaction history | Backend/API | Extend the seed PLAN with a richer, dated set of transactions across Avery's checking & savings (payroll, groceries, utilities, dining, transfers, interest, a fee, plus current **pending** items) — all bank-originated or balanced transfer legs; existing money + access invariants still pass; **no schema change** | D-01 | Done | `seed-plan.ts` rebuilt with paired helpers + `daysAgo`; `seed-apply.ts` dates each entry (`createdAt`/`postedAt`); 7 → **56** entries; invariants + `seed-plan.test.ts` green |
+| D-03 | Transaction read endpoint (access-scoped) | Backend/API | `GET /api/accounts/:id/transactions` returns the account's transactions newest-first with derived running balance, scoped by the SAME access rules as `/api/accounts/:id` (owner/joint see it; others 403/404); supports `?status=&q=&origin=` filter/search server-side; pending vs posted distinguished | D-01,D-02 | Done | `listAccountTransactions` in `access.ts` (reuses `getAccountRelationship`); route in `accounts.ts` w/ whitelisted `parseTransactionQuery`; `transactions.test.ts` (**10** tests, full access matrix + filters) |
+| D-04 | Accounts overview | Frontend Customer | Dashboard landing shows all accessible accounts grouped (checking/savings), derived available+current balances, a combined total, and links into each account's detail; degrades on loading/empty/offline; disclaimer visible | D-01 | Done | `Dashboard` reworked into an overview: combined total, account cards linking to detail, retained sign-in activity + disclaimer |
+| D-05 | Account detail view | Frontend Customer | `/accounts/:id` shows the account header (name, type, derived balances, pending holds) + its transaction history; 403/404 handled; back to overview | D-03,D-04 | Done | `pages/AccountDetail.tsx` + protected `/accounts/:id` route; loading/offline/403/404 states |
+| D-06 | Transaction history + pending/posted + search/filter | Frontend Customer | Transactions list shows **pending** vs **posted** clearly (grouping/badges), with running balance, and a basic **search** (description) + **filter** (status/origin); empty/least-noise states | D-03,D-05 | Done | `components/TransactionList.tsx`: pending/posted/other groups, running balance, search + status/category filter via shared `filterTransactions` |
+| D-07 | Statements/documents placeholder | Frontend Customer | A clearly-labelled statements/documents placeholder (no real PDFs) reachable from the dashboard/detail, tagged to its future milestone | D-04 | Done | `pages/Statements.tsx` + protected `/statements`; linked from dashboard + detail; "coming soon" (v0.9.0), no real PDFs |
+| D-08 | Tests (unit/integration + e2e + verify) | Testing/QA | Shared transaction helpers unit-tested; backend endpoint access + filter integration tests; Playwright: overview → detail → transactions, pending/posted visible, search/filter, statements placeholder; `npm run verify` green | D-01..D-07 | Done | +13 shared +10 backend = **93** Vitest; `e2e/dashboard.spec.ts` (+8) = **22** e2e; verify green |
+| D-09 | Milestone handoff | Process Scribe | Update all handoff docs (report, review, next prompt, state/next, board, experiment log, changelog, quality report); annotated tag `v0.4.0` | D-01..D-08 | Done | This board + report/review/next-prompt + state/next/changelog/experiment-log/quality-report; version bumped to 0.4.0; tag `v0.4.0` |
+
+> Later milestones (v0.5.0–v1.0.0) are summarized in `ROADMAP.md` and will be
 > decomposed into tasks here when they become the active milestone.

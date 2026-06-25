@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { SiteLayout } from './components/SiteLayout';
 import { RequireAuth } from './components/RequireAuth';
+import { ScrollToTop } from './components/ScrollToTop';
 import { AuthProvider } from './lib/AuthProvider';
 import { MarketingHome } from './pages/MarketingHome';
 import { Checking } from './pages/Checking';
@@ -11,6 +12,8 @@ import { About } from './pages/About';
 import { OpenAccount } from './pages/OpenAccount';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { AccountDetail } from './pages/AccountDetail';
+import { Statements } from './pages/Statements';
 import { NotFound } from './pages/NotFound';
 
 /**
@@ -22,8 +25,10 @@ import { NotFound } from './pages/NotFound';
  *  - "/borrow"       loans & CDs overview (coming soon)
  *  - "/about"        about / trust / security / roadmap
  *  - "/open-account" open-account entry point (onboarding placeholder until v0.6.0)
- *  - "/login"        simulated sign-in (v0.2.0)
- *  - "/dashboard"    authenticated dashboard (protected by RequireAuth)
+ *  - "/login"        simulated sign-in (v0.2.0); "already signed in" when authed
+ *  - "/dashboard"    authenticated accounts overview (protected by RequireAuth)
+ *  - "/accounts/:id" authenticated account detail + transactions (protected)
+ *  - "/statements"   authenticated statements/documents placeholder (protected)
  *  - "*"             not found
  *
  * The whole tree is wrapped in <AuthProvider> so the nav and protected routes
@@ -32,6 +37,7 @@ import { NotFound } from './pages/NotFound';
 export function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AuthProvider>
         <Routes>
           <Route element={<SiteLayout />}>
@@ -48,6 +54,22 @@ export function App() {
               element={
                 <RequireAuth>
                   <Dashboard />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/accounts/:id"
+              element={
+                <RequireAuth>
+                  <AccountDetail />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/statements"
+              element={
+                <RequireAuth>
+                  <Statements />
                 </RequireAuth>
               }
             />
