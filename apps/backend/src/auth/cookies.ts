@@ -35,8 +35,7 @@ export type { SessionAudience };
  * the customer surface, the least-privileged default (ops/admin routes stay
  * role-gated regardless).
  */
-export function sessionAudienceForRequest(req: FastifyRequest): SessionAudience {
-  const origin = req.headers.origin;
+export function sessionAudienceForOrigin(origin: string | undefined): SessionAudience {
   if (!origin) return 'customer';
   if (config.operationsOrigins.includes(origin)) return 'operations';
   try {
@@ -46,6 +45,10 @@ export function sessionAudienceForRequest(req: FastifyRequest): SessionAudience 
     // Malformed Origin → fall through to the customer default.
   }
   return 'customer';
+}
+
+export function sessionAudienceForRequest(req: FastifyRequest): SessionAudience {
+  return sessionAudienceForOrigin(req.headers.origin);
 }
 
 /** The session cookie name for the surface a request belongs to. */

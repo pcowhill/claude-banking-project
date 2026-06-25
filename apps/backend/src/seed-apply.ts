@@ -1,6 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
+import { isTerminalOpsStatus, type OpsRequestStatus } from '@simbank/shared';
 import { hashPassword } from './auth/password';
-import { assertSeedAccessIntegrity, assertSeedInvariants, type SeedPlan } from './seed-plan';
+import {
+  assertSeedAccessIntegrity,
+  assertSeedInvariants,
+  assertSeedOpsIntegrity,
+  type SeedPlan,
+} from './seed-plan';
 
 /**
  * Apply a seed PLAN to the database. Extracted from the seed script so the exact
@@ -15,6 +21,8 @@ export interface SeedResult {
   accounts: number;
   entries: number;
   grants: number;
+  opsRequests: number;
+  simulatedEvents: number;
 }
 
 export async function applySeedPlan(
@@ -24,14 +32,16 @@ export async function applySeedPlan(
 ): Promise<SeedResult> {
   assertSeedInvariants(plan);
   assertSeedAccessIntegrity(plan);
+  assertSeedOpsIntegrity(plan);
 
   await prisma.loginEvent.deleteMany();
   await prisma.session.deleteMany();
   await prisma.accountAccess.deleteMany();
   await prisma.ledgerEntry.deleteMany();
   await prisma.account.deleteMany();
-  await prisma.auditLog.deleteMany();
+  await prisma.simulatedEvent.deleteMany();
   await prisma.operationsRequest.deleteMany();
+  await prisma.auditLog.deleteMany();
   await prisma.user.deleteMany();
 
   const userIdByEmail = new Map<string, string>();
@@ -93,6 +103,59 @@ export async function applySeedPlan(
     });
   }
 
+  // Operations queue work items (v0.5.0). Each gets an intake audit row so the
+  // request-detail history reads "created → …" from the same AuditLog trail the
+  // operator actions append to. SIMULATION: seeding a request never moves money.
+  const MINUTE_MS = 60 * 1000;
+  const requestIdByKey = new Map<string, string>();
+  for (const r of plan.operationsRequests) {
+    const occurredAt = new Date(now.getTime() - (r.daysAgo ?? 0) * DAY_MS);
+    const status = (r.status ?? 'pending') as OpsRequestStatus;
+    const request = await prisma.operationsRequest.create({
+      data: {
+        type: r.type,
+        status,
+        priority: r.priority ?? 'normal',
+        summary: r.summary,
+        detail: r.detail ?? null,
+        subjectName: r.subjectName ?? null,
+        subjectEmail: r.subjectEmail ?? null,
+        payload: r.payload ? JSON.stringify(r.payload) : null,
+        resolvedAt: isTerminalOpsStatus(status) ? occurredAt : null,
+        createdAt: occurredAt,
+        updatedAt: occurredAt,
+      },
+    });
+    requestIdByKey.set(r.key, request.id);
+    await prisma.auditLog.create({
+      data: {
+        actorRole: 'system',
+        action: 'ops_request_created',
+        entity: 'operations_request',
+        entityId: request.id,
+        reason: r.summary,
+        createdAt: occurredAt,
+      },
+    });
+  }
+
+  // Seeded SIMULATED external events (clearly fake; never a real provider).
+  for (const e of plan.simulatedEvents) {
+    const occurredAt = new Date(now.getTime() - (e.minutesAgo ?? 0) * MINUTE_MS);
+    await prisma.simulatedEvent.create({
+      data: {
+        channel: e.channel,
+        direction: e.direction ?? 'outbound',
+        kind: e.kind ?? null,
+        status: e.status ?? 'sent',
+        summary: e.summary,
+        detail: e.detail ?? null,
+        requestId: e.requestKey ? (requestIdByKey.get(e.requestKey) ?? null) : null,
+        createdAt: occurredAt,
+      },
+    });
+  }
+
   await prisma.simulationClock.upsert({
     where: { id: 'singleton' },
     update: {},
@@ -104,15 +167,18 @@ export async function applySeedPlan(
       actorRole: 'admin',
       action: 'seed_database',
       entity: 'system',
-      reason: 'Demo seed (v0.4.0: demo users + access grants + dated transaction history)',
+      reason:
+        'Demo seed (v0.5.0: demo users + access grants + dated transaction history + operations queue + simulated events)',
     },
   });
 
-  const [users, accounts, entries, grants] = await Promise.all([
+  const [users, accounts, entries, grants, opsRequests, simulatedEvents] = await Promise.all([
     prisma.user.count(),
     prisma.account.count(),
     prisma.ledgerEntry.count(),
     prisma.accountAccess.count(),
+    prisma.operationsRequest.count(),
+    prisma.simulatedEvent.count(),
   ]);
-  return { users, accounts, entries, grants };
+  return { users, accounts, entries, grants, opsRequests, simulatedEvents };
 }

@@ -157,15 +157,57 @@ model AuditLog {
   @@index([entity])
 }
 
-/// Work item for the Bank Operations Simulator queues (wired up in v0.5.0).
+/// Work item for the Bank Operations Simulator queues (live in v0.5.0). An
+/// operator approves/rejects/holds/requests-info; every action is audited in
+/// AuditLog and pushed to operator consoles over Socket.IO. SIMULATION: acting on
+/// a request changes its WORKFLOW state only — it never posts to the ledger
+/// (money movement arrives in v0.7.0), so balances stay derived.
 model OperationsRequest {
-  id        String   @id @default(cuid())
-  type      String // see OpsRequestType in @simbank/shared
-  status    String   @default("pending") // see OpsRequestStatus in @simbank/shared
-  summary   String
-  payload   String? // JSON string
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id       String @id @default(cuid())
+  type     String // see OpsRequestType in @simbank/shared
+  status   String @default("pending") // see OpsRequestStatus in @simbank/shared
+  priority String @default("normal") // see OpsRequestPriority in @simbank/shared
+  summary  String
+  detail   String?
+  // The customer/applicant this item concerns. Display only, intentionally NOT a
+  // foreign key (e.g. an onboarding applicant is not yet a User).
+  subjectName  String?
+  subjectEmail String?
+  payload      String? // JSON string (simulation context)
+  // Most-recent operator action bookkeeping; the full trail lives in AuditLog.
+  lastAction     String? // see OpsAction in @simbank/shared
+  lastActorId    String?
+  lastActorRole  String?
+  lastActorName  String?
+  lastActionNote String?
+  resolvedAt     DateTime? // set when the item reaches a terminal status
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  events SimulatedEvent[]
 
   @@index([status])
+  @@index([type])
+}
+
+/// A SIMULATED external event (SMS / email / MFA / identity). LOCAL SIMULATION
+/// ONLY — this NEVER calls a real SMS, email, MFA, or identity provider; it only
+/// records a fake event the operations console can display, clearly labelled as
+/// simulated. Optionally linked to the OperationsRequest that triggered it.
+model SimulatedEvent {
+  id        String             @id @default(cuid())
+  channel   String // see SimEventChannel in @simbank/shared (sms|email|mfa|identity)
+  direction String             @default("outbound") // outbound | inbound
+  kind      String? // otp | notification | verification | ...
+  status    String             @default("sent") // see SimEventStatus in @simbank/shared
+  summary   String
+  detail    String?
+  requestId String?
+  request   OperationsRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  metadata  String? // JSON string
+  createdAt DateTime           @default(now())
+
+  @@index([channel])
+  @@index([requestId])
+  @@index([createdAt])
 }
