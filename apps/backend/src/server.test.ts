@@ -22,11 +22,11 @@ describe('backend server', () => {
     expect(typeof body.uptimeSeconds).toBe('number');
   });
 
-  it('GET /status reports version 0.2.0 and the simulation flag', async () => {
+  it('GET /status reports version 0.3.0 and the simulation flag', async () => {
     const res = await app.inject({ method: 'GET', url: '/status' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.version).toBe('0.2.0');
+    expect(body.version).toBe('0.3.0');
     expect(body.isSimulation).toBe(true);
     expect(['ok', 'degraded']).toContain(body.status);
   });

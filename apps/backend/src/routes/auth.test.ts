@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { AUTH } from '@simbank/shared';
+import { AUTH, sessionCookieName } from '@simbank/shared';
 import { buildServer } from '../server';
 import { prisma } from '../db';
 import { DEMO, cookieHeader, loginAs, resetAuthState, seedDemo, sessionCookieValue } from '../test/fixtures';
@@ -33,7 +33,7 @@ describe('auth routes', () => {
       expect(res.json().user).toMatchObject({ email: DEMO.customer.email, role: 'customer' });
       expect(res.json().user.passwordHash).toBeUndefined();
 
-      const cookie = res.cookies.find((c) => c.name === AUTH.sessionCookieName);
+      const cookie = res.cookies.find((c) => c.name === sessionCookieName('customer'));
       expect(cookie).toBeDefined();
       expect(cookie?.httpOnly).toBe(true);
       expect(cookie?.value).toBeTruthy();
@@ -164,6 +164,21 @@ describe('auth routes', () => {
 
       const me2 = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: cookie! } });
       expect(me2.statusCode).toBe(401);
+    });
+
+    it('logout works even when the request declares an empty application/json body', async () => {
+      // Regression: a bodyless POST that sets Content-Type: application/json (as a
+      // best-effort browser logout does) must still revoke the session, not 400.
+      const { cookie } = await loginAs(app, DEMO.customer.email, DEMO.customer.password);
+      const out = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: { cookie: cookie!, 'content-type': 'application/json' },
+      });
+      expect(out.statusCode).toBe(200);
+
+      const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: cookie! } });
+      expect(me.statusCode).toBe(401);
     });
 
     it('treats an expired session as logged out', async () => {

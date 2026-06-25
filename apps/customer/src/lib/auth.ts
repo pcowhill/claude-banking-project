@@ -19,12 +19,18 @@ import { API_URL } from './api';
  * accounts, money, or personal data.
  */
 
-/** Always attach the session cookie and ask for/ send JSON. */
-const jsonInit = (init: RequestInit = {}): RequestInit => ({
-  credentials: 'include',
-  headers: { 'Content-Type': 'application/json', ...(init.headers ?? {}) },
-  ...init,
-});
+/**
+ * Always attach the session cookie. Declare a JSON content-type ONLY when we
+ * actually send a JSON body: a bodyless POST (e.g. logout) that claims
+ * `application/json` makes the backend reject the empty body with 400 — which
+ * would silently skip the server-side logout (revoke + clear cookie). Bodyless
+ * GETs likewise don't need it (and avoid an unnecessary CORS preflight).
+ */
+const jsonInit = (init: RequestInit = {}): RequestInit => {
+  const headers: Record<string, string> = { ...((init.headers as Record<string, string>) ?? {}) };
+  if (init.body != null) headers['Content-Type'] = 'application/json';
+  return { credentials: 'include', ...init, headers };
+};
 
 /** Discriminated result of a login attempt. */
 export type LoginResult =

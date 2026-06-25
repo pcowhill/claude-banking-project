@@ -23,12 +23,34 @@ export const ACCOUNT_RELATIONSHIPS = ['owner', 'joint', 'authorized', 'viewer'] 
 export type AccountRelationship = (typeof ACCOUNT_RELATIONSHIPS)[number];
 
 /**
+ * The two distinct front-end surfaces that authenticate against this backend:
+ * the public **customer** portal and the staff **operations** console. They run
+ * as separate apps on separate ports, but they share this one backend origin —
+ * and browser cookies are NOT isolated by port (a cookie for host `localhost`
+ * is sent to `localhost:3000` no matter which app made the request). So each
+ * surface gets its OWN named session cookie; the backend picks the right one per
+ * request (from the request Origin). Without this, a single shared cookie lets
+ * one app's login bleed into the other — e.g. an operations login showing
+ * through on, or surviving a logout from, the customer portal.
+ */
+export const SESSION_AUDIENCES = ['customer', 'operations'] as const;
+export type SessionAudience = (typeof SESSION_AUDIENCES)[number];
+
+/**
  * Tunable auth policy. Centralized so the backend, the seed, and the tests all
  * agree on the same thresholds. Values are deliberately modest for a local demo.
  */
 export const AUTH = {
-  /** Cookie that carries the opaque session token. */
-  sessionCookieName: 'mer_session',
+  /**
+   * Per-surface session cookie names (see {@link SESSION_AUDIENCES}). The
+   * customer portal keeps the original `mer_session`; the operations console
+   * uses its own `mer_ops_session`, so the two sessions are fully independent
+   * even when both apps are open in the same browser.
+   */
+  sessionCookieNames: {
+    customer: 'mer_session',
+    operations: 'mer_ops_session',
+  } as Record<SessionAudience, string>,
   /** bcrypt cost factor used by the password hasher. */
   bcryptCostFactor: 10,
   /** Failed logins (in a row) before an account is temporarily locked. */
@@ -42,6 +64,11 @@ export const AUTH = {
   /** How many recent login-history rows the customer UI shows. */
   loginHistoryLimit: 10,
 } as const;
+
+/** The session cookie name for a given app surface (see {@link SESSION_AUDIENCES}). */
+export function sessionCookieName(audience: SessionAudience): string {
+  return AUTH.sessionCookieNames[audience];
+}
 
 /** Known reasons attached to a login attempt (stored on LoginEvent.reason). */
 export const LOGIN_REASONS = [

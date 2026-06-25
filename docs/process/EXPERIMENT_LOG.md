@@ -6,6 +6,76 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 3 — v0.3.0 Public bank website and branding — 2026-06-25
+
+**Goal:** Complete only `v0.3.0 — Public bank website and branding` (polished home
+page, product marketing pages, image placeholders + prompts, login/open-account
+entry points, responsive + accessible polish), **and** address the v0.2.0 review
+feedback: a cross-app session-bleed bug. Human approved starting v0.3.0.
+
+**Execution mode:**
+- The **bug fix (W-00)** touches auth + routing — a **risky shared area** — so it
+  was done **first and serially**, locked behind the full test suite, then
+  re-verified at the browser level before any website work.
+- The **public-site work** is single-app (`apps/customer`) and was built on a
+  shared marketing-component contract for brand consistency.
+
+**The reported bug had TWO root causes (both fixed):**
+1. **Shared host-only cookie.** Both apps hit the same backend origin; the session
+   cookie had no `Domain`, so it was a host-only `localhost` cookie shared across
+   ports — one session for both apps. Fixed with **per-surface cookies**
+   (`mer_session` / `mer_ops_session`) selected by request `Origin` (also matched
+   by the ops port for LAN hosts).
+2. **Logout returned 400 and never revoked.** The customer logout sent a `POST`
+   with `Content-Type: application/json` and **no body**; Fastify rejects an empty
+   JSON body with 400, so the handler never ran — session not revoked, cookie not
+   cleared. The client cleared its own state best-effort, which **masked** it (no
+   v0.2.0 test navigated to a protected route after logout). Fixed by not declaring
+   a JSON content-type on bodyless requests, plus a backend empty-JSON-body
+   tolerance. Found by writing a browser-level e2e that reproduced the exact
+   two-tab scenario — a good argument for testing the *server-side* effect of
+   logout, not just the client UI state.
+
+**Key decisions:**
+- **Per-surface cookies keyed by Origin** instead of a schema/audience column — the
+  smallest correct fix, no migration, minimal blast radius.
+- **Reusable `components/marketing.tsx` kit** + `lib/nav.ts` (nav split out so the
+  presentational module stays component-only and react-refresh-clean).
+- **Coming-soon pages** for Cards and Loans/CDs now (clearly tagged) so the nav and
+  product story are complete ahead of v0.8.0/v0.9.0.
+- **Accessibility baked in**: skip link, landmarks, labelled mobile-menu toggle,
+  alt text on every image slot; disclaimer visible site-wide.
+
+**Surprises / environment friction (sandbox only — not a product issue):**
+- Same Prisma engine-download block as Sessions 1–2 (ECONNRESET to
+  `binaries.prisma.sh` from Prisma's own fetcher, though curl reaches it). Resolved
+  by `npm install --ignore-scripts` then **curl-mirroring** the query-engine
+  library + schema-engine for `debian-openssl-3.0.x` (note: the remote gz names are
+  `libquery_engine.so.node.gz` / `schema-engine.gz`) and pointing Prisma at them via
+  `PRISMA_QUERY_ENGINE_LIBRARY` + `PRISMA_SCHEMA_ENGINE_BINARY` (+
+  `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING`). Prisma is now **5.22.0** (engine
+  `605197351a3c8bdd595af2d2a9bc3025bca48ea2`).
+- Same Playwright/Chromium build mismatch — used the pre-installed Chromium
+  (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`) via the existing
+  `PLAYWRIGHT_CHROMIUM_PATH` hook (executablePath bypasses the build-version check).
+- The first cut of the browser-level isolation e2e raced (clicked Log out then
+  navigated immediately, aborting the in-flight logout). Fixed by waiting for the
+  logged-out header before navigating — but that wait is *also* what surfaced the
+  real logout-400 bug above.
+
+**Outcome:** `npm run verify` passes; **70** unit/integration + **14** Playwright
+e2e green (up from 65 + 8). No schema change. Milestone complete; annotated tag
+`v0.3.0` created locally (tag push blocked by env policy — HTTP 403 — so the human
+pushes it on merge; see the milestone report). Session branch pushed. Stopped at
+the gate; did **not** begin v0.4.0.
+
+**Carried forward / open items:** marketing images are placeholders until real
+files are dropped in; `/open-account` is a placeholder pending v0.6.0 onboarding;
+security follow-ups (CSRF, config-driven cookie `secure`, helmet + rate-limit) and
+dev-tooling audit advisories still tracked in `QUALITY_REPORT.md`.
+
+---
+
 ## Session 2 — v0.2.0 Auth, roles, and demo users — 2026-06-25
 
 **Goal:** Complete only `v0.2.0 — Auth, roles, and demo users`: real password
@@ -140,4 +210,4 @@ was attempted, remaining errors, likely cause, options (retry / simplify / defer
 session. Then **do not** mark the milestone complete or tag it; stop with a
 truthful blocker report. Prioritize truthful project state over appearing done.
 
-_No blockers were filed for v0.1.0 or v0.2.0._
+_No blockers were filed for v0.1.0, v0.2.0, or v0.3.0._

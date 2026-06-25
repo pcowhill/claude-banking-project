@@ -15,7 +15,11 @@ import { createSession, revokeSession } from '../auth/sessions';
 import { hashSessionToken } from '../auth/tokens';
 import { recordLoginEvent, writeAudit } from '../auth/audit';
 import { requestContext, requireAuth } from '../auth/guards';
-import { SESSION_COOKIE, clearedCookieOptions, sessionCookieOptions } from '../auth/cookies';
+import {
+  sessionCookieNameForRequest,
+  clearedCookieOptions,
+  sessionCookieOptions,
+} from '../auth/cookies';
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
@@ -150,7 +154,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     });
     const token = await createSession(prisma, user.id, now, ctx);
-    reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions());
+    reply.setCookie(sessionCookieNameForRequest(req), token, sessionCookieOptions());
     await recordLoginEvent(prisma, {
       userId: user.id,
       email,
@@ -169,7 +173,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
-    const token = req.cookies?.[SESSION_COOKIE];
+    const cookieName = sessionCookieNameForRequest(req);
+    const token = req.cookies?.[cookieName];
     if (token) {
       const now = new Date();
       const session = await prisma.session.findUnique({
@@ -187,7 +192,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         });
       }
     }
-    reply.clearCookie(SESSION_COOKIE, clearedCookieOptions());
+    reply.clearCookie(cookieName, clearedCookieOptions());
     return reply.code(200).send({ ok: true });
   });
 

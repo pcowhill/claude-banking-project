@@ -52,5 +52,28 @@ dependencies · status · result/outcome · related commit/tag.
 | A-09 | Auth tests | Testing/QA | Playwright login tests + auth unit/integration (incl. RBAC ownership) | A-02..A-08 | Done | 65 unit/integration + 8 e2e (login journeys + RBAC + redirect) |
 | A-10 | Milestone handoff | Process Scribe | Update all handoff docs; tag `v0.2.0` | A-01..A-09 | Done | This board + reports; annotated tag `v0.2.0` |
 
-> Later milestones (v0.3.0–v1.0.0) are summarized in `ROADMAP.md` and will be
+## Milestone v0.3.0 — Public bank website and branding  ✅ Done (tag `v0.3.0`)
+
+> Approved to start by the human (see `feedback/FEEDBACK_v0.2_2026-06-25_0306.md`).
+> The v0.2.0 review also reported a **cross-app session-bleed bug**; we agreed it is
+> real and folded the fix into this milestone as `W-00` (done first). `W-00` touches
+> auth + routing — a **risky shared area** — so it is serialized, tested, and
+> reviewed before any of the parallelizable website work. `W-01` (IA + shared
+> layout) gates the page work; once it lands, `W-02…W-06` are largely independent
+> and may be parallelized across customer-frontend agents.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| W-00 | Cross-app session isolation (bug fix) | Backend/API + Security | Customer portal (`:5173`) and Ops console (`:5174`) hold **independent** sessions: per-surface session cookies (`mer_session` / `mer_ops_session`) chosen by request `Origin`; a customer logout (or no customer login) makes `/dashboard` redirect to the customer login regardless of any Ops session; Ops session unaffected by customer login/logout and vice-versa; integration + e2e tests prove isolation; no schema change | v0.2.0 | Done | **Two root causes found & fixed:** (1) shared host-only cookie → per-surface audience cookies (`sessionCookieName(audience)` + `sessionAudienceForRequest`); (2) customer logout returned **400** (bodyless POST with `Content-Type: application/json`) so it never revoked/cleared — fixed the client to omit JSON content-type when bodyless + hardened the backend to tolerate empty JSON bodies. `session-isolation.test.ts` + empty-body logout regression test + browser-level `session-isolation.spec.ts` |
+| W-01 | Public site IA, routing & shared layout | Frontend Customer | Marketing route structure + shared public header/footer/nav building on brand tokens + Meridian logo; session-aware nav and protected `/dashboard` NOT regressed | W-00 | Done | `/`, `/checking`, `/savings`, `/cards`, `/borrow`, `/about`, `/open-account` + `PublicNav`/header CTAs |
+| W-02 | Polished public home page | Frontend Customer | Hero, value props, product highlights, trust/about teaser, footer; clear login + open-account CTAs; responsive; a11y (headings, alt text) | W-01 | Done | Rebuilt `MarketingHome` (hero, 3 value props, product grid, security/trust, testimonial-as-sim, CTA) |
+| W-03 | Product marketing pages (checking & savings) | Frontend Customer | Content-rich, clearly fictional checking + savings pages (features, simulated rates/fees, FAQs, CTAs) | W-01 | Done | `Checking`, `Savings` pages w/ feature grids, sim APY/fee disclaimers, FAQs |
+| W-04 | Cards & borrowing overview ("coming soon") | Frontend Customer | Overview page(s) presenting cards/loans/CDs as coming soon with milestone tags; clearly fictional | W-01 | Done | `Cards`, `Borrow` pages with roadmap-tagged "coming soon" product rails |
+| W-05 | Image system: realistic placeholders + prompts | Frontend Customer | `ImagePlaceholder` wired across pages (real files drop into `public/images/` with no code change); extend `IMAGE_GENERATION_PROMPTS.md`; descriptive alt text | W-02..W-04 | Done | Named image slots across pages; prompts file extended to cover every slot |
+| W-06 | Login / open-account entry points | Frontend Customer | Consistent CTAs from the public site to `/login` and an `/open-account` route (placeholder onboarding until v0.6.0); clearly labelled | W-01 | Done | Header + hero + footer CTAs; `/open-account` placeholder routing to login w/ v0.6.0 note |
+| W-07 | Responsive & accessibility polish | Frontend Customer | Breakpoint pass (mobile→desktop); semantic landmarks/headings; labelled controls; visible focus; simulation disclaimer visible site-wide | W-02..W-06 | Done | Mobile nav, fluid grids, skip-link, focus-visible, banner+footer disclaimers on every page |
+| W-08 | Tests (unit/integration + e2e + verify) | Testing/QA | Session-isolation integration tests; public-site Playwright smoke (marketing routes, nav, CTAs); `npm run verify` green | W-00..W-07 | Done | 65→**70** Vitest (session-isolation + empty-body-logout regression); 8→**14** e2e (`public-site.spec.ts` + browser-level `session-isolation.spec.ts`); verify green |
+| W-09 | Milestone handoff | Process Scribe | Update all handoff docs; annotated tag `v0.3.0` | W-00..W-08 | Done | This board + reports; tag `v0.3.0` |
+
+> Later milestones (v0.4.0–v1.0.0) are summarized in `ROADMAP.md` and will be
 > decomposed into tasks here when they become the active milestone.

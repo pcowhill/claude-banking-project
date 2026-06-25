@@ -9,11 +9,11 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 
 | App | What it is | Local URL |
 | --- | --- | --- |
-| **Customer app** | Public marketing site + authenticated banking portal (shell) | http://localhost:5173 |
+| **Customer app** | Public marketing **website** + authenticated banking portal | http://localhost:5173 |
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.2.0 — Auth, roles, and demo users` (see `ROADMAP.md`).
+**Current milestone:** `v0.3.0 — Public bank website and branding` (see `ROADMAP.md`).
 
 ## Tech stack
 
@@ -75,6 +75,18 @@ Run `npm run db:reset` first to seed these users.
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
+
+### New in v0.3.0 (public website)
+
+- **Browse the public site at http://localhost:5173** — a polished home page plus
+  **Checking**, **Savings**, **Cards** and **Loans & CDs** (coming-soon overviews),
+  **About**, and an **Open account** page. Try the responsive **mobile menu** by
+  narrowing the window. Marketing photos are drop-in placeholders (branded
+  gradients until you add files to `apps/customer/public/images/`).
+- **Independent app sessions:** the customer portal and the operations console now
+  keep **separate** sessions. Logging into Ops no longer affects the customer site,
+  and logging out of the customer app makes `/dashboard` redirect to the customer
+  login (fixes the v0.2.0 review bug — see `docs/process/HUMAN_REVIEW_v0.3.md`).
 
 ### What to look at in v0.2.0
 

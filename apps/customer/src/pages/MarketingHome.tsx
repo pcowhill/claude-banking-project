@@ -1,143 +1,250 @@
 import { Link } from 'react-router-dom';
 import { BRAND } from '@simbank/shared';
 import { Button } from '../components/ui/Button';
-import { Card, CardDescription, CardTitle } from '../components/ui/Card';
-import { ImagePlaceholder } from '../components/ImagePlaceholder';
 import { BackendStatusPill } from '../components/BackendStatusPill';
+import { ImagePlaceholder } from '../components/ImagePlaceholder';
+import {
+  CTASection,
+  FeatureGrid,
+  Icon,
+  MilestoneTag,
+  PageHero,
+  Section,
+  SectionHeading,
+  type Feature,
+  type IconName,
+} from '../components/marketing';
 
-const products = [
-  { title: 'Checking', description: 'Everyday spending with no surprise fees.', milestone: 'v0.4.0' },
-  { title: 'Savings', description: 'Set goals and earn simulated interest.', milestone: 'v0.4.0' },
-  { title: 'Credit cards', description: 'Build credit with transparent terms.', milestone: 'v0.8.0' },
-  { title: 'Loans', description: 'Personal, auto, and mortgage-style loans.', milestone: 'v0.9.0' },
-  { title: 'Certificates of Deposit', description: 'Lock in a rate for a fixed term.', milestone: 'v0.9.0' },
-  { title: 'External accounts', description: 'Link outside accounts for transfers.', milestone: 'v0.7.0' },
+/** Why-Meridian value props. */
+const valueProps: Feature[] = [
+  {
+    icon: 'compass',
+    title: 'Clarity by design',
+    description:
+      'A calm, uncluttered interface with balances derived from an append-only ledger — what you see is always reconcilable.',
+  },
+  {
+    icon: 'shield',
+    title: 'Security you can see',
+    description:
+      'Real password hashing, role-based access, and an audit trail behind every sensitive action. You only ever see your own accounts.',
+  },
+  {
+    icon: 'sparkles',
+    title: 'Built in the open',
+    description:
+      'Meridian is a transparent simulation shipped milestone by milestone — every feature is documented and clearly labelled.',
+  },
+];
+
+interface ProductHighlight {
+  to: string;
+  title: string;
+  description: string;
+  icon: IconName;
+  tag: string;
+}
+
+const productHighlights: ProductHighlight[] = [
+  {
+    to: '/checking',
+    title: 'Everyday Checking',
+    description: 'No surprise fees, simulated early direct deposit, and a clean spending view.',
+    icon: 'card',
+    tag: 'Explore now',
+  },
+  {
+    to: '/savings',
+    title: 'Goal Savings',
+    description: 'Set goals and watch simulated interest accrue straight from the ledger.',
+    icon: 'piggy',
+    tag: 'Explore now',
+  },
+  {
+    to: '/cards',
+    title: 'Cards',
+    description: 'Debit and credit cards with freeze, travel notices, and disputes.',
+    icon: 'lock',
+    tag: 'Arrives v0.8.0',
+  },
+  {
+    to: '/borrow',
+    title: 'Loans & CDs',
+    description: 'Personal, auto, and mortgage-style loans plus certificates of deposit.',
+    icon: 'chart',
+    tag: 'Arrives v0.9.0',
+  },
 ];
 
 export function MarketingHome() {
   return (
     <div>
-      {/* Hero */}
-      <section className="bg-gradient-to-b from-brand-mist to-white">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 lg:grid-cols-2">
-          <div>
-            <span className="inline-flex items-center rounded-full bg-brand-teal/10 px-3 py-1 text-xs font-semibold text-brand-teal-dark">
-              {BRAND.tagline}
-            </span>
-            <h1 className="mt-4 text-4xl font-bold leading-tight text-brand-navy sm:text-5xl">
-              Modern banking that keeps you on course.
-            </h1>
-            <p className="mt-4 max-w-md text-lg text-slate-600">
-              Checking, savings, cards, and loans in one calm, secure place. Meridian is a
-              realistic <strong>simulated</strong> bank built to explore great banking UX — without
-              any real money.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/login">
-                <Button size="lg">Open a (simulated) account</Button>
-              </Link>
-              <Link to="/login">
-                <Button size="lg" variant="ghost">
-                  Log in
-                </Button>
-              </Link>
-            </div>
-            <div className="mt-6">
-              <BackendStatusPill />
-            </div>
-          </div>
-          <div className="overflow-hidden rounded-2xl shadow-lg">
-            <ImagePlaceholder
-              src="/images/hero-family.jpg"
-              alt="A family enjoying everyday banking"
-              label="Hero image"
-              className="aspect-[16/10] w-full"
-            />
-          </div>
+      <PageHero
+        eyebrow={BRAND.tagline}
+        title={
+          <>
+            Modern banking that keeps you <span className="text-brand-teal-dark">on course</span>.
+          </>
+        }
+        lead={
+          <>
+            Checking, savings, cards, and loans in one calm, secure place. Meridian is a realistic{' '}
+            <strong>simulated</strong> bank built to explore great banking UX — without any real
+            money.
+          </>
+        }
+        ctas={[
+          { to: '/open-account', label: 'Open a (simulated) account', variant: 'primary' },
+          { to: '/login', label: 'Log in', variant: 'ghost' },
+        ]}
+        image={{
+          src: '/images/hero-family.jpg',
+          alt: 'A family enjoying everyday banking together',
+          label: 'Hero image',
+        }}
+      >
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500">
+          <BackendStatusPill />
+          <span className="inline-flex items-center gap-1.5">
+            <Icon name="lock" className="h-4 w-4 text-brand-teal-dark" /> Encrypted demo sessions
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Icon name="receipt" className="h-4 w-4 text-brand-teal-dark" /> Ledger-derived balances
+          </span>
         </div>
-      </section>
+      </PageHero>
 
-      {/* Products */}
-      <section className="mx-auto max-w-6xl px-4 py-16">
-        <h2 className="text-2xl font-bold text-brand-navy">Everything you expect from a bank</h2>
-        <p className="mt-2 text-slate-600">
-          The full product set is delivered across milestones. Each card notes when it arrives.
-        </p>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => (
-            <Card key={product.title}>
-              <div className="flex items-center justify-between">
-                <CardTitle>{product.title}</CardTitle>
-                <span className="rounded bg-brand-mist px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                  {product.milestone}
-                </span>
+      {/* Value props */}
+      <Section>
+        <SectionHeading
+          eyebrow="Why Meridian"
+          title="Banking that earns trust through transparency"
+          subtitle="Every part of the experience is designed to be understandable — for customers and for the engineers building it."
+        />
+        <FeatureGrid features={valueProps} />
+      </Section>
+
+      {/* Product highlights */}
+      <Section tone="muted">
+        <SectionHeading
+          eyebrow="Products"
+          title="Everything you expect from a bank"
+          subtitle="The full product set arrives across milestones. Checking and savings are ready to explore today."
+        />
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {productHighlights.map((product) => (
+            <Link
+              key={product.to}
+              to={product.to}
+              className="group flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+            >
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-brand-mist text-brand-teal-dark">
+                <Icon name={product.icon} />
+              </span>
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <h3 className="text-base font-semibold text-brand-navy">{product.title}</h3>
               </div>
-              <CardDescription>{product.description}</CardDescription>
-            </Card>
+              <p className="mt-1.5 flex-1 text-sm text-slate-600">{product.description}</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-teal-dark group-hover:gap-2">
+                {product.tag.startsWith('Arrives') ? (
+                  <MilestoneTag>{product.tag}</MilestoneTag>
+                ) : (
+                  <>
+                    {product.tag} <span aria-hidden="true">→</span>
+                  </>
+                )}
+              </span>
+            </Link>
           ))}
         </div>
-      </section>
+      </Section>
 
-      {/* Features */}
-      <section className="bg-brand-mist">
-        <div className="mx-auto grid max-w-6xl gap-6 px-4 py-16 md:grid-cols-2">
-          <Card className="overflow-hidden p-0">
+      {/* Experience cards */}
+      <Section>
+        <div className="grid gap-6 md:grid-cols-2">
+          <article className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <ImagePlaceholder
               src="/images/feature-professional.jpg"
-              alt="A professional banking on a laptop"
+              alt="A professional reviewing finances on a laptop and phone"
               label="Professional banking"
               className="aspect-[3/2] w-full"
             />
             <div className="p-6">
-              <CardTitle>Bank from anywhere</CardTitle>
-              <CardDescription>
+              <h3 className="text-lg font-semibold text-brand-navy">Bank from anywhere</h3>
+              <p className="mt-1.5 text-sm text-slate-600">
                 A responsive portal for desktop and mobile, with a clean dashboard and real-time
-                updates.
-              </CardDescription>
+                status. Designed to feel fast and reassuring on any screen.
+              </p>
             </div>
-          </Card>
-          <Card className="overflow-hidden p-0">
+          </article>
+          <article className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <ImagePlaceholder
               src="/images/feature-small-business.jpg"
-              alt="A small business owner banking"
+              alt="A small-business owner checking finances behind the counter"
               label="Small business"
               className="aspect-[3/2] w-full"
             />
             <div className="p-6">
-              <CardTitle>Built for real life</CardTitle>
-              <CardDescription>
-                Transfers, bill pay, deposits, disputes, and fraud protection — simulated end to
-                end.
-              </CardDescription>
+              <h3 className="text-lg font-semibold text-brand-navy">Built for real life</h3>
+              <p className="mt-1.5 text-sm text-slate-600">
+                Transfers, bill pay, deposits, disputes, and fraud protection — each modeled end to
+                end as the simulation grows, with a bank-operations console behind the scenes.
+              </p>
             </div>
-          </Card>
+          </article>
         </div>
-      </section>
+      </Section>
 
-      {/* Security */}
-      <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 lg:grid-cols-2">
-        <div className="overflow-hidden rounded-2xl shadow-lg">
-          <ImagePlaceholder
-            src="/images/security-protection.jpg"
-            alt="Security and fraud protection"
-            label="Security & fraud protection"
-            className="aspect-[16/10] w-full"
-          />
+      {/* Security teaser */}
+      <Section tone="muted">
+        <div className="grid items-center gap-10 lg:grid-cols-2">
+          <div className="overflow-hidden rounded-2xl shadow-lg">
+            <ImagePlaceholder
+              src="/images/security-protection.jpg"
+              alt="An abstract shield representing security and fraud protection"
+              label="Security & fraud protection"
+              className="aspect-[16/10] w-full"
+            />
+          </div>
+          <div>
+            <SectionHeading
+              eyebrow="Security"
+              title="Protection built in from the first milestone"
+              subtitle="Authentication, access control, and audit logging landed early — so the discipline is structural, not bolted on later."
+            />
+            <ul className="mt-5 space-y-3 text-sm text-slate-700">
+              {[
+                'Explainable rules and audit logs — no black-box decisions',
+                'Role-based access: customers see only their own accounts',
+                'Independent sessions for the customer and operations apps',
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-2">
+                  <Icon name="shield" className="mt-0.5 h-5 w-5 shrink-0 text-brand-teal-dark" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+            <Link to="/about#security" className="mt-6 inline-block">
+              <Button variant="ghost">How security works</Button>
+            </Link>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-brand-navy">Security you can see</h2>
-          <p className="mt-3 text-slate-600">
-            Later milestones add real password hashing, multi-factor login, trusted devices, login
-            history, and an explainable fraud-rules engine. A companion Operations console
-            simulates the bank-side decisions behind the scenes.
-          </p>
-          <ul className="mt-4 space-y-2 text-sm text-slate-700">
-            <li>• Explainable fraud rules (no black-box AI)</li>
-            <li>• Audit logs for every sensitive action</li>
-            <li>• You only ever see your own accounts</li>
-          </ul>
-        </div>
-      </section>
+      </Section>
+
+      {/* Testimonial (clearly a simulated persona) */}
+      <Section>
+        <figure className="mx-auto max-w-3xl text-center">
+          <blockquote className="text-xl font-medium text-brand-navy sm:text-2xl">
+            “Meridian makes it obvious where every number comes from. It is the clearest banking
+            experience I have used — and it is all a transparent simulation.”
+          </blockquote>
+          <figcaption className="mt-4 text-sm text-slate-500">
+            Sample persona · illustrative testimonial for the Meridian simulation
+          </figcaption>
+        </figure>
+      </Section>
+
+      <CTASection />
     </div>
   );
 }

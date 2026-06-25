@@ -6,19 +6,23 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.2.0` — Auth, roles, and demo users (complete).
-  The annotated tag `v0.2.0` was created locally on the milestone commit; pushing
+- **Current version / tag:** `v0.3.0` — Public bank website and branding (complete).
+  The annotated tag `v0.3.0` was created locally on the milestone commit; pushing
   tags is blocked by this environment's git policy (HTTP 403), so the tag must be
   (re)created/pushed by the human on merge to `main` — see the milestone report
   for the exact command.
-- **Next milestone:** `v0.3.0` — Public bank website and branding (not started).
-- **Working branch (this session):** `claude/gifted-hawking-x44wtg` (the Claude
+- **Next milestone:** `v0.4.0` — Customer banking dashboard (not started).
+- **Working branch (this session):** `claude/jolly-archimedes-hqljs0` (the Claude
   Code Cloud session branch, used as the milestone branch; intended milestone
-  name `milestone/v0.2-auth`).
-- **Gate status:** `npm run verify` ✅ passes. **65** unit/integration tests + **8**
-  Playwright e2e tests green. Runtime deps: no new audit advisories from auth.
+  name `milestone/v0.3-website`).
+- **Gate status:** `npm run verify` ✅ passes. **70** unit/integration tests + **14**
+  Playwright e2e tests green. No schema change and no new runtime audit advisories.
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
-  `npm run dev`. Sign in with the seeded demo accounts (see `README.md`).
+  `npm run dev`. Browse the public site at `:5173`; sign in with the seeded demo
+  accounts (see `README.md`).
+- **v0.2.0 review bug fixed:** the cross-app session-bleed reported in the v0.2.0
+  review is fixed (two root causes — shared cookie + a logout that returned 400 and
+  never revoked). See `docs/process/HUMAN_REVIEW_v0.3.md`.
 
 ## What exists today
 
@@ -53,10 +57,19 @@
   ledger entries) with money + access invariant guards. `npm run db:reset` works.
 
 ### apps/customer (React + Vite + Tailwind)
-- Routes: `/` (marketing), `/login` (**real** sign-in), `/dashboard`
+- **Public marketing site (v0.3.0):** `/` (polished home), `/checking`, `/savings`,
+  `/cards` + `/borrow` (coming-soon overviews), `/about` (story + `#security` +
+  roadmap), `/open-account` (onboarding placeholder → login). A reusable
+  `components/marketing.tsx` kit (Section/PageHero/FeatureGrid/FAQ/RateTable/
+  CTASection/icons), `lib/nav.ts`, a responsive sticky header + accessible mobile
+  menu, a skip-to-content link, and a footer with real links.
+- **Authenticated surface (v0.2.0):** `/login` (**real** sign-in), `/dashboard`
   (**protected**; live accounts + recent sign-in activity), `*` (404). Auth
   context/provider, session-aware nav, logo, simulation banner/footer,
-  backend-status pill, drop-in `ImagePlaceholder`.
+  backend-status pill, drop-in `ImagePlaceholder` (9 image slots + prompts).
+- **Sessions are per-app (v0.3.0 fix):** the customer portal uses the `mer_session`
+  cookie, the operations console uses `mer_ops_session`; the backend selects the
+  cookie per request by Origin, so the two apps' sessions are independent.
 
 ### apps/operations (React + Vite + Tailwind)
 - **Operator login** (staff-only; customer logins rejected) gating a dark
@@ -80,9 +93,9 @@
 - **MFA, password reset, remember-device, new-device alerts** (deferred within
   the auth theme; planned for v0.5.0+ alongside the operations queues that
   service them).
-- Public marketing site polish + product pages (v0.3.0 — next).
-- Real account/transaction data, money movement, cards, fraud, loans, CDs,
-  simulated time (v0.4.0+).
+- Real account/transaction data + a richer customer banking dashboard (accounts
+  overview, transaction history, statements placeholder) — **v0.4.0 (next)**.
+- Money movement, cards, fraud, loans, CDs, simulated time (v0.5.0+).
 - Live operations queues / WebSocket-driven workflows (v0.5.0+).
 - Frontend component unit tests (still deferred; auth UIs are covered by build +
   Playwright login journeys for now — see QUALITY_REPORT).

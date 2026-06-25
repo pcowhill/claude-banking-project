@@ -19,6 +19,10 @@ generated image, export it to the matching path and it appears automatically.
 | Small business owner | `public/images/feature-small-business.jpg` | 1200×800 |
 | Credit card / product marketing | `public/images/product-card.jpg` | 1200×800 |
 | Security / fraud protection | `public/images/security-protection.jpg` | 1200×800 |
+| Checking — everyday lifestyle | `public/images/checking-lifestyle.jpg` | 1600×1100 |
+| Savings — goals lifestyle | `public/images/savings-goals.jpg` | 1600×1100 |
+| Loans & CDs — lifestyle | `public/images/borrow-lifestyle.jpg` | 1600×1100 |
+| About — operations / behind the scenes | `public/images/about-operations.jpg` | 1600×1100 |
 
 Shared style direction for all images: clean, modern, trustworthy national-bank
 aesthetic; natural light; navy/teal/white palette with subtle warm gold accents;
@@ -76,6 +80,46 @@ softly glowing abstract shield or padlock motif integrated with a subtle compass
 / meridian-line pattern, navy-and-teal palette with a single warm gold accent,
 minimalist, lots of negative space, premium and reassuring. Abstract and
 modern, not literal; no text, no logos.
+```
+
+## 6. Everyday checking lifestyle (`checking-lifestyle.jpg`)
+
+```
+A bright, candid lifestyle photograph of a person tapping a smartphone to pay at
+a cozy café counter, relaxed and confident, soft natural daylight. Cool
+navy-and-teal grade with a warm gold highlight from the café. Shallow depth of
+field, generous negative space on the left for headline text. Photorealistic,
+editorial banking-brand quality. No text, no logos, no readable screens, no real
+card numbers.
+```
+
+## 7. Savings goals lifestyle (`savings-goals.jpg`)
+
+```
+A warm candid photograph of a couple at a sunlit kitchen table planning together
+with a notebook and a tablet, hopeful and calm mood, a small jar or plant hinting
+at "saving toward a goal." Navy/teal palette with soft warm accents. Shallow
+depth of field, room on one side for text. Photorealistic lifestyle photography,
+no readable screen content, no brand names or logos.
+```
+
+## 8. Loans & CDs lifestyle (`borrow-lifestyle.jpg`)
+
+```
+A reassuring lifestyle photograph of a person reviewing a plan on a tablet in a
+comfortable home setting, thoughtful and at ease, natural window light. Balanced
+navy/teal with a single warm gold accent. Plenty of negative space for text.
+Photorealistic and editorial, no readable screens, no brand names, no logos.
+```
+
+## 9. About — behind the scenes (`about-operations.jpg`)
+
+```
+A clean, abstract conceptual image of a calm modern banking operations workspace:
+softly out-of-focus desks and screens rendered as gentle navy-and-teal shapes,
+with a subtle compass / meridian-line motif and a single warm gold accent.
+Minimalist, lots of negative space, premium and trustworthy. Abstract rather than
+literal; no readable text, no logos, no identifiable people.
 ```
 
 ---

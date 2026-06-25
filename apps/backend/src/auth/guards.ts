@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastif
 import type { ApiErrorResponse, SessionUser, UserRole } from '@simbank/shared';
 import { prisma } from '../db';
 import { resolveSession } from './sessions';
-import { SESSION_COOKIE, clearedCookieOptions } from './cookies';
+import { sessionCookieNameForRequest, clearedCookieOptions } from './cookies';
 
 // Make the authenticated user available to route handlers in a typed way.
 declare module 'fastify' {
@@ -25,14 +25,15 @@ export function requestContext(req: FastifyRequest): { ip: string | null; userAg
  * `req.user`; otherwise it ends the request with 401 (clearing a dead cookie).
  */
 export const requireAuth: preHandlerHookHandler = async (req, reply) => {
-  const token = req.cookies?.[SESSION_COOKIE];
+  const cookieName = sessionCookieNameForRequest(req);
+  const token = req.cookies?.[cookieName];
   if (!token) {
     unauthorized(reply, { error: 'Not authenticated.', code: 'unauthenticated' });
     return;
   }
   const resolved = await resolveSession(prisma, token, new Date());
   if (!resolved) {
-    reply.clearCookie(SESSION_COOKIE, clearedCookieOptions());
+    reply.clearCookie(cookieName, clearedCookieOptions());
     unauthorized(reply, { error: 'Your session has expired. Please log in again.', code: 'session_expired' });
     return;
   }
