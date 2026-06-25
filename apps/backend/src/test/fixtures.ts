@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { AUTH } from '@simbank/shared';
+import { SESSION_AUDIENCES, sessionCookieName, type SessionAudience } from '@simbank/shared';
 import { prisma } from '../db';
 import { applySeedPlan } from '../seed-apply';
 import { buildSeedPlan } from '../seed-plan';
@@ -34,14 +34,24 @@ interface InjectLikeResponse {
   cookies?: Array<{ name: string; value: string }>;
 }
 
-/** The raw session-cookie value from an inject() response, if one was set. */
+/** Every per-surface session cookie name (customer + operations). */
+const SESSION_COOKIE_NAMES = SESSION_AUDIENCES.map(sessionCookieName);
+
+/**
+ * The raw session-cookie value from an inject() response, whichever surface's
+ * cookie was set. A login sets exactly one session cookie, so this is unambiguous.
+ */
 export function sessionCookieValue(res: InjectLikeResponse): string | undefined {
-  return res.cookies?.find((c) => c.name === AUTH.sessionCookieName)?.value;
+  return res.cookies?.find((c) => SESSION_COOKIE_NAMES.includes(c.name))?.value;
 }
 
-/** Build a Cookie header carrying a session token. */
-export function cookieHeader(value: string): string {
-  return `${AUTH.sessionCookieName}=${value}`;
+/**
+ * Build a Cookie header carrying a session token. Defaults to the customer
+ * surface's cookie name (requests via `app.inject` have no Origin, so the
+ * backend reads the customer cookie); pass an audience to target the ops surface.
+ */
+export function cookieHeader(value: string, audience: SessionAudience = 'customer'): string {
+  return `${sessionCookieName(audience)}=${value}`;
 }
 
 /** Log in via the API and return the Cookie header for authenticated requests. */

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { AUTH } from '@simbank/shared';
+import { AUTH, sessionCookieName } from '@simbank/shared';
 import { buildServer } from '../server';
 import { prisma } from '../db';
 import { DEMO, cookieHeader, loginAs, resetAuthState, seedDemo, sessionCookieValue } from '../test/fixtures';
@@ -33,7 +33,7 @@ describe('auth routes', () => {
       expect(res.json().user).toMatchObject({ email: DEMO.customer.email, role: 'customer' });
       expect(res.json().user.passwordHash).toBeUndefined();
 
-      const cookie = res.cookies.find((c) => c.name === AUTH.sessionCookieName);
+      const cookie = res.cookies.find((c) => c.name === sessionCookieName('customer'));
       expect(cookie).toBeDefined();
       expect(cookie?.httpOnly).toBe(true);
       expect(cookie?.value).toBeTruthy();
