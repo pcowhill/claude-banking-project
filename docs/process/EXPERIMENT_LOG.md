@@ -6,6 +6,83 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 4 — v0.4.0 Customer banking dashboard — 2026-06-25
+
+**Goal:** Complete only `v0.4.0 — Customer banking dashboard` (accounts overview,
+account detail, transaction history with pending vs posted + search/filter,
+statements placeholder, realistic seeded transactions — balances DERIVED), **and**
+address the v0.3.0 review feedback: two public-site UX fixes (R-01 scroll-to-top +
+a Security deep-link; R-02 session-aware entry points). Human approved starting
+v0.4.0.
+
+**Key realization — no schema migration needed.** A "transaction" is already a row
+of the append-only `LedgerEntry` table (it carries `status` pending/posted/held/…,
+`origin`, amount+direction, description, postedAt/createdAt). So v0.4.0 avoided the
+riskiest shared area (Prisma schema) entirely: the work was a pure shared contract +
+derivation, a richer **seed** (with per-entry dating), one **access-scoped read
+endpoint**, and the **dashboard UI**. This was the single biggest scoping decision.
+
+**Execution mode (serialized risky area = the API contract + the data every screen
+reads):**
+- R-01/R-02 (R-01 touches routing) done **first**, e2e-tested.
+- Then `D-01` shared DTOs + pure derivation (`toTransactionDTOs`,
+  `filterTransactions`) written and unit-tested to **lock the contract**.
+- Then `D-02` seed + `D-03` access-scoped endpoint with integration tests.
+- Only then the dashboard UI (`D-04…D-07`) built against the locked contract.
+- A read-only security review ran before the gate (**PASS**, no new findings).
+
+**Key decisions:**
+- **Reuse the v0.2.0 access primitive** (`getAccountRelationship`) for
+  `GET /api/accounts/:id/transactions` so the transactions endpoint inherits the
+  exact ownership/joint scoping (and IDOR-safety) of the single-account read — no
+  parallel access path to get wrong.
+- **One filtering definition** (`filterTransactions` in shared) used by BOTH the
+  server endpoint (`?q=&group=&origin=`, whitelisted) and the UI (instant
+  client-side filter over the fetched rows) — same behavior, tested once.
+- **Running balance derived server-side** in chronological order over settled
+  entries, then attached to the newest-first list, so the statement reads correctly
+  while the API returns rows newest-first.
+- **Seed built via paired helpers** (`transfer()` posts both legs; `daysAgo` dates
+  each entry) so the money invariants (transfers net to zero; every settled credit
+  bank-originated or a transfer leg) stay trivially satisfied even at 56 entries.
+- **R-01 as one router-level effect** (`ScrollToTop`) rather than wiring each
+  button — it keys off the location, so every control (header/footer/in-page CTA)
+  is covered; a `#hash` destination scrolls the section in (with `scroll-mt` under
+  the sticky header) instead of jumping to the top.
+- **R-02 via a pure `resolveCtas` helper** that rewrites only `/login` + 
+  `/open-account` CTAs to a single deduped "Visit your Dashboard" when signed in;
+  the `/login` route gains an "already signed in" branch. No client-side trust for
+  protection — `RequireAuth` + server `requireAuth` are unchanged.
+
+**Surprises / environment friction (sandbox only — not a product issue):**
+- Same Prisma engine-download block as Sessions 1–3 (ECONNRESET to
+  `binaries.prisma.sh` from Prisma's fetcher; curl reaches it). Resolved the same
+  documented way — `npm install --ignore-scripts`, curl-mirror the query-engine
+  library + schema-engine for `debian-openssl-3.0.x` (gz names
+  `libquery_engine.so.node.gz` / `schema-engine.gz`), point Prisma at them via
+  `PRISMA_QUERY_ENGINE_LIBRARY` + `PRISMA_SCHEMA_ENGINE_BINARY`
+  (+ `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING`). Prisma 5.22.0, engine
+  `605197351a3c8bdd595af2d2a9bc3025bca48ea2`.
+- Same Playwright/Chromium build mismatch — used the pre-installed Chromium
+  (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`) via `PLAYWRIGHT_CHROMIUM_PATH`.
+- No new product surprises; the seed dating + running-balance derivation were
+  validated end-to-end against the live DB before building the UI.
+
+**Outcome:** `npm run verify` passes; **93** unit/integration (was 70) + **22**
+Playwright e2e (was 14) green. No schema change; no new runtime audit advisories;
+security review PASS. Milestone complete; annotated tag `v0.4.0` created locally
+(tag push blocked by env policy — HTTP 403 — so the human pushes it on merge; see
+the milestone report). Session branch pushed. Stopped at the gate; did **not**
+begin v0.5.0.
+
+**Carried forward / open items:** statements are a placeholder until v0.9.0;
+money-movement (which creates *new* transactions) is v0.7.0 — today's history is
+seeded; frontend component unit tests still deferred; security hardening
+follow-ups (CSRF, config-driven cookie `secure`, helmet + rate-limit) and
+dev-tooling audit advisories still tracked in `QUALITY_REPORT.md`.
+
+---
+
 ## Session 3 — v0.3.0 Public bank website and branding — 2026-06-25
 
 **Goal:** Complete only `v0.3.0 — Public bank website and branding` (polished home
@@ -210,4 +287,4 @@ was attempted, remaining errors, likely cause, options (retry / simplify / defer
 session. Then **do not** mark the milestone complete or tag it; stop with a
 truthful blocker report. Prioritize truthful project state over appearing done.
 
-_No blockers were filed for v0.1.0, v0.2.0, or v0.3.0._
+_No blockers were filed for v0.1.0, v0.2.0, v0.3.0, or v0.4.0._

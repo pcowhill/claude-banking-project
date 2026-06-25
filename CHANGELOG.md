@@ -8,7 +8,71 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.4.0 — Customer banking dashboard** (not started).
+- Next milestone: **v0.5.0 — Operations simulator core** (not started).
+
+## [0.4.0] — 2026-06-25 — Customer banking dashboard
+
+A real customer banking dashboard over the (still fully simulated) data: an
+accounts overview, per-account detail with transaction history (pending vs
+posted) and search/filter, a statements placeholder, and realistic seeded
+transaction history. Balances stay **DERIVED** from the append-only ledger.
+Also folds in two v0.3.0-review UX fixes. No schema migration; no real money.
+
+### Added
+
+- **Accounts overview** (`/dashboard`, reworked): every account the user can see,
+  with ledger-derived available + current balances, a combined total, and a link
+  into each account; recent sign-in activity retained. Degrades on
+  loading/empty/offline.
+- **Account detail** (`/accounts/:id`, protected): account header with derived
+  balances (available/current, pending out, on hold, pending in) and the full
+  transaction history. Scoped server-side — a 403/404 shows a friendly
+  "no access / not found" without leaking existence.
+- **Transaction history** with clear **pending vs posted** grouping, a per-row
+  **running settled balance**, category/status badges, and an instant
+  **search** (description) + **filter** (status / category) built on a shared
+  helper. **Statements & documents** placeholder (`/statements`, protected) —
+  clearly "coming soon" (real statements in v0.9.0), no real PDFs.
+- **Transaction API** (no schema change): `GET /api/accounts/:id/transactions`
+  returns the account header + derived transactions (newest-first, signed
+  amounts, running balance), scoped by the SAME access rules as the
+  single-account read, with server-side `?q=&group=&origin=` search/filter.
+- **Shared transaction contract** (`@simbank/shared/transactions`): `TransactionDTO`,
+  `AccountTransactionsResponse`, `TransactionQuery`, and pure helpers
+  (`toTransactionDTOs`, `filterTransactions`, `groupForStatus`, `originLabel`,
+  `signedMinor`) — one definition reused by the API and the UI.
+- **Realistic seeded transaction history**: ~3 months of dated activity on Avery's
+  checking & savings (payroll direct deposits, rent, groceries, utilities,
+  subscriptions, card spending, an ATM withdrawal, a fee, a refund, internal
+  transfers both ways, monthly interest) plus current **pending** and **held**
+  items — all bank-originated or balanced transfer legs (money never appears from
+  nowhere). Seed grew from 7 → **56** ledger entries.
+
+### Changed (v0.3.0 review follow-ups)
+
+- **Scroll-to-top on navigation (R-01).** Every client-side navigation now lands at
+  the top of the destination page — from any control (header, footer, in-page
+  CTAs) — via a single router-level `ScrollToTop` effect. A `#hash` destination
+  (e.g. the **"Security"** link → `/about#security`) scrolls that section into view
+  instead, accounting for the sticky header.
+- **Session-aware entry points (R-02).** When signed in, the public "Log in" /
+  "Open an account" CTAs collapse to a single **"Visit your Dashboard"** (hero,
+  footer, closing CTA band); visiting **`/login`** while authenticated shows an
+  **"already signed in"** panel (a dashboard link + a log-out button) instead of
+  the login form. Logged-out behavior is unchanged.
+
+### Notes
+
+- `npm run verify` passes (lint, typecheck, **93** unit/integration tests, build);
+  **22** Playwright e2e green (up from 70 + 14). The simulation disclaimer remains
+  visible site-wide; balances remain derived, never stored.
+- **No Prisma schema migration** — a transaction *is* an append-only `LedgerEntry`,
+  so v0.4.0 only extended the seed + added a read endpoint and UI.
+- Security review: **PASS**, no new findings. The new endpoint reuses the v0.2.0
+  access primitive (no IDOR; ops/admin get 403 on customer accounts); query params
+  are whitelisted; no secrets. Pre-existing follow-ups (CSRF, config-driven cookie
+  `secure`, helmet + rate-limit, dev-tooling audit advisories) remain tracked in
+  `docs/process/QUALITY_REPORT.md`.
 
 ## [0.3.0] — 2026-06-25 — Public bank website and branding
 

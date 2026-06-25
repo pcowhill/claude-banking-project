@@ -5,6 +5,75 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.4.0 — Customer banking dashboard — 2026-06-25
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **93 passed / 93** (70 + 23 new):
+  `@simbank/shared` `transactions.test.ts` (**13** — derivation, ordering, running
+  balance, grouping, filtering) and `@simbank/backend` `routes/transactions.test.ts`
+  (**10** — full access matrix incl. IDOR 403/404 + server-side filters). All prior
+  suites still green.
+- **Build** — backend (tsup) + customer (vite) + operations all build.
+
+### E2E (Playwright) ✅ PASS
+- **22 passed / 22** (14 + 8 new): `dashboard.spec.ts` covers overview → detail →
+  transactions, pending-vs-posted visible, search + status filter, the statements
+  placeholder, **R-01** (scroll-to-top on nav + `/about#security` deep-link), and
+  **R-02** (logged-in "Visit your Dashboard" CTAs + the already-logged-in `/login`
+  panel). All prior auth/public-site/session-isolation/smoke specs still green.
+
+### Scope decision — no schema migration
+A transaction is an existing `LedgerEntry` row, so v0.4.0 added **no Prisma
+migration**: a pure shared contract + derivation, a richer dated seed, one
+access-scoped read endpoint, and the dashboard UI. Balances + running balance are
+DERIVED server-side; there is still no stored/editable balance field.
+
+### Security review (pre-gate, read-only) — ✅ PASS, no new findings
+The Security/Permissions reviewer verified: `GET /api/accounts/:id/transactions`
+reuses the v0.2.0 access primitive (`getAccountRelationship`) → IDOR-safe (unknown
+id → 404, no relationship → 403, ops/admin → 403 on customer accounts), confirmed
+by `transactions.test.ts`; the DTO exposes only display fields (no hashes/PII/
+cross-account data); `?q=&group=&origin=` are whitelisted (unknown dropped) and
+filtering is in-memory over already-authorized rows with no raw SQL / dynamic
+`RegExp` (no injection/ReDoS); seed passwords stay non-secret + bcrypt-hashed and
+the money invariants hold; the R-02 flows add no client-side trust for protection
+(`RequireAuth` + server `requireAuth` unchanged), no open redirect, and logout
+still revokes server-side. The three **Low** follow-ups (SEC-1 CSRF, SEC-2
+config-driven cookie `secure`, SEC-3 helmet + login rate-limit) remain accepted and
+tracked (targets v0.7.0 / v1.0.0); v0.4.0 adds no state-mutating endpoint, so the
+CSRF posture is unchanged.
+
+### Dependency audit
+- **No new runtime advisories.** The dashboard added no runtime dependencies. The
+  prior **dev/test-tooling advisories** (vite, vitest, esbuild — dev-only) are
+  unchanged and remain tracked in the v0.1.0 section for the v1.0.0 hardening pass.
+
+### Known limitations / deferred
+- **Frontend component unit tests** remain deferred; the dashboard is covered by
+  build + the Playwright journeys (+ the pure transaction logic is unit-tested in
+  shared). Revisit at a UI-heavy milestone.
+- **Statements** are a labelled placeholder (no real PDFs) until v0.9.0 statement
+  cycles; **money movement** (which creates new transactions) is v0.7.0 — today's
+  transaction history is seeded.
+- Search/filter runs **client-side** in the UI over the fetched rows for snappiness,
+  using the same shared `filterTransactions` the **server** endpoint uses (and which
+  is independently tested).
+
+### Sandbox-only notes (do not affect users/CI)
+- Prisma engines curl-mirrored (query-engine library + schema-engine for
+  `debian-openssl-3.0.x`) and Playwright pointed at the pre-installed Chromium —
+  same approach as Sessions 1–3; standard installs / `npx playwright install` work
+  elsewhere.
+
+### Overall
+**v0.4.0 meets the quality bar.** Gate green (93 + 22 tests, 0 lint warnings),
+balances derived from the ledger, the two v0.3.0 review fixes shipped with e2e
+coverage, security review PASS, open items tracked honestly. No blockers.
+
+---
+
 ## v0.3.0 — Public bank website and branding — 2026-06-25
 
 ### Gate: `npm run verify` ✅ PASS
