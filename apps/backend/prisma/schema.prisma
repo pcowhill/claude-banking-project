@@ -1,0 +1,105 @@
+// Meridian (Simulated Bank) — Prisma schema.
+//
+// LOCAL SIMULATION ONLY. This SQLite database holds nothing but fake, seeded
+// demo data. It models real banking concepts so the simulation behaves
+// realistically, but it is never connected to real financial systems.
+//
+// Design note: SQLite has no native enums, so enum-like columns are stored as
+// strings whose allowed values live in @simbank/shared (single source of truth).
+// Balances are NEVER stored as an editable field — they are derived from the
+// append-only LedgerEntry table (see packages/shared/src/ledger.ts).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A person in the system. Real auth (hashing, sessions, RBAC) arrives in v0.2.0.
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  displayName String
+  role        String   @default("customer") // see UserRole in @simbank/shared
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  accounts  Account[]
+  auditLogs AuditLog[] @relation("ActorAudit")
+}
+
+/// A banking product owned by a user (checking, savings, etc.).
+model Account {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String // see AccountType in @simbank/shared
+  name      String
+  currency  String   @default("USD")
+  status    String   @default("active") // see AccountStatus in @simbank/shared
+  openedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ledgerEntries LedgerEntry[]
+
+  @@index([userId])
+}
+
+/// Append-only ledger. Balances are derived from these rows, never edited.
+model LedgerEntry {
+  id          String    @id @default(cuid())
+  accountId   String
+  account     Account   @relation(fields: [accountId], references: [id])
+  amountMinor Int // ALWAYS positive integer minor units; sign comes from `direction`
+  direction   String // credit | debit
+  status      String    @default("posted") // pending|posted|held|failed|reversed|disputed
+  origin      String // seed|interest|fee|adjustment|transfer|payment|deposit|card
+  description String
+  reason      String? // required for admin adjustments (audited)
+  postedAt    DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([accountId])
+  @@index([status])
+}
+
+/// Singleton row holding the simulation clock (fast-forward arrives in v0.9.0).
+model SimulationClock {
+  id          String   @id @default("singleton")
+  currentTime DateTime @default(now())
+  speed       Int      @default(1)
+  updatedAt   DateTime @updatedAt
+}
+
+/// Audit trail for sensitive/administrative actions.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation("ActorAudit", fields: [actorId], references: [id])
+  actorRole String?
+  action    String
+  entity    String
+  entityId  String?
+  reason    String?
+  metadata  String? // JSON string
+  createdAt DateTime @default(now())
+
+  @@index([entity])
+}
+
+/// Work item for the Bank Operations Simulator queues (wired up in v0.5.0).
+model OperationsRequest {
+  id        String   @id @default(cuid())
+  type      String // see OpsRequestType in @simbank/shared
+  status    String   @default("pending") // see OpsRequestStatus in @simbank/shared
+  summary   String
+  payload   String? // JSON string
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}

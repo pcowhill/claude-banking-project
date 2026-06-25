@@ -1,0 +1,32 @@
+{
+  "name": "@simbank/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Fastify + Socket.IO + Prisma/SQLite backend for the Meridian banking simulation. Local-only; no real financial integrations.",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "db:generate": "node prisma/prisma-cli.mjs generate",
+    "db:migrate": "node prisma/prisma-cli.mjs migrate dev",
+    "db:deploy": "node prisma/prisma-cli.mjs migrate deploy",
+    "db:reset": "node prisma/prisma-cli.mjs migrate reset --force --skip-seed && npm run db:seed",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "node prisma/prisma-cli.mjs studio"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.0",
+    "@prisma/client": "^5.20.0",
+    "@simbank/shared": "*",
+    "fastify": "^5.8.5",
+    "socket.io": "^4.8.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.20.0",
+    "tsup": "^8.3.0"
+  }
+}

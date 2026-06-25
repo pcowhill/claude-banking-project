@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+coverage
+playwright-report
+test-results
+package-lock.json
+**/src/generated
+apps/backend/prisma/migrations
+*.svg
+CHANGELOG.md
