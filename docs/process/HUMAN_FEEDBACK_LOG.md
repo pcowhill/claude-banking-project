@@ -53,6 +53,6 @@ Each feedback file MUST contain these sections:
 
 | File | Milestone reviewed | Date | Summary |
 | --- | --- | --- | --- |
-| _(none yet)_ | — | — | The v0.1.0 review feedback will be the first entry, saved by the next session. |
+| `feedback/FEEDBACK_v0.1_2026-06-25_0146.md` | v0.1.0 | 2026-06-25 | "Looking great so far… excited to see v0.2.0." Approves starting v0.2.0. No re-scope; proceed with planned auth milestone. |
 
 > When you add a feedback file, also add a row here.

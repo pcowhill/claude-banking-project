@@ -32,19 +32,24 @@ dependencies · status · result/outcome · related commit/tag.
 | F-11 | Security/safety pass | Security Reviewer | No secrets; disclaimers; ledger discipline; runtime audit reviewed | F-02..F-06 | Done | Runtime audit 0; dev-tool advisories logged in QUALITY_REPORT |
 | F-12 | Milestone handoff | Process Scribe | Milestone report, human review, next-session prompt, state/next updated, tag | F-10 | Done | This board + reports; tag `v0.1.0` |
 
-## Milestone v0.2.0 — Auth, roles, and demo users  (planned / next)
+## Milestone v0.2.0 — Auth, roles, and demo users  ▶️ In Progress
+
+> Approved to start by the human (see `feedback/FEEDBACK_v0.1_2026-06-25_0146.md`).
+> No re-scope; building the planned auth milestone. Backend auth is a risky shared
+> area (schema + auth + routing), so it is implemented serially and reviewed; the
+> two independent frontend apps are parallelized once the API contract is locked.
 
 | ID | Title | Role | Acceptance criteria | Deps | Status |
 | --- | --- | --- | --- | --- | --- |
-| A-01 | Auth data model | Backend/API | Password hash fields/tables, sessions, login-history; migration | v0.1.0 | Ready |
-| A-02 | Password hashing | Backend/API | Real lib (bcrypt/argon2); no custom crypto; tested | A-01 | Ready |
-| A-03 | Sessions + lockout | Backend/API | Cookie sessions, timeout, lockout after N fails | A-01 | Ready |
-| A-04 | RBAC | Backend + Security | Customers see only own accounts; joint only authorized; ops/admin scoped; ownership checks tested | A-01 | Ready |
-| A-05 | Seeded demo users | Backend | One user per role; documented credentials (non-secret demo) | A-01 | Ready |
-| A-06 | Login history/audit | Backend/API | `AuditLog` rows on auth events | A-01 | Ready |
-| A-07 | Customer login UI | Frontend Customer | Real login/logout, session-aware nav, error states | A-02,A-03 | Backlog |
-| A-08 | Ops/admin login UI | Frontend Operations | Operator/admin login | A-02,A-03 | Backlog |
-| A-09 | Auth tests | Testing/QA | Playwright login tests + auth unit/integration (incl. RBAC) | A-02..A-08 | Backlog |
+| A-01 | Auth data model | Backend/API | Password hash fields/tables, sessions, account-access, login-history; migration | v0.1.0 | In Progress |
+| A-02 | Password hashing | Backend/API | Real lib (bcryptjs — pure-JS, cross-platform, no native build); no custom crypto; tested | A-01 | In Progress |
+| A-03 | Sessions + lockout | Backend/API | Cookie sessions (opaque token, stored hashed), idle timeout, lockout after N fails | A-01 | In Progress |
+| A-04 | RBAC | Backend + Security | Customers see only own accounts; joint only authorized; ops/admin scoped; ownership checks tested | A-01 | In Progress |
+| A-05 | Seeded demo users | Backend | One user per role (customer, joint, ops, admin); documented non-secret demo credentials | A-01 | In Progress |
+| A-06 | Login history/audit | Backend/API | `LoginEvent` history rows on every attempt + `AuditLog` rows on notable auth events | A-01 | In Progress |
+| A-07 | Customer login UI | Frontend Customer | Real login/logout, session-aware nav, protected routes, error states, live accounts | A-02,A-03 | Ready |
+| A-08 | Ops/admin login UI | Frontend Operations | Operator/admin login; role-gated console; non-ops users rejected | A-02,A-03 | Ready |
+| A-09 | Auth tests | Testing/QA | Playwright login tests + auth unit/integration (incl. RBAC ownership) | A-02..A-08 | Ready |
 | A-10 | Milestone handoff | Process Scribe | Update all handoff docs; tag `v0.2.0` | A-01..A-09 | Backlog |
 
 > Later milestones (v0.3.0–v1.0.0) are summarized in `ROADMAP.md` and will be

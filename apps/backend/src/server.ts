@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import { config } from './config';
 import { registerRoutes } from './routes/index';
 
@@ -12,12 +13,20 @@ import { registerRoutes } from './routes/index';
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: config.isTest ? false : { level: process.env.LOG_LEVEL ?? 'info' },
+    // Trust the proxy hop in local dev so req.ip reflects the real client for
+    // session/audit context (still a local simulation — no real network).
+    trustProxy: true,
   });
 
   await app.register(cors, {
     origin: config.corsOrigins,
     credentials: true,
   });
+
+  // Cookie parsing for session auth. Registered at the top level (before routes)
+  // and with `decorateRequest` so `req.cookies` / `req.user` exist everywhere.
+  await app.register(cookie);
+  app.decorateRequest('user', null);
 
   await app.register(registerRoutes);
 
