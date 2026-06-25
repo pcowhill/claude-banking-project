@@ -2,9 +2,12 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { OpsLayout } from './components/OpsLayout';
 import { SimulationBanner } from './components/SimulationBanner';
 import { OpsDashboard } from './pages/OpsDashboard';
+import { RequestQueues } from './pages/RequestQueues';
+import { SimulatedMessaging } from './pages/SimulatedMessaging';
 import { Login } from './pages/Login';
 import { NotFound } from './pages/NotFound';
 import { AuthProvider } from './lib/AuthContext';
+import { OpsDataProvider } from './lib/OpsDataContext';
 import { isOperatorRole, useAuth } from './lib/auth-context';
 
 /**
@@ -37,12 +40,16 @@ function OpsConsole() {
   if (!user || !isOperatorRole(user.role)) return <Login />;
 
   return (
-    <OpsLayout>
-      <Routes>
-        <Route path="/" element={<OpsDashboard />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </OpsLayout>
+    <OpsDataProvider>
+      <OpsLayout>
+        <Routes>
+          <Route path="/" element={<OpsDashboard />} />
+          <Route path="/queues" element={<RequestQueues />} />
+          <Route path="/messaging" element={<SimulatedMessaging />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </OpsLayout>
+    </OpsDataProvider>
   );
 }
 

@@ -1,0 +1,170 @@
+import { useCallback, useEffect, useState } from 'react';
+import {
+  opsActionLabel,
+  opsTypeLabel,
+  type OperationsRequestDetailDTO,
+  type OpsAction,
+} from '@simbank/shared';
+import { ApiError } from '../lib/api';
+import { fetchOpsRequestDetail } from '../lib/opsApi';
+import { useOpsData } from '../lib/ops-data-context';
+import { Card } from './ui/Card';
+import { StatusBadge, PriorityBadge } from './badges';
+import { ActionBar } from './ActionBar';
+import { OpsActivityFeed } from './OpsActivityFeed';
+import { relativeTime } from '../lib/format';
+
+/** Render one audit/history entry's action verb. */
+function historyVerb(action: string): string {
+  if (action === 'created') return 'Created';
+  // action is an OpsAction string for operator actions; fall back to raw.
+  return opsActionLabel(action as OpsAction);
+}
+
+/**
+ * Detail view for the selected queue item: its full context, the operator-action
+ * history (from the audit trail), any linked SIMULATED events, and an action bar
+ * with an optional note. Actions go through the live data context so the queue
+ * and this panel update together.
+ */
+export function RequestDetailPanel({
+  requestId,
+  onClose,
+}: {
+  requestId: string;
+  onClose: () => void;
+}) {
+  const { act } = useOpsData();
+  const [detail, setDetail] = useState<OperationsRequestDetailDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setDetail(await fetchOpsRequestDetail(requestId));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load request detail.');
+    } finally {
+      setLoading(false);
+    }
+  }, [requestId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handleAction = useCallback(
+    async (action: OpsAction) => {
+      setBusy(true);
+      setError(null);
+      try {
+        await act(requestId, action, note.trim() || undefined);
+        setNote('');
+        await load(); // refresh history + status
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'That action could not be completed.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [act, requestId, note, load],
+  );
+
+  return (
+    <Card className="flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            {detail ? opsTypeLabel(detail.type) : 'Request'}
+          </div>
+          <h3 className="text-sm font-semibold text-white">{detail?.summary ?? 'Loading…'}</h3>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
+        >
+          Close
+        </button>
+      </div>
+
+      {loading && <p className="text-xs text-slate-500">Loading request…</p>}
+
+      {detail && (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <StatusBadge status={detail.status} />
+            <PriorityBadge priority={detail.priority} />
+          </div>
+
+          {detail.detail && <p className="text-sm text-slate-300">{detail.detail}</p>}
+
+          <dl className="grid grid-cols-1 gap-1 text-xs text-slate-400 sm:grid-cols-2">
+            {detail.subjectName && (
+              <div>
+                <dt className="inline text-slate-500">Subject: </dt>
+                <dd className="inline text-slate-200">{detail.subjectName}</dd>
+              </div>
+            )}
+            {detail.subjectEmail && (
+              <div>
+                <dt className="inline text-slate-500">Email: </dt>
+                <dd className="inline text-slate-200">{detail.subjectEmail}</dd>
+              </div>
+            )}
+          </dl>
+
+          {/* Optional note + actions */}
+          <div className="space-y-2">
+            <label htmlFor="ops-note" className="block text-xs font-medium text-slate-400">
+              Note (optional) — recorded in the audit log
+            </label>
+            <textarea
+              id="ops-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              maxLength={500}
+              placeholder="Add context for this decision…"
+              className="w-full rounded-md border border-white/10 bg-brand-navy-deep/60 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+            />
+            <ActionBar status={detail.status} busy={busy} size="md" onAction={handleAction} />
+          </div>
+
+          {error && <p className="text-xs text-rose-300/90">{error}</p>}
+
+          {/* Operator-action history (audit trail) */}
+          <section>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">History</h4>
+            <ul className="mt-2 space-y-1.5">
+              {detail.history.map((entry) => (
+                <li key={entry.id} className="text-xs text-slate-300">
+                  <span className="font-semibold text-white">{historyVerb(entry.action)}</span>
+                  {entry.actorName ? ` by ${entry.actorName}` : ''}
+                  <span className="text-slate-500"> · {relativeTime(entry.createdAt)}</span>
+                  {entry.note && <div className="text-slate-400">“{entry.note}”</div>}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* Linked simulated events */}
+          {detail.events.length > 0 && (
+            <section>
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Linked simulated events
+              </h4>
+              <div className="mt-1">
+                <OpsActivityFeed events={detail.events} />
+              </div>
+            </section>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}

@@ -65,6 +65,24 @@ async function toApiError(res: Response): Promise<ApiError> {
 }
 
 /**
+ * Shared JSON request helper for cookie-authenticated API calls. Sends + parses
+ * JSON, always includes the session cookie, and throws {@link ApiError} (with the
+ * backend's machine code) on any non-2xx. Used by the operations data client.
+ */
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    credentials: 'include',
+    ...init,
+    headers: {
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as T;
+}
+
+/**
  * POST /api/auth/login. On success the backend sets the session cookie and
  * returns the signed-in user. Throws {@link ApiError} for invalid input, bad
  * credentials, and locked/disabled accounts.

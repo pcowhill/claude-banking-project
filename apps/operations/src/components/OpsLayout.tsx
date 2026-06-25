@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { NavLink } from 'react-router-dom';
 import { APP_VERSION, MILESTONE, MILESTONE_NAME } from '@simbank/shared';
 import { Logo } from './Logo';
 import { RoleBadge } from './RoleBadge';
@@ -7,13 +8,17 @@ import { useApiStatus } from '../lib/useApiStatus';
 import { useAuth } from '../lib/auth-context';
 import { cn } from '../lib/cn';
 
-const navSections = [
-  { label: 'Dashboard', active: true },
-  { label: 'Request queues', active: false, milestone: 'v0.5.0' },
-  { label: 'Simulation controls', active: false, milestone: 'v0.5.0' },
-  { label: 'Simulated messaging', active: false, milestone: 'v0.5.0' },
-  { label: 'Audit log', active: false, milestone: 'v0.5.0' },
-  { label: 'Simulation clock', active: false, milestone: 'v0.9.0' },
+/** Live console sections (v0.5.0). */
+const navLinks = [
+  { label: 'Dashboard', to: '/', end: true },
+  { label: 'Request queues', to: '/queues', end: false },
+  { label: 'Simulated messaging', to: '/messaging', end: false },
+];
+
+/** Sections that arrive in later milestones (shown dimmed). */
+const futureNav = [
+  { label: 'Audit log', milestone: 'v0.6.0' },
+  { label: 'Simulation clock', milestone: 'v0.9.0' },
 ];
 
 function OpsStatus() {
@@ -96,20 +101,31 @@ export function OpsLayout({ children }: { children: ReactNode }) {
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 py-6">
         <aside className="hidden w-56 shrink-0 lg:block">
           <nav className="space-y-1">
-            {navSections.map((item) => (
-              <div
+            {navLinks.map((item) => (
+              <NavLink
                 key={item.label}
-                className={cn(
-                  'flex items-center justify-between rounded-md px-3 py-2 text-sm',
-                  item.active
-                    ? 'bg-brand-teal/15 font-semibold text-white'
-                    : 'text-slate-400',
-                )}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal',
+                    isActive
+                      ? 'bg-brand-teal/15 font-semibold text-white'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200',
+                  )
+                }
               >
                 <span>{item.label}</span>
-                {item.milestone && (
-                  <span className="text-[10px] text-slate-500">{item.milestone}</span>
-                )}
+              </NavLink>
+            ))}
+            {futureNav.map((item) => (
+              <div
+                key={item.label}
+                className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-slate-500"
+              >
+                <span>{item.label}</span>
+                <span className="text-[10px] text-slate-600">{item.milestone}</span>
               </div>
             ))}
           </nav>

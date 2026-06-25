@@ -1,45 +1,18 @@
+import { Link } from 'react-router-dom';
+import {
+  isTerminalOpsStatus,
+  OPS_REQUEST_STATUSES,
+  opsStatusLabel,
+  opsTypeLabel,
+} from '@simbank/shared';
 import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
+import { StatusBadge, PriorityBadge } from '../components/badges';
+import { OpsActivityFeed } from '../components/OpsActivityFeed';
 import { useAuth } from '../lib/auth-context';
 import { useOpsSummary } from '../lib/useOpsSummary';
+import { useOpsData } from '../lib/ops-data-context';
+import { relativeTime } from '../lib/format';
 import { cn } from '../lib/cn';
-
-/**
- * Operations dashboard SHELL. The live overview counts (v0.2.0) sit at the top;
- * the queues, actions, simulation controls and simulated external responses are
- * placeholders that become live and WebSocket-driven starting in v0.5.0. The
- * structure intentionally mirrors the real workflow so future milestones slot in
- * without re-architecting.
- */
-const queues = [
-  { key: 'onboarding', label: 'Onboarding & identity', pending: 0, milestone: 'v0.6.0' },
-  { key: 'deposits', label: 'Deposits & mobile checks', pending: 0, milestone: 'v0.7.0' },
-  { key: 'ach', label: 'ACH transfers', pending: 0, milestone: 'v0.7.0' },
-  { key: 'wires', label: 'Wire transfers', pending: 0, milestone: 'v0.7.0' },
-  { key: 'fraud', label: 'Fraud alerts', pending: 0, milestone: 'v0.8.0' },
-  { key: 'disputes', label: 'Disputes', pending: 0, milestone: 'v0.8.0' },
-  { key: 'support', label: 'Support messages', pending: 0, milestone: 'v0.5.0' },
-  { key: 'password', label: 'Password resets', pending: 0, milestone: 'v0.2.0' },
-];
-
-const simControls = [
-  'Inject random transaction',
-  'Trigger fraud alert',
-  'Place account hold',
-  'Create failed payment',
-  'Simulate monthly interest',
-  'Generate statement cycle',
-  'Fast-forward simulation time',
-];
-
-const simulatedResponses = [
-  { channel: 'SMS code', detail: 'Deliver / fail a one-time passcode' },
-  { channel: 'Email message', detail: 'Send a simulated notification' },
-  { channel: 'MFA / identity', detail: 'Approve or reject verification' },
-  { channel: 'ACH network', detail: 'Return success / NSF / R01…' },
-  { channel: 'Wire network', detail: 'Approve / reject / hold' },
-  { channel: 'Check image', detail: 'Accept / reject deposit' },
-];
 
 /** One overview tile in the top strip. */
 function SummaryStat({
@@ -68,130 +41,118 @@ function SummaryStat({
   );
 }
 
-/** Live operations counts from `GET /api/ops/summary` (ops_agent / admin). */
-function OverviewStrip() {
-  const { loading, summary, error } = useOpsSummary();
-
-  return (
-    <section>
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-        Platform overview
-      </h2>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryStat label="Customers & staff" value={summary?.users} loading={loading} />
-        <SummaryStat label="Accounts" value={summary?.accounts} loading={loading} />
-        <SummaryStat label="Pending requests" value={summary?.pendingRequests} loading={loading} />
-        <SummaryStat
-          label="Locked accounts"
-          value={summary?.lockedAccounts}
-          loading={loading}
-          accent
-        />
-      </div>
-      {error && (
-        <p className="mt-2 text-xs text-rose-300/80">{error}</p>
-      )}
-    </section>
-  );
-}
-
 export function OpsDashboard() {
   const { user } = useAuth();
+  const { loading: summaryLoading, summary } = useOpsSummary();
+  const { requests, counts, events, connected } = useOpsData();
+
+  const open = requests.filter((r) => !isTerminalOpsStatus(r.status));
+  const needsAttention = open.slice(0, 5);
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-bold text-white">Operations overview</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          {user ? `Signed in as ${user.displayName}. ` : ''}Simulate the bank-side of every customer
-          action. The counts below are live; the queues and controls are placeholders that light up
-          in later milestones.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-white">Operations overview</h1>
+          <p className="mt-1 text-sm text-slate-400">
+            {user ? `Signed in as ${user.displayName}. ` : ''}Simulate the bank-side of every customer
+            action. Counts and queues below are live.
+          </p>
+        </div>
+        <span
+          className={cn(
+            'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs',
+            connected
+              ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+              : 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+          )}
+        >
+          <span className={cn('h-2 w-2 rounded-full', connected ? 'bg-emerald-400' : 'bg-amber-400')} />
+          {connected ? 'Live' : 'Reconnecting…'}
+        </span>
       </div>
 
-      {/* Live platform counts (v0.2.0) */}
-      <OverviewStrip />
-
-      {/* Request queues */}
+      {/* Platform counts */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Pending request queues
+          Platform overview
         </h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {queues.map((queue) => (
-            <Card key={queue.key} className="flex flex-col gap-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-white">{queue.label}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-slate-500">
-                    arrives {queue.milestone}
-                  </div>
-                </div>
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-bold text-slate-300">
-                  {queue.pending}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <Button variant="approve" size="sm" disabled>
-                  Approve
-                </Button>
-                <Button variant="reject" size="sm" disabled>
-                  Reject
-                </Button>
-                <Button variant="hold" size="sm" disabled>
-                  Hold
-                </Button>
-                <Button variant="ghost" size="sm" disabled>
-                  Request info
-                </Button>
-              </div>
-            </Card>
-          ))}
+          <SummaryStat label="Customers & staff" value={summary?.users} loading={summaryLoading} />
+          <SummaryStat label="Accounts" value={summary?.accounts} loading={summaryLoading} />
+          <SummaryStat label="Open requests" value={open.length} loading={false} />
+          <SummaryStat
+            label="Locked accounts"
+            value={summary?.lockedAccounts}
+            loading={summaryLoading}
+            accent
+          />
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Scenario / simulation controls */}
-        <section>
+      {/* Queue snapshot */}
+      <section>
+        <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-            Scenario controls
+            Request queue
           </h2>
-          <Card className="mt-3">
-            <div className="flex flex-wrap gap-2">
-              {simControls.map((control) => (
-                <Button key={control} variant="ghost" size="sm" disabled>
-                  {control}
-                </Button>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-slate-500">
-              These drive the disciplined ledger and fraud engine in later milestones (v0.5.0+).
-            </p>
-          </Card>
-        </section>
+          <Link to="/queues" className="text-xs font-semibold text-brand-teal hover:underline">
+            Open queues →
+          </Link>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          {OPS_REQUEST_STATUSES.map((status) => (
+            <Card key={status} className="flex flex-col gap-1 py-3">
+              <span className="text-[11px] uppercase tracking-wide text-slate-500">
+                {opsStatusLabel(status)}
+              </span>
+              <span className="text-xl font-bold tabular-nums text-white">{counts[status]}</span>
+            </Card>
+          ))}
+        </div>
 
-        {/* Simulated external responses */}
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-            Simulated external responses
-          </h2>
-          <Card className="mt-3">
-            <ul className="divide-y divide-white/10">
-              {simulatedResponses.map((item) => (
-                <li key={item.channel} className="flex items-center justify-between py-2">
-                  <div>
-                    <div className="text-sm text-white">{item.channel}</div>
-                    <div className="text-xs text-slate-500">{item.detail}</div>
+        <Card className="mt-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Needs attention
+          </h3>
+          {needsAttention.length === 0 ? (
+            <p className="mt-2 text-xs text-slate-500">The queue is clear. 🎉</p>
+          ) : (
+            <ul className="mt-2 divide-y divide-white/10">
+              {needsAttention.map((request) => (
+                <li key={request.id} className="flex items-center justify-between gap-3 py-2">
+                  <Link to="/queues" className="min-w-0 hover:underline">
+                    <div className="text-[10px] uppercase tracking-wide text-slate-500">
+                      {opsTypeLabel(request.type)}
+                    </div>
+                    <div className="truncate text-sm text-white">{request.summary}</div>
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <PriorityBadge priority={request.priority} />
+                    <StatusBadge status={request.status} />
+                    <span className="text-[10px] text-slate-500">{relativeTime(request.createdAt)}</span>
                   </div>
-                  <Button variant="ghost" size="sm" disabled>
-                    Send
-                  </Button>
                 </li>
               ))}
             </ul>
-          </Card>
-        </section>
-      </div>
+          )}
+        </Card>
+      </section>
+
+      {/* Recent simulated events */}
+      <section>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Recent simulated events
+          </h2>
+          <Link to="/messaging" className="text-xs font-semibold text-brand-teal hover:underline">
+            Simulated messaging →
+          </Link>
+        </div>
+        <Card className="mt-3">
+          <OpsActivityFeed events={events} limit={6} emptyHint="No simulated events yet." />
+        </Card>
+      </section>
     </div>
   );
 }
