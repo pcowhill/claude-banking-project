@@ -1,6 +1,6 @@
 {
   "name": "@simbank/backend",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Local Fastify + Socket.IO + Prisma/SQLite backend for the Meridian banking simulation. Local-only; no real financial integrations.",
@@ -30,6 +30,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "prisma": "^5.20.0",
+    "socket.io-client": "^4.8.0",
     "tsup": "^8.3.0"
   }
 }

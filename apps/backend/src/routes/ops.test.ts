@@ -77,8 +77,10 @@ describe('operations endpoints (v0.5.0)', () => {
     });
 
     it('forbids customer and joint_customer roles with 403', async () => {
+      const seeded = await prisma.operationsRequest.findFirst();
       for (const cookie of [customer.cookie, joint.cookie]) {
         expect((await get('/api/ops/requests', cookie)).statusCode).toBe(403);
+        expect((await get(`/api/ops/requests/${seeded!.id}`, cookie)).statusCode).toBe(403);
         expect((await get('/api/ops/events', cookie)).statusCode).toBe(403);
         const denied = await post('/api/ops/simulate/event', cookie, { channel: 'sms' });
         expect(denied.statusCode).toBe(403);
