@@ -13,7 +13,7 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.4.0 — Customer banking dashboard` (see `ROADMAP.md`).
+**Current milestone:** `v0.5.0 — Operations simulator core` (see `ROADMAP.md`).
 
 ## Tech stack
 
@@ -75,6 +75,27 @@ Run `npm run db:reset` first to seed these users.
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
+
+### New in v0.5.0 (operations simulator core)
+
+- **Sign in to the operations console at http://localhost:5174** as a staff member
+  (`sam.operator@example.com` / `Operator123!`, or the admin `riley.admin@example.com`
+  / `Admin123!`). Customer logins are still rejected here.
+- **Live request queues** (`/queues`): a seeded queue of work items (identity, MFA,
+  fraud, deposit, dispute, onboarding, ACH, support, password reset, external
+  account). **Approve / reject / hold / request info** on any card — the status
+  updates immediately and every action is written to an **audit log**. Filter by
+  status or queue lane; open a card for its history, linked simulated events, and an
+  optional note.
+- **Real-time, for real:** open the console in **two windows** and action a request
+  in one — it updates in the other without a refresh (operator sockets only).
+- **Simulated messaging** (`/messaging`): generate fake **SMS / email / MFA /
+  identity** events (clearly labelled simulated — no real provider is ever contacted)
+  and watch them stream into a live feed.
+- **No money moves:** acting on a request changes its workflow status only; it never
+  posts to the ledger or changes a balance (money movement is v0.7.0).
+- `npm run db:reset` now also seeds a **10-item operations queue** + **4 simulated
+  events** alongside the existing users/accounts/transactions.
 
 ### New in v0.4.0 (customer banking dashboard)
 

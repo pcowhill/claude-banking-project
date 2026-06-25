@@ -8,7 +8,70 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.5.0 — Operations simulator core** (not started).
+- Next milestone: **v0.6.0 — Onboarding and account opening** (not started).
+
+## [0.5.0] — 2026-06-25 — Operations simulator core
+
+The bank-side operations console comes alive: live request queues, audited
+operator actions, real-time updates over WebSockets, and clearly-labelled
+simulated external events. Money discipline is preserved — operator actions
+change workflow state only and never post to the ledger (that arrives with money
+movement in v0.7.0). Still a local SIMULATION; no real money, no real providers.
+
+### Added
+
+- **Live operations queues** in the console: real pending work items
+  (`GET /api/ops/requests`) replacing the placeholders, with status + queue-lane
+  filters and live status counts.
+- **Operator actions** — approve / reject / hold / request-more-info — via a pure
+  action **state machine**, each writing an `AuditLog` row (actor, note,
+  from/to status); `request_info` auto-generates a linked simulated email.
+- **Real-time updates** over Socket.IO: `ops:request_changed` and
+  `ops:external_event` push to an operators-only room so connected consoles update
+  without a refresh.
+- **Simulated external events** (`SimulatedEvent`): an SMS / email / MFA / identity
+  generator + a live feed, clearly labelled simulated — no real provider is ever
+  contacted.
+- **Request detail** with the operator-action history (from the audit trail), the
+  linked simulated events, and an optional note recorded in the audit log.
+- **Shared operations contract** (`@simbank/shared/operations`): action / priority
+  / channel enums, the action state machine (`nextStatusForAction`,
+  `isTerminalOpsStatus`, `canApplyAction`), request / detail / action-log / event
+  DTOs, the API request/response DTOs, socket payload types, and label / queue /
+  count helpers. Ops socket-event names + the operators room live in `constants.ts`.
+- **Operator API** (RBAC: ops_agent / admin only): `/api/ops/requests` (+counts /
+  filters), `/api/ops/requests/:id` (detail + history + events),
+  `/api/ops/requests/:id/action`, `/api/ops/simulate/event`, `/api/ops/events`;
+  `/api/ops/summary` extended with per-status counts (backward-compatible).
+
+### Changed
+
+- **Prisma schema** (first migration since v0.2.0, `operations_core`, additive):
+  `OperationsRequest` fleshed out (priority, detail, subject, last-action
+  bookkeeping, `resolvedAt`); new `SimulatedEvent` model. Money/auth tables
+  unchanged.
+- **Seed** now includes a dated 10-item operations queue + 4 simulated events
+  (with intake audit rows), guarded by new ops-integrity invariants.
+- **Socket.IO handshake** authenticates the operations session cookie and joins
+  only staff roles to the operators room (customers/anonymous never join).
+- **Operations console** dashboard reworked into a live overview; sidebar nav
+  switched to real links (Dashboard / Request queues / Simulated messaging).
+- Platform version bumped to **0.5.0**.
+
+### Security
+
+- Read-only security review: **PASS** (no Critical/High). Its one Medium — the
+  socket-room access control lacked an automated test — was addressed this
+  milestone with a real-client integration test
+  (`apps/backend/src/realtime.test.ts`).
+
+### Tests
+
+- **145** Vitest unit/integration (was 93): the shared operations contract,
+  backend ops routes (RBAC matrix, transitions, audit, realtime emissions,
+  simulated events, money-discipline), seed invariants, and the socket-room RBAC.
+- **25** Playwright e2e (was 22): the operator journey (live dashboard, action a
+  queue item, simulated messaging).
 
 ## [0.4.0] — 2026-06-25 — Customer banking dashboard
 
