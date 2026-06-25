@@ -51,8 +51,10 @@ React+Vite apps, branding, tests, CI, and the full docs/process framework.
   transfer leg.
 
 **Outcome:** `npm run verify` passes; 20 unit/integration + 3 smoke tests green;
-runtime audit clean. Milestone complete and tagged `v0.1.0`. Stopped at the
-gate; did **not** begin v0.2.0.
+runtime audit clean. Milestone complete; annotated tag `v0.1.0` created locally
+(tag push is blocked by the environment's git policy — HTTP 403 — so the human
+pushes it on merge to `main`; see the milestone report for commands). The
+session branch was pushed. Stopped at the gate; did **not** begin v0.2.0.
 
 **Carried forward / open items:** dev-tooling audit advisories (vite, vitest,
 esbuild); deferred frontend component tests. Tracked in `QUALITY_REPORT.md`.

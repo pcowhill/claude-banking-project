@@ -6,7 +6,11 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.1.0` — Project Foundation (complete).
+- **Current version / tag:** `v0.1.0` — Project Foundation (complete). The
+  annotated tag `v0.1.0` was created locally on the milestone commit; pushing
+  tags is blocked by this environment's git policy (HTTP 403), so the tag must be
+  (re)created/pushed by the human on merge to `main` — see the milestone report
+  for the exact command.
 - **Next milestone:** `v0.2.0` — Auth, roles, and demo users (not started).
 - **Working branch (this session):** `claude/stoic-mayer-y1ik2y` (the Claude
   Code Cloud session branch, used as the milestone branch; intended milestone

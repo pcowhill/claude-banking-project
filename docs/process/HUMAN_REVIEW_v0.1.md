@@ -11,8 +11,10 @@ not done yet, and where to leave feedback.
 
 - **Branch:** `claude/stoic-mayer-y1ik2y` (the Claude Code Cloud session branch,
   used as the milestone branch; intended name `milestone/v0.1-foundation`).
-- **Tag:** `v0.1.0` (annotated) — points at the milestone commit on that branch.
-- **Commit:** the tip of the branch / the `v0.1.0`-tagged commit (`git log -1`).
+- **Tag:** `v0.1.0` (annotated) — created locally on the milestone commit.
+  **Pushing tags is blocked by this cloud environment's git policy (HTTP 403)**,
+  so you create/push the tag on merge (commands below).
+- **Commit:** the tip of the branch (`git log -1`).
 - **Merge to `main`:** pending your review — see "About branches & merging".
 
 ## What changed (high level)
@@ -113,10 +115,22 @@ npm run dev
 ## About branches & merging
 
 This milestone was built in Claude Code Cloud on the session branch
-`claude/stoic-mayer-y1ik2y` and tagged `v0.1.0`. The intended git model is:
-`main` = latest completed milestone. To adopt v0.1.0 as `main`, review this
-branch and merge it (the `v0.1.0` tag marks the milestone commit). No pull
-request was opened (none was requested) — say the word if you'd like one.
+`claude/stoic-mayer-y1ik2y`. The intended git model is: `main` = latest
+completed milestone. The annotated `v0.1.0` tag was created locally but **could
+not be pushed** (the environment's git policy returns HTTP 403 for tag pushes;
+only the session branch is pushable). To adopt v0.1.0, after reviewing the
+branch run locally:
+
+```bash
+git fetch origin
+git checkout main
+git merge --no-ff origin/claude/stoic-mayer-y1ik2y
+git tag -a v0.1.0 -m "v0.1.0 — Project Foundation"
+git push origin main
+git push origin v0.1.0
+```
+
+No pull request was opened (none was requested) — say the word if you'd like one.
 
 ## Questions for you (each with my recommendation)
 

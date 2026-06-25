@@ -42,7 +42,7 @@ development setup, and CI; complete **only** milestone v0.1.0.
 | Milestone/human-review/next-prompt docs exist | ✅ |
 | `CHANGELOG.md` includes v0.1.0 | ✅ |
 | `PROJECT_STATE.md` / `NEXT_SESSION.md` current | ✅ |
-| Annotated tag `v0.1.0` | ✅ (created on the milestone commit) |
+| Annotated tag `v0.1.0` | ✅ created locally; ⚠️ push blocked by env git policy (HTTP 403) — see below |
 | Merged to `main` if checks pass | ⏳ pending human review (see HUMAN_REVIEW) |
 | Stop after v0.1.0; do not start v0.2.0 | ✅ |
 
@@ -63,11 +63,29 @@ development setup, and CI; complete **only** milestone v0.1.0.
   schema-relative resolution.
 - See `docs/process/decisions/ADR-0001-project-foundation.md`.
 
+## Git: branch, tag, and merge (manual steps for the human)
+
+- Built and pushed on the Claude Code Cloud session branch
+  `claude/stoic-mayer-y1ik2y` (used as the milestone branch; intended name
+  `milestone/v0.1-foundation`). No PR opened (none requested).
+- The annotated tag `v0.1.0` was created locally on the milestone commit, but
+  **pushing tags is blocked by this environment's git egress policy (HTTP 403)**.
+  Only the session branch is pushable here. To adopt the milestone, run locally
+  after reviewing the branch:
+
+  ```bash
+  git fetch origin
+  git checkout main
+  git merge --no-ff origin/claude/stoic-mayer-y1ik2y   # or merge the reviewed PR
+  git tag -a v0.1.0 -m "v0.1.0 — Project Foundation"
+  git push origin main
+  git push origin v0.1.0
+  ```
+
 ## Deviations / honest caveats
 
-- **Git:** built on the Claude Code Cloud session branch (not literally
-  `milestone/v0.1-foundation`); `main` merge is left for human review. No PR
-  opened (none requested).
+- **Tag push** blocked by environment policy (above) — local tag exists; human
+  pushes it on merge.
 - **Sandbox-only setup:** Prisma engine local mirror and a Playwright
   executable-path hook were needed in the cloud sandbox; neither affects normal
   machines or GitHub Actions.
