@@ -1,4 +1,12 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
+
+/**
+ * Either the full Prisma client or an interactive-transaction client. Domain
+ * services accept this so the SAME function works both standalone and inside a
+ * `prisma.$transaction(async (tx) => …)` (e.g. onboarding provisioning, which
+ * must create a user + account + ledger entry atomically).
+ */
+export type DbClient = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Prisma client + database helpers.

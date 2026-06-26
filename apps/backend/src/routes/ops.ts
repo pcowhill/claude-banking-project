@@ -7,6 +7,7 @@ import {
   OPS_REQUEST_TYPES,
   SIM_EVENT_DIRECTIONS,
   SIM_EVENT_STATUSES,
+  validateAdminCreateUser,
   type ApiErrorResponse,
   type OperationsQueueQuery,
   type OpsRequestStatus,
@@ -25,6 +26,7 @@ import {
   listSimulatedEvents,
   OpsActionError,
 } from '../ops/requests';
+import { adminCreateUser, AdminUserError } from '../ops/admin-users';
 
 /**
  * Operations & admin endpoints, gated by role (ops_agent / admin). Customers and
@@ -108,20 +110,28 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { action?: unknown; note?: unknown };
     if (!isOpsAction(body.action)) {
-      return badRequest(reply, 'A valid action (approve | reject | hold | request_info) is required.');
+      return badRequest(
+        reply,
+        'A valid action (approve | reject | hold | request_info | note) is required.',
+      );
     }
     const note =
       typeof body.note === 'string' ? body.note.slice(0, MAX_NOTE_LENGTH) : undefined;
+    // A note carries no decision, so its text is mandatory.
+    if (body.action === 'note' && !note?.trim()) {
+      return badRequest(reply, 'A note is required to add a note.');
+    }
 
     try {
-      const { request, event } = await applyOperatorAction(
+      const { request, event, events } = await applyOperatorAction(
         prisma,
         { id, action: body.action, note, actor: req.user! },
         new Date(),
       );
-      // Push the queue change (and any auto-generated simulated event) to operators.
+      // Push the queue change (and any auto-generated simulated events) to operators.
       app.opsRealtime.requestChanged('updated', request);
       if (event) app.opsRealtime.externalEvent(event);
+      for (const extra of events ?? []) app.opsRealtime.externalEvent(extra);
       return reply.send({ request });
     } catch (err) {
       if (err instanceof OpsActionError) {
@@ -168,32 +178,63 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
 
   // ---- Admin ----------------------------------------------------------------
 
-  app.get(
-    '/api/admin/users',
-    { preHandler: [requireAuth, requireRole('admin')] },
-    async (_req, reply) => {
-      const users = await prisma.user.findMany({
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          email: true,
-          displayName: true,
-          role: true,
-          status: true,
-          lastLoginAt: true,
-          failedLoginAttempts: true,
-          lockedUntil: true,
-          createdAt: true,
-        },
-      });
-      return reply.send({
-        users: users.map((u) => ({
-          ...u,
-          lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
-          lockedUntil: u.lockedUntil ? u.lockedUntil.toISOString() : null,
-          createdAt: u.createdAt.toISOString(),
-        })),
-      });
-    },
-  );
+  const adminOnly = { preHandler: [requireAuth, requireRole('admin')] };
+
+  app.get('/api/admin/users', adminOnly, async (_req, reply) => {
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        status: true,
+        lastLoginAt: true,
+        failedLoginAttempts: true,
+        lockedUntil: true,
+        createdAt: true,
+      },
+    });
+    return reply.send({
+      users: users.map((u) => ({
+        ...u,
+        lastLoginAt: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
+        lockedUntil: u.lockedUntil ? u.lockedUntil.toISOString() : null,
+        createdAt: u.createdAt.toISOString(),
+      })),
+    });
+  });
+
+  // Admin-created demo users (v0.6.0). Optionally opens + funds an account;
+  // funding is an AUDITED bank-originated adjustment requiring a reason (enforced
+  // by the shared validator + the service). Balances stay derived.
+  app.post('/api/admin/users', adminOnly, async (req, reply) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const check = validateAdminCreateUser({
+      email: typeof body.email === 'string' ? body.email.slice(0, MAX_NOTE_LENGTH) : undefined,
+      displayName: typeof body.displayName === 'string' ? body.displayName.slice(0, MAX_NOTE_LENGTH) : undefined,
+      role: typeof body.role === 'string' ? (body.role as never) : undefined,
+      product: typeof body.product === 'string' ? body.product : undefined,
+      initialFundingMinor:
+        typeof body.initialFundingMinor === 'number' ? body.initialFundingMinor : undefined,
+      reason: typeof body.reason === 'string' ? body.reason.slice(0, MAX_NOTE_LENGTH) : undefined,
+      password: typeof body.password === 'string' ? body.password : undefined,
+    });
+    if (!check.ok || !check.value) {
+      return reply.code(400).send({
+        error: 'Please correct the highlighted fields.',
+        code: 'invalid_request',
+        fields: check.errors,
+      } as ApiErrorResponse & { fields?: Record<string, string> });
+    }
+    try {
+      const result = await adminCreateUser(check.value, req.user!, new Date());
+      return reply.code(201).send(result);
+    } catch (err) {
+      if (err instanceof AdminUserError) {
+        return reply.code(409).send({ error: err.message, code: err.code } satisfies ApiErrorResponse);
+      }
+      throw err;
+    }
+  });
 }

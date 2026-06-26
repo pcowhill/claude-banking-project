@@ -1,6 +1,8 @@
 import {
   ACCOUNT_RELATIONSHIPS,
   BANK_ORIGINATED_ORIGINS,
+  INVITATION_STATUSES,
+  ONBOARDING_PRODUCTS,
   OPS_REQUEST_PRIORITIES,
   OPS_REQUEST_STATUSES,
   OPS_REQUEST_TYPES,
@@ -10,9 +12,11 @@ import {
   toMinor,
   type AccountRelationship,
   type AccountType,
+  type InvitationStatus,
   type LedgerDirection,
   type LedgerOrigin,
   type LedgerStatus,
+  type OnboardingProduct,
   type OpsRequestPriority,
   type OpsRequestStatus,
   type OpsRequestType,
@@ -104,12 +108,45 @@ export interface SeedSimulatedEvent {
   minutesAgo?: number;
 }
 
+/**
+ * A seeded onboarding APPLICATION (v0.6.0), linked 1:1 to a seeded `onboarding`
+ * operations request so a reviewer can approve it end-to-end (which provisions a
+ * user + account + initial funding). SIMULATION: the password is a non-secret
+ * demo value, hashed by the seed writer before it touches the database.
+ */
+export interface SeedOnboardingApplication {
+  /** The {@link SeedOperationsRequest.key} of the `onboarding` request this backs. */
+  requestKey: string;
+  reference: string;
+  fullName: string;
+  email: string;
+  product: OnboardingProduct;
+  initialFundingMinor: number;
+  jointInviteEmail?: string | null;
+  /** Non-secret demo password (SIMULATION); hashed by the seed writer. */
+  password: string;
+}
+
+/**
+ * A seeded joint-owner INVITATION (v0.6.0). Lets the demo show accept/decline
+ * turning into an `AccountAccess` grant. SIMULATION: never a real email.
+ */
+export interface SeedInvitation {
+  accountKey: string;
+  inviterEmail: string;
+  inviteeEmail: string;
+  relationship: AccountRelationship;
+  status?: InvitationStatus; // default 'pending'
+}
+
 export interface SeedPlan {
   users: SeedUser[];
   entries: SeedLedgerEntry[];
   access: SeedAccess[];
   operationsRequests: SeedOperationsRequest[];
   simulatedEvents: SeedSimulatedEvent[];
+  onboardingApplications: SeedOnboardingApplication[];
+  invitations: SeedInvitation[];
 }
 
 export function buildSeedPlan(): SeedPlan {
@@ -349,10 +386,18 @@ export function buildSeedPlan(): SeedPlan {
       key: 'onboarding-taylor',
       type: 'onboarding',
       summary: 'New account application — Everyday Checking',
-      detail: 'A prospective customer applied to open an Everyday Checking account.',
+      detail:
+        'A prospective customer applied to open an Everyday Checking account (simulated). Approving this request provisions the account and posts the opening deposit.',
       subjectName: 'Taylor Prospect',
       subjectEmail: 'taylor.prospect@example.com',
-      payload: { product: 'Everyday Checking' },
+      // Runtime onboarding context (matches what the open-account flow stores), so
+      // the operator console can show product + funding and approve it end-to-end.
+      payload: {
+        reference: 'MER-SEED01',
+        product: 'checking',
+        initialFundingMinor: 25_000,
+        jointInviteEmail: null,
+      },
       daysAgo: 1,
     },
     {
@@ -420,7 +465,37 @@ export function buildSeedPlan(): SeedPlan {
     },
   ];
 
-  return { users, entries, access, operationsRequests, simulatedEvents };
+  // --- Onboarding application (v0.6.0) ---------------------------------------
+  // Backs the seeded `onboarding-taylor` queue item with a real application so a
+  // reviewer can APPROVE it and watch a user + checking account + a $250.00
+  // bank-originated opening deposit get provisioned. SIMULATION only.
+  const onboardingApplications: SeedOnboardingApplication[] = [
+    {
+      requestKey: 'onboarding-taylor',
+      reference: 'MER-SEED01',
+      fullName: 'Taylor Prospect',
+      email: 'taylor.prospect@example.com',
+      product: 'checking',
+      initialFundingMinor: 25_000, // $250.00
+      jointInviteEmail: null,
+      password: 'Prospect123!',
+    },
+  ];
+
+  // --- Joint-owner invitation (v0.6.0) ---------------------------------------
+  // Avery invites Jordan to the Goal Savings account; accepting (in the portal)
+  // creates a `joint` AccountAccess grant so Jordan can see savings too.
+  const invitations: SeedInvitation[] = [
+    {
+      accountKey: 'avery-savings',
+      inviterEmail: 'avery.customer@example.com',
+      inviteeEmail: 'jordan.joint@example.com',
+      relationship: 'joint',
+      status: 'pending',
+    },
+  ];
+
+  return { users, entries, access, operationsRequests, simulatedEvents, onboardingApplications, invitations };
 }
 
 /**
@@ -538,6 +613,67 @@ export function assertSeedOpsIntegrity(plan: SeedPlan): void {
       throw new Error(
         `Seed invariant violated: simulated event references unknown request key '${event.requestKey}'.`,
       );
+    }
+  }
+}
+
+/**
+ * Onboarding/invitation integrity invariants the seed must satisfy (v0.6.0).
+ * Throws on violation. Keeps the seeded applications + invitations internally
+ * consistent (each application backs a real `onboarding` request of a known
+ * product; each invitation references declared users + an account) so the
+ * onboarding + invitation flows rest on a sound fixture.
+ */
+export function assertSeedOnboardingIntegrity(plan: SeedPlan): void {
+  const requestByKey = new Map(plan.operationsRequests.map((r) => [r.key, r]));
+  const emails = new Set(plan.users.map((u) => u.email.toLowerCase()));
+  const accountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+
+  const references = new Set<string>();
+  for (const app of plan.onboardingApplications) {
+    const request = requestByKey.get(app.requestKey);
+    if (!request) {
+      throw new Error(
+        `Seed invariant violated: onboarding application references unknown request key '${app.requestKey}'.`,
+      );
+    }
+    if (request.type !== 'onboarding') {
+      throw new Error(
+        `Seed invariant violated: onboarding application '${app.reference}' is linked to a non-onboarding request.`,
+      );
+    }
+    if (!ONBOARDING_PRODUCTS.includes(app.product)) {
+      throw new Error(`Seed invariant violated: onboarding application has unknown product '${app.product}'.`);
+    }
+    if (app.initialFundingMinor < 0 || !Number.isInteger(app.initialFundingMinor)) {
+      throw new Error(`Seed invariant violated: onboarding application '${app.reference}' has invalid funding.`);
+    }
+    if (references.has(app.reference)) {
+      throw new Error(`Seed invariant violated: duplicate onboarding reference '${app.reference}'.`);
+    }
+    references.add(app.reference);
+    // A pending application whose email already belongs to a seeded user could
+    // never be approved (provisioning is blocked on a duplicate email), so guard
+    // against that footgun at seed time.
+    if (emails.has(app.email.toLowerCase())) {
+      throw new Error(
+        `Seed invariant violated: onboarding application '${app.reference}' reuses an existing user email '${app.email}'.`,
+      );
+    }
+  }
+
+  for (const invite of plan.invitations) {
+    if (!accountKeys.has(invite.accountKey)) {
+      throw new Error(`Seed invariant violated: invitation references unknown account key '${invite.accountKey}'.`);
+    }
+    if (!emails.has(invite.inviterEmail.toLowerCase())) {
+      throw new Error(`Seed invariant violated: invitation references unknown inviter '${invite.inviterEmail}'.`);
+    }
+    if (!ACCOUNT_RELATIONSHIPS.includes(invite.relationship)) {
+      throw new Error(`Seed invariant violated: invitation has unknown relationship '${invite.relationship}'.`);
+    }
+    if (invite.status && !INVITATION_STATUSES.includes(invite.status)) {
+      throw new Error(`Seed invariant violated: invitation has unknown status '${invite.status}'.`);
     }
   }
 }

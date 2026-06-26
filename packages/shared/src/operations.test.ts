@@ -4,6 +4,7 @@ import {
   OPS_ACTIONS,
   OPS_ACTION_LABELS,
   OPS_ACTION_RESULT,
+  OPS_NOTE_ACTION,
   OPS_QUEUES,
   OPS_REQUEST_PRIORITIES,
   OPS_REQUEST_STATUS_LABELS,
@@ -14,6 +15,7 @@ import {
   canApplyAction,
   channelLabel,
   countRequestsByStatus,
+  isDecisionAction,
   isOpsAction,
   isSimEventChannel,
   isTerminalOpsStatus,
@@ -145,6 +147,33 @@ describe('enum completeness', () => {
   it('exposes the expected action and priority sets', () => {
     expect([...OPS_ACTIONS]).toEqual(['approve', 'reject', 'hold', 'request_info']);
     expect([...OPS_REQUEST_PRIORITIES]).toEqual(['low', 'normal', 'high']);
+  });
+});
+
+describe('note action (v0.6.0)', () => {
+  it('is NOT one of the four decision actions (never a fifth decision button)', () => {
+    expect(OPS_ACTIONS as readonly string[]).not.toContain(OPS_NOTE_ACTION);
+  });
+
+  it('isOpsAction accepts note; isDecisionAction rejects it', () => {
+    expect(isOpsAction('note')).toBe(true);
+    expect(isDecisionAction('note')).toBe(false);
+    expect(isDecisionAction('approve')).toBe(true);
+  });
+
+  it('does not change status (nextStatusForAction is null)', () => {
+    expect(nextStatusForAction('note')).toBeNull();
+  });
+
+  it('is allowed at any time, including on a terminal request', () => {
+    expect(canApplyAction('pending', 'note')).toBe(true);
+    expect(canApplyAction('approved', 'note')).toBe(true);
+    expect(canApplyAction('rejected', 'note')).toBe(true);
+  });
+
+  it('has a display label', () => {
+    expect(opsActionLabel('note')).toBe('Add note');
+    expect(OPS_ACTION_LABELS.note).toBe('Add note');
   });
 });
 

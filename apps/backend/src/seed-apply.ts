@@ -1,9 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { isTerminalOpsStatus, type OpsRequestStatus } from '@simbank/shared';
 import { hashPassword } from './auth/password';
 import {
   assertSeedAccessIntegrity,
   assertSeedInvariants,
+  assertSeedOnboardingIntegrity,
   assertSeedOpsIntegrity,
   type SeedPlan,
 } from './seed-plan';
@@ -23,6 +25,8 @@ export interface SeedResult {
   grants: number;
   opsRequests: number;
   simulatedEvents: number;
+  onboardingApplications: number;
+  invitations: number;
 }
 
 export async function applySeedPlan(
@@ -33,11 +37,14 @@ export async function applySeedPlan(
   assertSeedInvariants(plan);
   assertSeedAccessIntegrity(plan);
   assertSeedOpsIntegrity(plan);
+  assertSeedOnboardingIntegrity(plan);
 
   await prisma.loginEvent.deleteMany();
   await prisma.session.deleteMany();
+  await prisma.accountInvitation.deleteMany();
   await prisma.accountAccess.deleteMany();
   await prisma.ledgerEntry.deleteMany();
+  await prisma.onboardingApplication.deleteMany();
   await prisma.account.deleteMany();
   await prisma.simulatedEvent.deleteMany();
   await prisma.operationsRequest.deleteMany();
@@ -156,6 +163,51 @@ export async function applySeedPlan(
     });
   }
 
+  // Onboarding applications (v0.6.0): linked 1:1 to a seeded `onboarding` request
+  // so a reviewer can approve it end-to-end. The non-secret demo password is
+  // hashed here; the plaintext never lands in the database.
+  for (const app of plan.onboardingApplications) {
+    const requestId = requestIdByKey.get(app.requestKey);
+    if (!requestId) throw new Error(`Seed references an unknown request key: ${app.requestKey}`);
+    const passwordHash = await hashPassword(app.password);
+    await prisma.onboardingApplication.create({
+      data: {
+        reference: app.reference,
+        status: 'submitted',
+        fullName: app.fullName,
+        email: app.email,
+        product: app.product,
+        initialFundingMinor: app.initialFundingMinor,
+        jointInviteEmail: app.jointInviteEmail ?? null,
+        consentAt: now,
+        passwordHash,
+        requestId,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
+  // Joint-owner invitations (v0.6.0): pending so the demo can accept/decline.
+  for (const invite of plan.invitations) {
+    const accountId = accountIdByKey.get(invite.accountKey);
+    const invitedById = userIdByEmail.get(invite.inviterEmail.toLowerCase());
+    if (!accountId) throw new Error(`Seed references an unknown account key: ${invite.accountKey}`);
+    if (!invitedById) throw new Error(`Seed references an unknown inviter email: ${invite.inviterEmail}`);
+    await prisma.accountInvitation.create({
+      data: {
+        token: randomBytes(24).toString('hex'),
+        accountId,
+        invitedById,
+        inviteeEmail: invite.inviteeEmail.toLowerCase(),
+        relationship: invite.relationship,
+        status: invite.status ?? 'pending',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
   await prisma.simulationClock.upsert({
     where: { id: 'singleton' },
     update: {},
@@ -168,17 +220,20 @@ export async function applySeedPlan(
       action: 'seed_database',
       entity: 'system',
       reason:
-        'Demo seed (v0.5.0: demo users + access grants + dated transaction history + operations queue + simulated events)',
+        'Demo seed (v0.6.0: demo users + access grants + dated transaction history + operations queue + simulated events + an approvable onboarding application + a pending joint invitation)',
     },
   });
 
-  const [users, accounts, entries, grants, opsRequests, simulatedEvents] = await Promise.all([
-    prisma.user.count(),
-    prisma.account.count(),
-    prisma.ledgerEntry.count(),
-    prisma.accountAccess.count(),
-    prisma.operationsRequest.count(),
-    prisma.simulatedEvent.count(),
-  ]);
-  return { users, accounts, entries, grants, opsRequests, simulatedEvents };
+  const [users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations] =
+    await Promise.all([
+      prisma.user.count(),
+      prisma.account.count(),
+      prisma.ledgerEntry.count(),
+      prisma.accountAccess.count(),
+      prisma.operationsRequest.count(),
+      prisma.simulatedEvent.count(),
+      prisma.onboardingApplication.count(),
+      prisma.accountInvitation.count(),
+    ]);
+  return { users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations };
 }
