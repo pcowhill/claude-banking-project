@@ -5,6 +5,96 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.6.2 — Operations sign-in fix (patch) — 2026-06-26
+
+A patch release fixing the single blocking operator sign-in regression reported in
+the v0.6.1 review (B-06). Changes are confined to **surface-resolution** — the shared
+auth contract, the backend cookie/handshake selection, and the operations app's
+outgoing requests — plus the shared version string. **No money-path, schema,
+migration, ledger, contract, auth-model, public-site, dashboard, or onboarding
+change.** (This patch sits on top of v0.6.1, whose B-03/B-04 fixes are retained — the
+fresh branch was fast-forwarded to include the previously-unmerged v0.6.1 commit.)
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **201 passed / 201** (189 + **12 new**):
+  - `apps/backend/src/routes/ops-session-origin.test.ts` (**5**, `app.inject`): ops
+    login sets the ops cookie; an **Origin-less GET carrying the surface header →
+    200** (the fix); `GET /api/auth/me` with the header and no Origin → 200; an
+    explicit ops `Origin` with **no** header still works (Origin fallback unchanged);
+    **no Origin AND no header → 401** (documents the latent customer default the bug
+    rode on). The two header tests **failed against the pre-fix backend** and pass
+    after — the empirical reproduction.
+  - `apps/backend/src/auth/cookies.test.ts` (**7**): `sessionAudienceFromHeader`,
+    `sessionAudienceForOrigin`, and the **header-over-Origin precedence** in
+    `sessionAudienceForRequest`.
+  - All prior suites still green (no regression).
+- **Build** — backend (tsup) + customer (vite) + operations (vite) all build.
+
+### E2E (Playwright) ✅ PASS
+- **33 passed / 33** in **real Chromium** (32 + **1 new** in `operations.spec.ts`):
+  - **B-06 reproduction + fix** — "stays signed in when the browser omits Origin on
+    API GETs (same-origin deployment)": routes `**/api/**` and **strips the `Origin`
+    header on GET/HEAD only** (keeping it on the login POST, exactly how a same-origin
+    browser behaves), forwarding to the real backend; asserts the operator reaches the
+    dashboard, the live queue loads, and a **reload restores the session** (not
+    bounced). A self-validating `sawOriginlessOpsGet` guard asserts the test actually
+    exercised an Origin-less ops GET, so it can't pass trivially.
+  - The v0.3.0 **session-isolation** bleed test stays green (isolation NOT regressed),
+    and the v0.6.1 **B-03** narrow-nav + **B-04** session-recovery e2e stay green.
+
+### Diagnosis evidence (B-06 — why it was a same-origin-only bug)
+The backend chose the per-surface session cookie from the request **`Origin`** header
+and defaulted to the **customer** surface when `Origin` was absent. Browsers **omit
+`Origin` on same-origin GETs**, so in a same-origin deployment the operator's
+authenticated `/api/ops/*` GETs read the empty customer cookie and 401'd; the v0.6.1
+recovery handler escalated that into an unrecoverable login loop. The cross-origin dev
+setup (`:5174` → `:3000`) always sends `Origin`, which is why local runs, the v0.6.1
+curl checks, and the cross-origin e2e all passed. Reproduced via `app.inject` with no
+`Origin` (401 pre-fix → 200 with the surface header) and via a real-browser route
+rewrite that strips `Origin` on GETs.
+
+### Security / safety
+No security-surface regression. The new `x-meridian-surface` header **only selects
+which session cookie is read** — it cannot grant access; the RBAC `requireRole` checks
+are unchanged, so a client self-declaring `operations` with no valid ops cookie still
+gets 401/403. Session isolation (the v0.3.0 per-surface fix) is preserved (Origin
+remains the fallback and is still honoured) and is covered by the green
+session-isolation tests. No money-path, ledger, or schema change; no secrets added;
+`.env` still ignored; simulation disclaimer still visible in both apps + README. The
+v0.6.0 security review (PASS) still stands.
+
+### CORS
+The real-browser WebServer logs showed `OPTIONS` preflights returning **204** for the
+new `x-meridian-surface` header on `/api/ops/*` GETs — `@fastify/cors` reflects
+requested headers by default, so **no CORS config change was needed**; the
+cross-origin path is unaffected.
+
+### Known issues / follow-ups (unchanged from v0.6.0)
+- Pre-existing hardening follow-ups (CSRF token, config-driven cookie `secure`,
+  helmet + login rate-limit) and the dev-tooling npm-audit advisories (vite, vitest,
+  esbuild) remain tracked for a hardening pass; runtime audit clean.
+- Frontend component **unit** tests remain deferred; the apps are covered by build +
+  Playwright journeys + backend/contract tests. (This patch's new backend unit +
+  integration + e2e tests extend coverage to surface-header session resolution.)
+- The carried v0.5.0 **Q-01** (approving a pending deposit → pending→posted) remains
+  parked with **v0.7.0**.
+
+### Sandbox-only notes (do not affect users/CI)
+- Prisma engines curl-mirrored (query-engine library + schema-engine for
+  `debian-openssl-3.0.x`) and Playwright pointed at the pre-installed Chromium — same
+  approach as Sessions 1–7. No migration this patch; standard installs / `npx
+  playwright install` work elsewhere.
+
+### Overall
+**v0.6.2 meets the quality bar.** Gate green (201 + 33 tests, 0 lint warnings), the
+operator sign-in loop is root-caused and fixed with tests that fail on the pre-fix
+backend, session isolation preserved, money discipline untouched, open items tracked
+honestly. No blockers.
+
+---
+
 ## v0.6.1 — Operations console fixes (patch) — 2026-06-26
 
 A patch release fixing the two v0.6.0-review bugs in the operations console. Changes

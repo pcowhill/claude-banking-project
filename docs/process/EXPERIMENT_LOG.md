@@ -6,6 +6,96 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 8 — v0.6.2 Operations sign-in fix (patch) — 2026-06-26
+
+**Goal:** The human's v0.6.1 review reported a **new, blocking regression** — they
+could no longer sign in to Meridian Operations at all (after a successful login the
+dashboard flashed, then bounced back to the sign-in screen with the v0.6.1 "session
+has ended" notice, looping forever and surviving a cookie clear; both Sam and Riley
+affected) — and **explicitly re-scoped the session away from v0.7.0** to a patch
+release `v0.6.2` fixing only that bug for them to test. So: do NOT start Money
+movement; root-cause the login loop, fix it, prove it, document, tag.
+
+**Branch-history surprise (resolved first):** the fresh session branch
+(`claude/gracious-fermi-5cfomj`) was cut from `main` (**v0.6.0**) and did **not**
+contain v0.6.1 — that work was a **single commit (`52347db`) on an UNMERGED branch**
+(`origin/claude/dreamy-maxwell-njcxe7`) never merged to `main`. Since the bug being
+fixed is literally the v0.6.1 recovery handler escalating a pre-existing 401 into a
+loop, the fix has to sit on top of v0.6.1, so the branch was **fast-forwarded** to
+include `52347db` — it now carries v0.6.0 + v0.6.1 + v0.6.2.
+
+**Bug (B-06) — operator sign-in loop:** confirmed real, and not role/cookie-specific
+(both staff users). Diagnosis by reproduction, narrowing to the same-origin request
+shape:
+- **Backend `app.inject` with an explicit ops `Origin`:** login sets `mer_ops_session`;
+  `/api/auth/me` + `/api/ops/*` GETs 200. The Origin path is correct (matching the
+  v0.6.1 curl checks).
+- **Backend `app.inject` with NO `Origin` on the GET** (the same-origin browser shape):
+  the authenticated GET resolved to the **customer** cookie and **401'd** —
+  reproducing the loop's trigger. Adding `x-meridian-surface: operations` to that same
+  request returns 200 — the fix, empirically.
+- **Real Chromium, route-rewritten** to strip `Origin` on GET/HEAD only (keeping it on
+  the login POST, exactly how a same-origin browser behaves): pre-fix it loops; post-
+  fix the operator reaches the dashboard, the queue loads, and a reload restores the
+  session.
+
+**Root cause (B-06):** the backend picks the per-surface session cookie
+(`mer_session` customer / `mer_ops_session` operations) from the request **`Origin`
+header**, defaulting to the **customer** surface when `Origin` is absent/unrecognized
+(`apps/backend/src/auth/cookies.ts` → `sessionAudienceForOrigin`). But **browsers omit
+`Origin` on same-origin GET requests** — they send it on the login POST but not on
+safe-method GETs. In a same-origin deployment the operator's authenticated `/api/ops/*`
+GETs arrived with no `Origin`, were treated as customer, read the empty `mer_session`,
+and returned **401**. v0.6.0 surfaced that exact 401 as the "Not authenticated"
+dead-end (original B-04); the v0.6.1 recovery handler then escalated the same 401 into
+an **unrecoverable login loop**. The standard cross-origin dev setup (`:5174` →
+`:3000`) **always** sends `Origin`, which is precisely why local runs, the v0.6.1 curl
+checks (ops Origin set), and the cross-origin Playwright suite all passed while the
+human's same-origin environment failed — the blind spot.
+
+**Fix (B-06):** each front-end app declares its surface via an explicit header
+`AUTH.surfaceHeader` = `x-meridian-surface` that the backend trusts **ahead of**
+`Origin` (Origin stays a fallback, so the Socket.IO handshake, cross-origin dev, and
+existing Origin-based tests are unchanged). Added `isSessionAudience` guard +
+`surfaceHeader` to `packages/shared/src/auth.ts`; new `sessionAudienceFromHeader()` +
+`sessionAudienceForRequest()` = header ?? Origin-fallback in `cookies.ts`; the
+Socket.IO ops-room handshake (`realtime.ts`) also prefers the header. The ops app
+sends `operations` on every authenticated REST call (`api.ts`) and as socket
+`extraHeaders` (`useOpsSocket.ts`). The **customer app was deliberately NOT changed**
+— it already resolves to the `customer` cookie via the least-privileged default, and
+adding a custom header to its GETs would reintroduce the CORS preflights its design
+note avoids; session isolation (the v0.3.0 fix) stays covered by the existing
+Origin-based tests and remains green. **Security:** the surface header only selects
+WHICH cookie is read — it cannot grant access (RBAC `requireRole` checks unchanged),
+so trusting the client's self-declared surface is safe.
+
+**Discipline kept:** no money-path, schema, migration, ledger, money-contract, or auth
+*model* change — only surface-resolution. Money discipline, the public site, the
+customer dashboard, and onboarding untouched; balances stay derived; disclaimer
+visible in both apps + README; no secrets.
+
+**Surprises / environment friction (sandbox only):** same Prisma engine-download block
+as Sessions 1–7 (ECONNRESET to `binaries.prisma.sh`); resolved the documented way
+(`npm install --ignore-scripts` + curl-mirror the query-engine library + schema-engine
+for `debian-openssl-3.0.x` + `PRISMA_*` env vars). Prisma 5.22.0, engine
+`605197351a3c8bdd595af2d2a9bc3025bca48ea2`. Playwright used the pre-installed Chromium
+via `PLAYWRIGHT_CHROMIUM_PATH`. The real-browser WebServer logs showed `OPTIONS`
+preflights returning **204** for the new `x-meridian-surface` header on `/api/ops/*`
+GETs — `@fastify/cors` reflects requested headers by default, so **no CORS config
+change was needed**. None of this affects normal machines or CI.
+
+**Outcome:** `npm run verify` passes; **201** unit/integration tests (was 189; +12 —
+`routes/ops-session-origin.test.ts` ×5 incl. the two header tests that FAILED against
+the pre-fix backend, + `auth/cookies.test.ts` ×7) + **33** Playwright e2e in real
+Chromium (was 32; +1 — the same-origin Origin-less-GET reproduction with a
+self-validating `sawOriginlessOpsGet` guard; the v0.3.0 session-isolation bleed test
+and the v0.6.1 B-03/B-04 e2e still green). No schema change this patch. Version bumped
+to 0.6.2; annotated tag `v0.6.2` created locally (tag push blocked by env policy — HTTP
+403 — so the human pushes it on merge; see the milestone report). Stopped at the patch
+gate; did **not** start v0.7.0.
+
+---
+
 ## Session 7 — v0.6.1 Operations console fixes (patch) — 2026-06-26
 
 **Goal:** The human's v0.6.0 review reported two Meridian Operations bugs and

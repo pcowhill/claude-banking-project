@@ -1,6 +1,6 @@
 import type { CookieSerializeOptions } from '@fastify/cookie';
 import type { FastifyRequest } from 'fastify';
-import { AUTH, sessionCookieName, type SessionAudience } from '@simbank/shared';
+import { AUTH, isSessionAudience, sessionCookieName, type SessionAudience } from '@simbank/shared';
 import { config } from '../config';
 
 /**
@@ -47,8 +47,32 @@ export function sessionAudienceForOrigin(origin: string | undefined): SessionAud
   return 'customer';
 }
 
+/**
+ * The surface a request explicitly declares via {@link AUTH.surfaceHeader}, or
+ * null if it sends no (valid) one. This is the PRIMARY signal: each front-end
+ * app sets the header on every API call, so the backend never has to guess the
+ * surface from `Origin` — which browsers omit on same-origin GETs and which only
+ * matches hard-coded localhost origins. (A header can only select WHICH session
+ * cookie is read; it cannot grant access — role checks still apply — so trusting
+ * the client's self-declared surface is safe.)
+ */
+export function sessionAudienceFromHeader(
+  value: string | string[] | undefined,
+): SessionAudience | null {
+  const header = Array.isArray(value) ? value[0] : value;
+  return isSessionAudience(header) ? header : null;
+}
+
+/**
+ * Pick the session surface for a request: trust the explicit surface header
+ * first, then fall back to the Origin (so the Socket.IO handshake, cross-origin
+ * dev fetches, and tests that send an Origin keep working unchanged).
+ */
 export function sessionAudienceForRequest(req: FastifyRequest): SessionAudience {
-  return sessionAudienceForOrigin(req.headers.origin);
+  return (
+    sessionAudienceFromHeader(req.headers[AUTH.surfaceHeader]) ??
+    sessionAudienceForOrigin(req.headers.origin)
+  );
 }
 
 /** The session cookie name for the surface a request belongs to. */

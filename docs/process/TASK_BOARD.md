@@ -205,6 +205,25 @@ dependencies · status · result/outcome · related commit/tag.
 | B-05 | Regression coverage + gate | Testing/QA | Deterministic e2e for both fixes; `npm run verify` green; no test regression | B-03,B-04 | Done | **+2** e2e (32 total, was 30): narrow-width nav + 401→sign-in recovery (via route interception); **189** Vitest unchanged; verify green |
 | DOC-061 | Patch handoff docs + tag | Process Scribe | Save feedback verbatim; v0.6.1-named human review (with the bug explanations the human asked for) + milestone report + next-session prompt; update PROJECT_STATE / NEXT_SESSION / TASK_BOARD / EXPERIMENT_LOG / CHANGELOG / QUALITY_REPORT / README; bump version to 0.6.1; annotated tag `v0.6.1` | B-03,B-04,B-05 | Done | `HUMAN_REVIEW_v0.6.1.md`, `MILESTONE_REPORT_v0.6.1.md`, `NEXT_SESSION_PROMPT_v0.6.1.md`; state/next/board/changelog/experiment-log/quality-report/README updated; version 0.6.1; tag `v0.6.1` |
 
+## Milestone v0.6.2 — Operations sign-in fix (patch)  ✅ Done (tag `v0.6.2`)
+
+> **Re-scoped by the human** (see `feedback/FEEDBACK_v0.6.1_2026-06-26_1852.md`): a
+> NEW blocking regression from the v0.6.1 B-04 fix made the operator unable to sign
+> in at all — the dashboard flashes, then the console bounces back to the sign-in
+> screen ("Your operator session has ended…") in an unrecoverable loop, for both Sam
+> and the Administrator. Fix ONLY this bug, ship **v0.6.2**, and do **not** start
+> v0.7.0 (which waits for the human to test v0.6.2). Confirmed a **real bug**; fixed.
+> The change touches the **shared auth contract + backend session-cookie/real-time
+> resolution + the operations app client** — no schema / migration / ledger / money
+> change, so money discipline, the public site, the customer dashboard, and
+> onboarding are untouched, and the v0.3.0 session isolation is preserved.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| B-06 | Operator cannot sign in — session lost on Origin-less requests (login loop) | Backend/API + Shared + Frontend Operations (risky, serial) | Root-cause the v0.6.1 login loop and fix it within session/auth discipline. Real defect: the backend picks the per-surface session cookie from the request **`Origin`**, defaulting to the **customer** cookie when `Origin` is absent — but browsers **omit `Origin` on same-origin GETs**, so the console's authenticated `/api/ops/*` GETs read the empty `mer_session` and 401'd; the v0.6.1 recovery handler then looped to sign-in. Fix: each app declares its surface via an explicit **`AUTH.surfaceHeader`** (`x-meridian-surface`) the backend trusts **ahead of** `Origin` (Origin kept as fallback so the socket handshake, cross-origin dev, and existing tests are unchanged); the ops client sends it on every REST call + the socket handshake; the backend resolves the cookie + ops-room from it. **Session isolation (v0.3.0) must stay green.** Reproduce + guard with tests | v0.6.1 | Done | `shared/auth.ts` (`surfaceHeader` + `isSessionAudience`); `backend/auth/cookies.ts` (`sessionAudienceFromHeader`, header-first `sessionAudienceForRequest`); `backend/realtime.ts` (handshake header-first); `operations/lib/api.ts` + `useOpsSocket.ts` (send the header); customer app intentionally unchanged (least-privileged `customer` default already correct) |
+| B-06-T | Reproduce + regression coverage | Testing/QA | An empirical reproduction (the surface-header request 401'd pre-fix, 200 post-fix) plus durable guards; `npm run verify` + `npm run test:e2e` green; no regression to auth/dashboard/public-site/onboarding/ops or the session-isolation test | B-06 | Done | `ops-session-origin.test.ts` (5 integration), `auth/cookies.test.ts` (7 unit) → **201** Vitest (was 189); `operations.spec.ts` +1 same-origin e2e (strips `Origin` on GETs in real Chromium, self-validating) → **33** e2e (was 32); CORS preflight for the new header handled by `@fastify/cors` (204), no CORS change |
+| DOC-062 | Patch handoff docs + tag | Process Scribe | Save feedback verbatim; v0.6.2-named human review (plain-language bug explanation + exact test steps for Sam + Admin) + milestone report + next-session prompt; update PROJECT_STATE / NEXT_SESSION / TASK_BOARD / EXPERIMENT_LOG / CHANGELOG / QUALITY_REPORT / README; bump version to 0.6.2; annotated tag `v0.6.2` | B-06,B-06-T | Done | `HUMAN_REVIEW_v0.6.2.md`, `MILESTONE_REPORT_v0.6.2.md`, `NEXT_SESSION_PROMPT_v0.6.2.md`; state/next/board/changelog/experiment-log/quality-report/README updated; version 0.6.2; tag `v0.6.2` |
+
 > Later milestones (v0.7.0–v1.0.0) are summarized in `ROADMAP.md` and will be
 > decomposed into tasks here when they become the active milestone. **v0.7.0
 > carries an explicit acceptance note from this review (`Q-01`):** deposit-review

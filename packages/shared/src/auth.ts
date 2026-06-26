@@ -29,12 +29,19 @@ export type AccountRelationship = (typeof ACCOUNT_RELATIONSHIPS)[number];
  * and browser cookies are NOT isolated by port (a cookie for host `localhost`
  * is sent to `localhost:3000` no matter which app made the request). So each
  * surface gets its OWN named session cookie; the backend picks the right one per
- * request (from the request Origin). Without this, a single shared cookie lets
- * one app's login bleed into the other — e.g. an operations login showing
- * through on, or surviving a logout from, the customer portal.
+ * request from an explicit surface header the app sends (see
+ * {@link AUTH.surfaceHeader}), falling back to the request Origin. Without this,
+ * a single shared cookie lets one app's login bleed into the other — e.g. an
+ * operations login showing through on, or surviving a logout from, the customer
+ * portal.
  */
 export const SESSION_AUDIENCES = ['customer', 'operations'] as const;
 export type SessionAudience = (typeof SESSION_AUDIENCES)[number];
+
+/** Narrow an arbitrary value (e.g. a request header) to a known app surface. */
+export function isSessionAudience(value: unknown): value is SessionAudience {
+  return value === 'customer' || value === 'operations';
+}
 
 /**
  * Tunable auth policy. Centralized so the backend, the seed, and the tests all
@@ -51,6 +58,16 @@ export const AUTH = {
     customer: 'mer_session',
     operations: 'mer_ops_session',
   } as Record<SessionAudience, string>,
+  /**
+   * HTTP header each front-end app sets (to its {@link SessionAudience}) so the
+   * backend can pick the right per-surface session cookie WITHOUT relying on the
+   * request `Origin` header. Browsers omit `Origin` on same-origin GETs and it
+   * only matches hard-coded localhost origins, which made the operations console
+   * read the customer cookie and 401 on otherwise-valid sessions (the v0.6.1
+   * login loop; fixed in v0.6.2 by trusting this header ahead of Origin). Stored
+   * lower-case because Node lower-cases incoming header names.
+   */
+  surfaceHeader: 'x-meridian-surface',
   /** bcrypt cost factor used by the password hasher. */
   bcryptCostFactor: 10,
   /** Failed logins (in a row) before an account is temporarily locked. */

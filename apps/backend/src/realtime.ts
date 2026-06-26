@@ -1,9 +1,15 @@
 import type { Server as HttpServer } from 'node:http';
 import type { PrismaClient } from '@prisma/client';
 import { Server as SocketIOServer, type Socket } from 'socket.io';
-import { OPS_REALTIME_ROOM, PLATFORM_META, SOCKET_EVENTS, sessionCookieName } from '@simbank/shared';
+import {
+  AUTH,
+  OPS_REALTIME_ROOM,
+  PLATFORM_META,
+  SOCKET_EVENTS,
+  sessionCookieName,
+} from '@simbank/shared';
 import { config } from './config';
-import { sessionAudienceForOrigin } from './auth/cookies';
+import { sessionAudienceForOrigin, sessionAudienceFromHeader } from './auth/cookies';
 import { resolveSession } from './auth/sessions';
 import { isOperatorRole, parseCookieHeader } from './ops/realtime';
 
@@ -50,8 +56,15 @@ export function attachRealtime(httpServer: HttpServer, prisma: PrismaClient): So
  */
 async function joinOpsRoomIfOperator(socket: Socket, prisma: PrismaClient): Promise<void> {
   try {
-    const origin = socket.handshake.headers.origin;
-    if (sessionAudienceForOrigin(origin) !== 'operations') return;
+    // Same surface resolution as the REST guards: trust the app's explicit
+    // surface header (sent by the ops client via the polling handshake), falling
+    // back to Origin. Browsers omit Origin on a same-origin handshake, so without
+    // the header an operator socket would silently miss the ops room.
+    const headers = socket.handshake.headers;
+    const audience =
+      sessionAudienceFromHeader(headers[AUTH.surfaceHeader]) ??
+      sessionAudienceForOrigin(headers.origin);
+    if (audience !== 'operations') return;
 
     const cookies = parseCookieHeader(socket.handshake.headers.cookie);
     const token = cookies[sessionCookieName('operations')];

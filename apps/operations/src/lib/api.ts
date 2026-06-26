@@ -1,6 +1,15 @@
-import type { AuthResponse, SessionUser, StatusResponse } from '@simbank/shared';
+import { AUTH, type AuthResponse, type SessionUser, type StatusResponse } from '@simbank/shared';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+
+/**
+ * Header that tells the backend this is the OPERATIONS console, so it reads the
+ * `mer_ops_session` cookie regardless of whether the browser sent an `Origin`
+ * (it omits it on same-origin GETs). Sent on every authenticated call — without
+ * it the backend defaults to the customer cookie and 401s, which is what trapped
+ * the console in a sign-in loop in v0.6.1 (fixed in v0.6.2).
+ */
+const SURFACE_HEADERS: Record<string, string> = { [AUTH.surfaceHeader]: 'operations' };
 
 /** Fetch backend status; returns null when the API is unreachable. */
 export async function fetchStatus(): Promise<StatusResponse | null> {
@@ -94,6 +103,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     credentials: 'include',
     ...init,
     headers: {
+      ...SURFACE_HEADERS,
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init.headers ?? {}),
     },
@@ -114,7 +124,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 export async function login(email: string, password: string): Promise<SessionUser> {
   const res = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...SURFACE_HEADERS },
     credentials: 'include',
     body: JSON.stringify({ email, password }),
   });
@@ -128,6 +138,7 @@ export async function logout(): Promise<void> {
   await fetch(`${API_URL}/api/auth/logout`, {
     method: 'POST',
     credentials: 'include',
+    headers: { ...SURFACE_HEADERS },
   });
 }
 
@@ -137,7 +148,10 @@ export async function logout(): Promise<void> {
  */
 export async function fetchMe(): Promise<SessionUser | null> {
   try {
-    const res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      credentials: 'include',
+      headers: { ...SURFACE_HEADERS },
+    });
     if (!res.ok) return null;
     const data = (await res.json()) as AuthResponse;
     return data.user;
@@ -151,7 +165,10 @@ export async function fetchMe(): Promise<SessionUser | null> {
  * Throws {@link ApiError} on 403 (forbidden) so the caller can react.
  */
 export async function fetchOpsSummary(): Promise<OpsSummary> {
-  const res = await fetch(`${API_URL}/api/ops/summary`, { credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/ops/summary`, {
+    credentials: 'include',
+    headers: { ...SURFACE_HEADERS },
+  });
   if (!res.ok) throw await toApiError(res);
   return (await res.json()) as OpsSummary;
 }

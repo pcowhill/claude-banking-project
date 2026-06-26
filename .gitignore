@@ -48,3 +48,7 @@ Thumbs.db
 .cache/
 .eslintcache
 .turbo/
+
+# Local sandbox-only Prisma engine mirror (not committed)
+.prisma-engines/
+.prisma-env.sh

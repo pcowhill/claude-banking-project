@@ -13,6 +13,58 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
   post the pending deposit (pending → posted) so the customer's line stops reading
   *Pending* and the available balance updates — within ledger discipline.
 
+## [0.6.2] — 2026-06-26 — Operations sign-in fix
+
+A focused **patch release** fixing a blocking regression from the v0.6.1 B-04 fix:
+the operator could not sign in to Meridian Operations at all. No new product scope;
+**v0.7.0 was not started.** Still a local SIMULATION; no schema / migration / ledger
+/ money change — balances stay derived and the v0.3.0 session isolation is preserved.
+
+### Fixed
+
+- **Operator cannot sign in — the console loops back to the sign-in screen (B-06).**
+  After a successful login the dashboard appeared for a split second, then the
+  console bounced back to the sign-in screen with the v0.6.1 "Your operator session
+  has ended…" notice, forever — for both Sam and the Administrator, even after
+  clearing cookies. Root cause: the backend chose the per-surface session cookie
+  (`mer_session` for the customer portal, `mer_ops_session` for the operations
+  console) from the request **`Origin`** header, defaulting to the customer cookie
+  when `Origin` was absent. But browsers **omit `Origin` on same-origin GET
+  requests**, so in a same-origin deployment the console's authenticated
+  `/api/ops/*` GETs read the empty customer cookie and returned **401** — which the
+  v0.6.1 recovery handler turned into an unrecoverable login loop. (Standard
+  cross-origin dev, the curl checks, and the cross-origin Playwright suite always
+  sent `Origin`, which is why they passed while the human's environment failed.)
+  Fix: each front-end app now **declares its surface with an explicit
+  `x-meridian-surface` header** that the backend trusts **ahead of** `Origin`
+  (`Origin` remains a fallback, so the Socket.IO handshake, cross-origin dev, and
+  existing tests are unchanged). The operations console sends it on every
+  authenticated REST call and on the socket handshake; the backend resolves the
+  session cookie and the operators-room membership from it. The customer portal was
+  intentionally left unchanged — its requests already resolve to the customer cookie
+  via the least-privileged default. Session isolation (the v0.3.0 fix) is preserved.
+
+### Tests
+
+- **+12 Vitest** (189 → **201**): `ops-session-origin.test.ts` (5 integration — an
+  Origin-less request resolves the operator session only with the surface header;
+  the explicit-Origin fallback still works; no-signal defaults to 401) and
+  `auth/cookies.test.ts` (7 unit — the surface-header-over-Origin precedence).
+- **+1 Playwright e2e** (32 → **33**): a real-Chromium test that strips `Origin`
+  from GET/HEAD requests exactly as a same-origin browser does and asserts the
+  operator stays signed in, the live queue loads, and a reload restores the session
+  (self-validating so it can't pass trivially). The v0.3.0 session-isolation e2e and
+  the v0.6.1 B-03/B-04 e2e remain green.
+- `npm run verify` and `npm run test:e2e` both green. The new custom header triggers
+  a CORS preflight on cross-origin GETs, handled by `@fastify/cors` (204) with no
+  config change.
+
+### Notes
+
+- Process: this session also discovered the v0.6.1 work lived on an **unmerged**
+  session branch and was missing from the branch this session was cut from; it was
+  fast-forwarded in so v0.6.2 builds on v0.6.1.
+
 ## [0.6.1] — 2026-06-26 — Operations console fixes
 
 A focused **patch release** fixing the two Meridian Operations bugs from the
