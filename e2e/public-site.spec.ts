@@ -46,10 +46,15 @@ test.describe('public marketing site', () => {
     await expect(page.getByText(/v0\.8\.0/).first()).toBeVisible();
   });
 
-  test('the open-account CTA leads to the working login', async ({ page }) => {
+  test('the open-account page is a real, clearly-simulated application that links to login', async ({
+    page,
+  }) => {
     await page.goto(CUSTOMER + '/open-account');
-    await expect(page.getByRole('heading', { name: /account opening is coming/i })).toBeVisible();
-    await page.getByRole('link', { name: /explore with a demo login/i }).click();
+    // v0.6.0: the placeholder is now a working, clearly-simulated application form.
+    await expect(page.getByRole('heading', { name: /open a simulated account/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /submit simulated application/i })).toBeVisible();
+    // It still offers a path to the working sign-in.
+    await page.getByRole('link', { name: /^sign in$/i }).first().click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByRole('heading', { name: /log in to meridian/i })).toBeVisible();
   });

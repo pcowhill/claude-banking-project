@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   formatMinor,
+  type AccountInvitationDTO,
   type AccountSummary,
   type LoginEventDTO,
 } from '@simbank/shared';
 import { Card, CardDescription, CardTitle } from '../components/ui/Card';
 import { BackendStatusPill } from '../components/BackendStatusPill';
+import { Button } from '../components/ui/Button';
 import { cn } from '../lib/cn';
 import { accountTypeLabel, RELATIONSHIP_META } from '../lib/account-display';
 import { useAuth } from '../lib/auth-context';
 import { fetchAccounts, fetchLoginHistory } from '../lib/auth';
+import { acceptInvitation, declineInvitation, fetchInvitations } from '../lib/invitations';
 
 /**
  * Authenticated dashboard — the accounts OVERVIEW (v0.4.0, task D-04). Lists
@@ -175,7 +178,9 @@ function LoginHistorySection({ state }: { state: AsyncData<LoginEventDTO[]> }) {
         {state.loading ? (
           <div className="p-6 text-sm text-slate-500">Loading recent activity…</div>
         ) : state.data === null ? (
-          <div className="p-6 text-sm text-slate-500">Sign-in history is unavailable right now.</div>
+          <div className="p-6 text-sm text-slate-500">
+            Sign-in history is unavailable right now.
+          </div>
         ) : state.data.length === 0 ? (
           <div className="p-6 text-sm text-slate-500">No sign-in activity recorded yet.</div>
         ) : (
@@ -207,10 +212,139 @@ function LoginHistorySection({ state }: { state: AsyncData<LoginEventDTO[]> }) {
   );
 }
 
+/** Friendly relationship word for an invitation ("as a joint owner"). */
+function invitationRelationshipLabel(invite: AccountInvitationDTO): string {
+  return RELATIONSHIP_META[invite.relationship]?.label ?? invite.relationship;
+}
+
+/**
+ * Pending joint-owner invitations addressed to the signed-in user. Each can be
+ * accepted or declined; accepting refetches the accounts list (via `onChange`)
+ * so the newly-shared account appears. Hidden entirely when there are none, and
+ * silently absent when offline so the dashboard stays honest.
+ */
+function InvitationsInbox({ onAccepted }: { onAccepted: () => void }) {
+  const [state, setState] = useState<AsyncData<AccountInvitationDTO[]>>({
+    loading: true,
+    data: null,
+  });
+  // Per-invitation in-flight action, so only the clicked row shows a busy state.
+  const [pending, setPending] = useState<Record<string, 'accept' | 'decline'>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetchInvitations().then((data) => {
+      if (active) setState({ loading: false, data });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function respond(id: string, action: 'accept' | 'decline') {
+    if (pending[id]) return;
+    setActionError(null);
+    setPending((p) => ({ ...p, [id]: action }));
+    const result = action === 'accept' ? await acceptInvitation(id) : await declineInvitation(id);
+    setPending((p) => {
+      const next = { ...p };
+      delete next[id];
+      return next;
+    });
+    if (!result.ok) {
+      setActionError(result.message);
+      return;
+    }
+    // Drop the resolved invitation from the list…
+    setState((s) => ({
+      loading: false,
+      data: (s.data ?? []).filter((inv) => inv.id !== id),
+    }));
+    // …and, on accept, refresh accounts so the shared account shows up.
+    if (action === 'accept') onAccepted();
+  }
+
+  // Loading the inbox: stay quiet (no skeleton) so we don't flash a section that
+  // may turn out to be empty. Offline (data === null) also degrades to nothing.
+  if (state.loading || state.data === null || state.data.length === 0) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold text-brand-navy">Invitations</h2>
+      <p className="text-sm text-slate-600">
+        Simulated invitations to join an account as a joint owner.
+      </p>
+      {actionError && (
+        <p
+          role="alert"
+          className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+        >
+          {actionError}
+        </p>
+      )}
+      <ul className="mt-3 space-y-3">
+        {state.data.map((invite) => {
+          const busy = pending[invite.id];
+          return (
+            <li key={invite.id}>
+              <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle>{invite.accountName ?? 'A shared account'}</CardTitle>
+                    <span className="rounded bg-brand-teal/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-teal-dark">
+                      {invitationRelationshipLabel(invite)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Invited by{' '}
+                    <span className="font-medium text-slate-700">
+                      {invite.invitedByName ?? 'an account owner'}
+                    </span>{' '}
+                    to join as a {invitationRelationshipLabel(invite).toLowerCase()}.
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void respond(invite.id, 'accept')}
+                    disabled={!!busy}
+                  >
+                    {busy === 'accept' ? 'Accepting…' : 'Accept'}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void respond(invite.id, 'decline')}
+                    disabled={!!busy}
+                  >
+                    {busy === 'decline' ? 'Declining…' : 'Decline'}
+                  </Button>
+                </div>
+              </Card>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function Dashboard() {
   const { user } = useAuth();
-  const [accounts, setAccounts] = useState<AsyncData<AccountSummary[]>>({ loading: true, data: null });
+  const [accounts, setAccounts] = useState<AsyncData<AccountSummary[]>>({
+    loading: true,
+    data: null,
+  });
   const [history, setHistory] = useState<AsyncData<LoginEventDTO[]>>({ loading: true, data: null });
+
+  // Reusable accounts loader so accepting an invitation can refresh the list.
+  const loadAccounts = useCallback(async () => {
+    const data = await fetchAccounts();
+    setAccounts({ loading: false, data });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -245,6 +379,8 @@ export function Dashboard() {
       </div>
 
       <AccountsOverview state={accounts} />
+
+      <InvitationsInbox onAccepted={() => void loadAccounts()} />
 
       {/* Quick links */}
       <section className="mt-8">

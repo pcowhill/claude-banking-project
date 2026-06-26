@@ -6,6 +6,88 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 6 — v0.6.0 Onboarding and account opening — 2026-06-26
+
+**Goal:** Complete only `v0.6.0 — Onboarding and account opening` (a real,
+simulated open-account flow feeding the v0.5.0 ops queue; operator approval that
+provisions a user + account + initial funding; joint-account invitations;
+admin-created demo users), **and** address the v0.5.0 review: two ops-console
+fixes (B-01 detail-panel buttons not deactivating; B-02 add a note after the
+decision) plus two written answers (Q-01 deposit "Pending"; Q-02 what Simulated
+Messaging is for). Human approved ("Everything else looks great.").
+
+**Headline decision — this is where an operator approval first CREATES money, so
+it had to stay inside the ledger discipline.** v0.5.0 kept operator actions
+workflow-only; v0.6.0 introduces the first approval-with-a-ledger-effect, but only
+the narrow safe case: approving an `onboarding` request provisions a `User` +
+`Account` and posts any opening deposit as an explicit **bank-originated, posted
+`deposit`** ledger entry — atomically (in a transaction), audited, and
+precondition-guarded (blocked + rolled back if the email already exists). A test
+asserts the system-wide settled total moves by **exactly** the funded amount and
+by nothing else; balances stay derived. Admin-funded users use an audited
+`adjustment` requiring a reason. Submitting an application / adding a note / a
+joint invite move no money.
+
+**Reuse over reinvention (per the constitution + the review):** the open-account
+submission creates an `OperationsRequest` of type `onboarding` on the SAME queue,
+flows through the SAME `applyOperatorAction` service, the SAME action route, and
+the SAME Socket.IO `OpsRealtime` channel — no new ops endpoint, no new socket
+event. The `note` action (B-02) is likewise the same action service/route/audit/
+real-time, just non-decision (no status change, allowed on terminal). Joint-invite
+acceptance creates a `joint` `AccountAccess` grant — the same grant RBAC already
+reads. Onboarding identity/MFA and the invite "email" are `SimulatedEvent`s — the
+existing simulated-messaging seam (the answer to Q-02), now driven by a real flow.
+
+**Execution mode (serialized risky areas = contract, schema/migration, ledger,
+routing, real-time):**
+- `N-01` shared contract first: `@simbank/shared/onboarding` (DTOs + the PURE
+  validators reused by client and server) + the `note` action added to
+  `operations.ts` (without adding a fifth decision button) — unit-tested to LOCK
+  the contract before anything built on it.
+- `N-02` Prisma schema + the **second additive migration since v0.2.0**
+  (`onboarding`: `OnboardingApplication` 1:1 with its request + holds the bcrypt
+  hash server-side, never in a DTO; `AccountInvitation`) — verified additive (only
+  `CREATE TABLE` + indexes; money/auth tables untouched).
+- `N-03` seed (an approvable onboarding application + a pending joint invite) with
+  a new `assertSeedOnboardingIntegrity`; money + access + ops invariants still pass.
+- `N-04…N-08` services + routes + the note action — backend integration tests
+  green (provisioning + the money invariant + RBAC matrix + note-on-terminal)
+  BEFORE any UI.
+- Only then the two frontends (`N-09/N-10` customer open-account + invitations,
+  `N-11` ops B-01/B-02 + onboarding context + admin page) were parallelized across
+  the two app agents against the LOCKED contract.
+- A read-only security review ran before the gate; e2e + full `verify` last.
+
+**Answers I owed the human (also in HUMAN_REVIEW_v0.6.md):**
+- **Q-01 (deposit "Pending"):** deferred to **v0.7.0** with a clear reason —
+  flipping a pending deposit to posted changes the available balance, i.e. it is
+  money movement; doing it now would ship a half-built deposit-posting path ahead
+  of the milestone that designs holds/availability/reversals. Recorded as an
+  explicit v0.7.0 acceptance note (ROADMAP + NEXT_SESSION_PROMPT).
+- **Q-02 (Simulated Messaging):** it is the provider "seam" — a clearly-labelled
+  fake event instead of a real SMS/email/MFA/identity provider; v0.6.0 onboarding
+  is its first real use, and 2FA-at-login will use the same `SimulatedEvent` model
+  when that auth sub-feature lands.
+
+**Surprises / environment friction (sandbox only — not a product issue):** same
+Prisma engine-download block as Sessions 1–5 (ECONNRESET to `binaries.prisma.sh`);
+resolved the documented way — `npm install --ignore-scripts`, curl-mirror the
+query-engine library + schema-engine for `debian-openssl-3.0.x`, point Prisma at
+them via `PRISMA_QUERY_ENGINE_LIBRARY` + `PRISMA_SCHEMA_ENGINE_BINARY`
+(+ `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING`). Prisma 5.22.0, engine
+`605197351a3c8bdd595af2d2a9bc3025bca48ea2`. Created the real `onboarding`
+migration through the mirrored schema engine. Playwright used the pre-installed
+Chromium via `PLAYWRIGHT_CHROMIUM_PATH`. None of this affects normal machines or CI.
+
+**Outcome:** `npm run verify` passes; **189** unit/integration (was 145) +
+**30** Playwright e2e (was 25) green. Second additive migration
+(`onboarding`); no new runtime audit advisories; security review PASS. Milestone
+complete; annotated tag `v0.6.0` created locally (tag push blocked by env policy —
+HTTP 403 — so the human pushes it on merge; see the milestone report). Session
+branch pushed. Stopped at the gate; did **not** start v0.7.0.
+
+---
+
 ## Session 5 — v0.5.0 Operations simulator core — 2026-06-25
 
 **Goal:** Complete only `v0.5.0 — Operations simulator core` (live request queues,

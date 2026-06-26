@@ -21,9 +21,31 @@ import { OPS_REQUEST_STATUSES, type OpsRequestStatus, type OpsRequestType } from
 
 // ---- Enums (the v0.5.0 additions) ------------------------------------------
 
-/** What an operator can DO to a queued request. */
+/**
+ * The DECISION actions that move a request through its workflow. This drives the
+ * console's action bar, so it is deliberately just the four decisions — see
+ * {@link OPS_NOTE_ACTION} for the non-decision `note` action, which is NOT part
+ * of this set (it must never render as a fifth decision button).
+ */
 export const OPS_ACTIONS = ['approve', 'reject', 'hold', 'request_info'] as const;
-export type OpsAction = (typeof OPS_ACTIONS)[number];
+export type OpsDecisionAction = (typeof OPS_ACTIONS)[number];
+
+/**
+ * A non-decision action (v0.6.0): record a free-form note in the audit trail
+ * WITHOUT changing the request's workflow status. Unlike the decisions, a note
+ * is allowed at ANY time — including on an already-resolved (terminal) request —
+ * so an operator can annotate a decision after the fact. It posts nothing to the
+ * ledger.
+ */
+export const OPS_NOTE_ACTION = 'note';
+
+/** Any action the action endpoint accepts: a workflow decision or a `note`. */
+export type OpsAction = OpsDecisionAction | typeof OPS_NOTE_ACTION;
+
+/** True for the four workflow decisions (i.e. not the `note` action). */
+export function isDecisionAction(action: OpsAction): action is OpsDecisionAction {
+  return action !== OPS_NOTE_ACTION;
+}
 
 /** Triage priority for a queue item. */
 export const OPS_REQUEST_PRIORITIES = ['low', 'normal', 'high'] as const;
@@ -54,17 +76,20 @@ export type SimEventStatus = (typeof SIM_EVENT_STATUSES)[number];
 
 // ---- State machine ----------------------------------------------------------
 
-/** The status a request lands in after a given operator action. */
-export const OPS_ACTION_RESULT: Record<OpsAction, OpsRequestStatus> = {
+/** The status a request lands in after a given DECISION action. */
+export const OPS_ACTION_RESULT: Record<OpsDecisionAction, OpsRequestStatus> = {
   approve: 'approved',
   reject: 'rejected',
   hold: 'on_hold',
   request_info: 'info_requested',
 };
 
-/** The resulting status for an action. Pure — the single transition rule. */
-export function nextStatusForAction(action: OpsAction): OpsRequestStatus {
-  return OPS_ACTION_RESULT[action];
+/**
+ * The resulting status for an action, or `null` when the action does not change
+ * status (a {@link OPS_NOTE_ACTION}). Pure — the single transition rule.
+ */
+export function nextStatusForAction(action: OpsAction): OpsRequestStatus | null {
+  return isDecisionAction(action) ? OPS_ACTION_RESULT[action] : null;
 }
 
 /**
@@ -80,15 +105,23 @@ export function isTerminalOpsStatus(status: OpsRequestStatus): boolean {
   return TERMINAL_OPS_STATUSES.includes(status);
 }
 
-/** Whether an operator action is allowed given the request's current status. */
-export function canApplyAction(status: OpsRequestStatus, _action: OpsAction): boolean {
+/**
+ * Whether an operator action is allowed given the request's current status. A
+ * `note` may be added at ANY time (including on a terminal request); the four
+ * workflow decisions are blocked once the request is resolved.
+ */
+export function canApplyAction(status: OpsRequestStatus, action: OpsAction): boolean {
+  if (!isDecisionAction(action)) return true; // a note is always allowed
   return !isTerminalOpsStatus(status);
 }
 
 // ---- Type guards (handy for server-side request validation) -----------------
 
 export function isOpsAction(value: unknown): value is OpsAction {
-  return typeof value === 'string' && (OPS_ACTIONS as readonly string[]).includes(value);
+  return (
+    typeof value === 'string' &&
+    (value === OPS_NOTE_ACTION || (OPS_ACTIONS as readonly string[]).includes(value))
+  );
 }
 
 export function isSimEventChannel(value: unknown): value is SimEventChannel {
@@ -124,6 +157,7 @@ export const OPS_ACTION_LABELS: Record<OpsAction, string> = {
   reject: 'Reject',
   hold: 'Hold',
   request_info: 'Request info',
+  note: 'Add note',
 };
 
 export const OPS_PRIORITY_LABELS: Record<OpsRequestPriority, string> = {

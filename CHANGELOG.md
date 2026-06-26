@@ -8,7 +8,80 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.6.0 — Onboarding and account opening** (not started).
+- Next milestone: **v0.7.0 — Money movement** (not started). Carries an explicit
+  acceptance note from the v0.5.0 review: approving a deposit-review request must
+  post the pending deposit (pending → posted) so the customer's line stops reading
+  *Pending* and the available balance updates — within ledger discipline.
+
+## [0.6.0] — 2026-06-26 — Onboarding and account opening
+
+A real, clearly-**simulated** account-opening flow that **feeds the v0.5.0
+operations queue**, and the first time an operator **approval has real effects**:
+approving an onboarding request provisions a `User` + `Account` + initial funding.
+Money discipline holds — initial funding enters only via an explicit
+**bank-originated** ledger event (audited; balances stay derived). Also folds in
+two v0.5.0 review fixes (B-01, B-02). Still a local SIMULATION; no real money,
+identity, or providers.
+
+### Added
+
+- **Open-account flow** (customer `/open-account`): a real simulated application
+  (applicant details, product, simulated opening deposit, optional joint-owner
+  invite, consent) → `POST /api/onboarding/applications` (public) → a confirmation
+  with a reference. Submitting creates a **pending `onboarding` work item in the
+  operations queue** (pushed live) and onboarding **simulated events**
+  (application-received email, identity verification, MFA enrollment). It creates
+  no user/account/money on its own.
+- **Approval → provisioning:** approving an `onboarding` request creates the
+  `User` + `Account` + owner grant and, for any opening deposit, posts a
+  **bank-originated, posted `deposit`** ledger entry — atomically, audited,
+  precondition-guarded (blocked + rolled back if the email already exists).
+  Rejecting marks the application declined and creates nothing.
+- **Joint-account invitations:** `POST /api/accounts/:id/invitations` (owner only),
+  `GET /api/invitations`, `POST /api/invitations/:id/accept|decline`. Accepting
+  creates a `joint` `AccountAccess` grant (the same grant RBAC reads); the invite
+  is "delivered" only as a clearly-labelled simulated email. Customer UI: an
+  invite form on account detail + an invitations inbox on the dashboard.
+- **Admin-created demo users:** `POST /api/admin/users` (admin only) creates a
+  user and optionally opens + funds an account; funding is an **audited
+  bank-originated `adjustment` requiring a reason**. An admin-only **Create demo
+  user** page in the operations console shows the non-secret demo credentials.
+- **Add-note-anytime (B-02):** a non-decision **`note`** operator action records an
+  audit note **without** changing status and is allowed **even on resolved
+  requests** — surfaced as an always-available "Add note" button in the request
+  detail panel. Reuses the v0.5.0 action service + route + real-time + audit.
+- **Shared onboarding contract** (`@simbank/shared/onboarding`): products /
+  statuses / invitation enums, funding bounds, the `OpenAccount` / invitation /
+  admin-create DTOs, and PURE validators (`validateOpenAccount`,
+  `validateInvitation`, `validateAdminCreateUser`) reused by client and server.
+
+### Changed
+
+- **Operations detail panel (B-01 fix):** the request detail panel now reads the
+  **live** shared queue state, so its status badge + action buttons deactivate the
+  moment a request is resolved — whether acted on from the queue card, the panel,
+  or another operator over the socket; it reloads history when the live copy
+  advances.
+- **Prisma schema** (second additive migration, `onboarding`): new
+  `OnboardingApplication` (1:1 with its `OperationsRequest`; holds the bcrypt
+  password hash server-side, never in any DTO) + `AccountInvitation` models +
+  relations. Money/auth tables unchanged; `npm run db:reset` rebuilds everything.
+- **Seed** now backs an onboarding queue item with a real, **approvable**
+  application (Taylor Prospect → Everyday Checking, $250 opening deposit) and a
+  **pending** joint invitation (Avery → Jordan on savings), guarded by new
+  onboarding-integrity invariants.
+- **`note` added to the shared ops action vocabulary** without adding a fifth
+  decision button; `nextStatusForAction('note')` is `null` and
+  `canApplyAction(..., 'note')` is always true.
+- Platform version bumped to **0.6.0**.
+
+### Security / money discipline
+
+- Initial funding (onboarding `deposit`) and admin funding (`adjustment`, reason
+  required) are the only new ways money enters — both are posted, bank-originated,
+  audited ledger entries; a test asserts the system-wide settled total moves by
+  exactly the funded amount. Balances stay derived; submit/note/invite move no
+  money. Applicant passwords are hashed immediately and never serialized.
 
 ## [0.5.0] — 2026-06-25 — Operations simulator core
 

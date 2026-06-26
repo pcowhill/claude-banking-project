@@ -1,7 +1,16 @@
-import { OPS_ACTIONS, isTerminalOpsStatus, opsActionLabel, type OpsAction, type OpsRequestStatus } from '@simbank/shared';
+import {
+  OPS_ACTIONS,
+  isTerminalOpsStatus,
+  opsActionLabel,
+  type OpsAction,
+  type OpsDecisionAction,
+  type OpsRequestStatus,
+} from '@simbank/shared';
 import { Button } from './ui/Button';
 
-const ACTION_VARIANT: Record<OpsAction, 'approve' | 'reject' | 'hold' | 'ghost'> = {
+// Variants for the DECISION actions only (`OPS_ACTIONS`); the non-decision
+// `note` action is handled separately in the detail panel, not on this bar.
+const ACTION_VARIANT: Record<OpsDecisionAction, 'approve' | 'reject' | 'hold' | 'ghost'> = {
   approve: 'approve',
   reject: 'reject',
   hold: 'hold',

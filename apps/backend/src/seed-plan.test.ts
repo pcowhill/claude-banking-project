@@ -10,6 +10,7 @@ import {
 import {
   assertSeedAccessIntegrity,
   assertSeedInvariants,
+  assertSeedOnboardingIntegrity,
   assertSeedOpsIntegrity,
   buildSeedPlan,
 } from './seed-plan';
@@ -181,5 +182,56 @@ describe('seed plan operations queue (v0.5.0)', () => {
       summary: 'bogus request',
     });
     expect(() => assertSeedOpsIntegrity(tampered)).toThrow(/unknown ops request type/i);
+  });
+});
+
+describe('seed plan onboarding & invitations (v0.6.0)', () => {
+  const plan = buildSeedPlan();
+
+  it('backs an onboarding queue item with a real, approvable application', () => {
+    expect(plan.onboardingApplications.length).toBeGreaterThanOrEqual(1);
+    const app = plan.onboardingApplications[0];
+    const request = plan.operationsRequests.find((r) => r.key === app.requestKey);
+    expect(request?.type).toBe('onboarding');
+    expect(app.email).toBe(request?.subjectEmail);
+    expect(app.password.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('seeds a pending joint invitation toward a declared account + users', () => {
+    expect(plan.invitations.length).toBeGreaterThanOrEqual(1);
+    const invite = plan.invitations[0];
+    const accountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+    const emails = new Set(plan.users.map((u) => u.email.toLowerCase()));
+    expect(accountKeys.has(invite.accountKey)).toBe(true);
+    expect(emails.has(invite.inviterEmail.toLowerCase())).toBe(true);
+  });
+
+  it('passes the onboarding-integrity invariants', () => {
+    expect(() => assertSeedOnboardingIntegrity(plan)).not.toThrow();
+  });
+
+  it('rejects an application linked to a non-onboarding request', () => {
+    const tampered = buildSeedPlan();
+    tampered.onboardingApplications.push({
+      requestKey: 'fraud-card', // not an onboarding request
+      reference: 'MER-BOGUS',
+      fullName: 'Bad Link',
+      email: 'bad@example.com',
+      product: 'checking',
+      initialFundingMinor: 0,
+      password: 'Password1',
+    });
+    expect(() => assertSeedOnboardingIntegrity(tampered)).toThrow(/non-onboarding/i);
+  });
+
+  it('rejects an invitation referencing an unknown account', () => {
+    const tampered = buildSeedPlan();
+    tampered.invitations.push({
+      accountKey: 'no-such-account',
+      inviterEmail: 'avery.customer@example.com',
+      inviteeEmail: 'someone@example.com',
+      relationship: 'joint',
+    });
+    expect(() => assertSeedOnboardingIntegrity(tampered)).toThrow(/unknown account/i);
   });
 });

@@ -5,6 +5,7 @@ import { metaRoutes } from './meta';
 import { authRoutes } from './auth';
 import { accountRoutes } from './accounts';
 import { opsRoutes } from './ops';
+import { onboardingRoutes } from './onboarding';
 
 /** Register all HTTP routes. New feature route groups are added here. */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -14,4 +15,5 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(authRoutes);
   await app.register(accountRoutes);
   await app.register(opsRoutes);
+  await app.register(onboardingRoutes);
 }

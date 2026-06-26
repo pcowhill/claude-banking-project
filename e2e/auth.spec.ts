@@ -51,9 +51,12 @@ test.describe('customer authentication', () => {
   test('a joint customer sees only the shared account (RBAC)', async ({ page }) => {
     await customerLogin(page, DEMO.joint.email, DEMO.joint.password);
     await expect(page.getByRole('heading', { name: /welcome back, jordan/i })).toBeVisible();
-    await expect(page.getByText('Everyday Checking')).toBeVisible();
-    // Jordan was NOT granted the savings account, so it must not appear.
-    await expect(page.getByText('Goal Savings')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Everyday Checking/i })).toBeVisible();
+    // Jordan was NOT granted savings ACCESS, so no savings ACCOUNT appears. (v0.6.0
+    // seeds a PENDING joint invitation to savings, which surfaces as an invitation
+    // card — not an account link — and grants nothing until accepted; assert on the
+    // account link specifically so the RBAC check ignores that pending invite.)
+    await expect(page.getByRole('link', { name: /Goal Savings/i })).toHaveCount(0);
   });
 });
 

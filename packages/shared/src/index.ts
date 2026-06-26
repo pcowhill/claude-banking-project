@@ -15,3 +15,4 @@ export * from './types';
 export * from './auth';
 export * from './transactions';
 export * from './operations';
+export * from './onboarding';

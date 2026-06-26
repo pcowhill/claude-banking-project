@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import type { LoginReason } from '@simbank/shared';
+import type { DbClient } from '../db';
 
 /**
  * Two complementary trails are written on auth activity:
@@ -41,7 +42,7 @@ export async function recordLoginEvent(
 }
 
 export async function writeAudit(
-  prisma: PrismaClient,
+  prisma: DbClient,
   input: {
     actorId?: string | null;
     actorRole?: string | null;

@@ -36,11 +36,12 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  accounts      Account[]
-  auditLogs     AuditLog[]      @relation("ActorAudit")
-  sessions      Session[]
-  accountAccess AccountAccess[]
-  loginEvents   LoginEvent[]
+  accounts        Account[]
+  auditLogs       AuditLog[]          @relation("ActorAudit")
+  sessions        Session[]
+  accountAccess   AccountAccess[]
+  loginEvents     LoginEvent[]
+  sentInvitations AccountInvitation[] @relation("InvitedBy")
 }
 
 /// A server-side session. The opaque token lives ONLY in the user's httpOnly
@@ -111,6 +112,7 @@ model Account {
 
   ledgerEntries LedgerEntry[]
   access        AccountAccess[]
+  invitations   AccountInvitation[]
 
   @@index([userId])
 }
@@ -184,7 +186,8 @@ model OperationsRequest {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  events SimulatedEvent[]
+  events                SimulatedEvent[]
+  onboardingApplication OnboardingApplication?
 
   @@index([status])
   @@index([type])
@@ -210,4 +213,59 @@ model SimulatedEvent {
   @@index([channel])
   @@index([requestId])
   @@index([createdAt])
+}
+
+/// A submitted account-opening application (v0.6.0). A public applicant creates
+/// one via the open-account flow; it is linked 1:1 to an `OperationsRequest` of
+/// type `onboarding`. An operator APPROVING that request is what PROVISIONS the
+/// real User + Account + initial funding — initial funding enters via an explicit
+/// BANK-ORIGINATED ledger event, audited, balances still derived (money discipline).
+/// SIMULATION: fake applicants only; never real identity data or real money.
+model OnboardingApplication {
+  id                  String   @id @default(cuid())
+  reference           String   @unique // short human code shown to the applicant
+  status              String   @default("submitted") // submitted | provisioned | rejected (see OnboardingStatus)
+  fullName            String
+  email               String
+  product             String // checking | savings (OnboardingProduct)
+  initialFundingMinor Int      @default(0)
+  jointInviteEmail    String?
+  consentAt           DateTime
+  // SIMULATION: bcrypt hash of a non-secret demo password, captured so the
+  // approved applicant can sign in. NEVER exposed in any DTO; plaintext never stored.
+  passwordHash        String
+  // The ops queue item that drives the approval workflow (1:1).
+  requestId           String?  @unique
+  request             OperationsRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  // Set when an operator approves and provisioning succeeds.
+  provisionedUserId    String?
+  provisionedAccountId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+}
+
+/// A joint-owner invitation (v0.6.0). An account OWNER invites another person by
+/// email; accepting creates a `joint` AccountAccess grant (the same grant RBAC
+/// reads), so the invitee then sees the account. SIMULATION: the invite is
+/// "delivered" only as a clearly-labelled SimulatedEvent — no real email is sent.
+model AccountInvitation {
+  id           String   @id @default(cuid())
+  token        String   @unique
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invitedById  String
+  invitedBy    User     @relation("InvitedBy", fields: [invitedById], references: [id])
+  inviteeEmail String
+  relationship String   @default("joint") // see AccountRelationship in @simbank/shared
+  status       String   @default("pending") // pending | accepted | declined | revoked (InvitationStatus)
+  acceptedById String? // the user who accepted (no FK; SIMULATION)
+  respondedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([inviteeEmail])
+  @@index([accountId])
 }

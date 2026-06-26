@@ -8,11 +8,20 @@ import { useApiStatus } from '../lib/useApiStatus';
 import { useAuth } from '../lib/auth-context';
 import { cn } from '../lib/cn';
 
-/** Live console sections (v0.5.0). */
-const navLinks = [
+interface NavItem {
+  label: string;
+  to: string;
+  end: boolean;
+  /** When true, only shown to admins. */
+  adminOnly?: boolean;
+}
+
+/** Live console sections (v0.5.0+). `adminOnly` links are gated by role. */
+const navLinks: NavItem[] = [
   { label: 'Dashboard', to: '/', end: true },
   { label: 'Request queues', to: '/queues', end: false },
   { label: 'Simulated messaging', to: '/messaging', end: false },
+  { label: 'Create demo user', to: '/admin', end: false, adminOnly: true },
 ];
 
 /** Sections that arrive in later milestones (shown dimmed). */
@@ -80,6 +89,10 @@ function OperatorMenu() {
 }
 
 export function OpsLayout({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const visibleNav = navLinks.filter((item) => !item.adminOnly || isAdmin);
+
   return (
     <div className="flex min-h-screen flex-col">
       <SimulationBanner />
@@ -101,7 +114,7 @@ export function OpsLayout({ children }: { children: ReactNode }) {
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 py-6">
         <aside className="hidden w-56 shrink-0 lg:block">
           <nav className="space-y-1">
-            {navLinks.map((item) => (
+            {visibleNav.map((item) => (
               <NavLink
                 key={item.label}
                 to={item.to}
@@ -136,7 +149,9 @@ export function OpsLayout({ children }: { children: ReactNode }) {
 
       <footer className="border-t border-white/10 bg-brand-navy-deep">
         <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:justify-between">
-          <span>Meridian Operations Simulator — local simulation only, not a real bank system.</span>
+          <span>
+            Meridian Operations Simulator — local simulation only, not a real bank system.
+          </span>
           <span>
             v{APP_VERSION} · {MILESTONE} {MILESTONE_NAME}
           </span>
