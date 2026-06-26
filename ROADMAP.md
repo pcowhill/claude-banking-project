@@ -12,9 +12,9 @@ Status legend: ✅ complete · ▶️ in progress · ⏳ planned
 | v0.2.0 | Auth, roles, and demo users | ✅ complete |
 | v0.3.0 | Public bank website and branding | ✅ complete |
 | v0.4.0 | Customer banking dashboard | ✅ complete |
-| **v0.5.0** | Operations simulator core | ✅ complete |
-| v0.6.0 | Onboarding and account opening | ⏳ planned (next) |
-| v0.7.0 | Money movement | ⏳ planned |
+| v0.5.0 | Operations simulator core | ✅ complete |
+| **v0.6.0** | Onboarding and account opening | ✅ complete |
+| v0.7.0 | Money movement | ⏳ planned (next) |
 | v0.8.0 | Cards, fraud, disputes | ⏳ planned |
 | v0.9.0 | Loans, CDs, simulated time | ⏳ planned |
 | v1.0.0 | Polish, hardening, final retrospective | ⏳ planned |
@@ -54,6 +54,10 @@ account invitation · operations approval/rejection · admin-created demo users.
 ### v0.7.0 — Money movement
 Internal transfers · external ACH transfers · wires · mobile check deposit ·
 bill pay · recurring/scheduled payments · approvals, failures, reversals, holds.
+**Acceptance note carried from the v0.5.0 review (Q-01):** approving a
+deposit-review request must POST the pending deposit (pending → posted) so the
+customer's line stops reading *Pending* and the available balance updates —
+within ledger discipline (audited, bank-originated; no stored/edited balance).
 
 ### v0.8.0 — Cards, fraud, disputes
 Debit/credit cards · freeze/unfreeze · lost/stolen flow · travel notices ·

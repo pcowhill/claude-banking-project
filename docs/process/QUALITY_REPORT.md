@@ -5,6 +5,114 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.6.0 — Onboarding and account opening — 2026-06-26
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **189 passed / 189** (145 + 44 new):
+  `@simbank/shared` `onboarding.test.ts` (**11** — the pure validators
+  `validateOpenAccount` / `validateInvitation` / `validateAdminCreateUser`,
+  funding bounds, product/email guards) and **5** new `operations.test.ts` cases
+  (the `note` action: not a decision button, allowed on terminal, no status
+  change, label); `@simbank/backend` `routes/onboarding.test.ts` (**23** — public
+  submit feeds the queue + creates no user/money, approval provisions
+  user/account/**bank-originated funding** with the settled-total money invariant,
+  rollback on duplicate email, reject, the `note` action on pending **and** on a
+  terminal request, the full invitation invite→accept→grant + RBAC matrix, and
+  admin create-user incl. funded-requires-reason / duplicate / non-admin) and **9**
+  new `seed-plan.test.ts` onboarding-integrity cases. All prior suites still green.
+- **Build** — backend (tsup) + customer (vite) + operations (vite) all build.
+
+### E2E (Playwright) ✅ PASS
+- **30 passed / 30** (25 + 5 new): `onboarding.spec.ts` — a visitor submits a
+  simulated open-account application → confirmation; an operator sees the
+  onboarding **application context**, approves it (proving **B-01**: the open
+  detail panel reacts to the live queue state — its terminal "you can still add a
+  note" hint appears after a card action) and **adds a note after the decision**
+  (**B-02**); the admin-only **Create demo user** page is available to an admin and
+  hidden from a non-admin operator; a customer sees a pending joint invitation in
+  their inbox. The existing `public-site.spec.ts` open-account test was updated for
+  the new working form (it was the placeholder before). All other prior specs green.
+
+### Schema migration (second since v0.2.0) — additive
+`onboarding` adds `OnboardingApplication` (1:1 with its `OperationsRequest`,
+holding the bcrypt password hash server-side) and `AccountInvitation`. The
+generated SQL was reviewed: only `CREATE TABLE` + indexes — the money/auth tables
+and the v0.5.0 ops tables are untouched. `npm run db:reset` rebuilds everything.
+
+### Money discipline
+The first milestone where an operator approval CREATES money — and it stays inside
+the ledger: onboarding **initial funding** posts one bank-originated `deposit`
+entry (posted, audited) inside the approval transaction; admin **funding** posts an
+`adjustment` requiring a reason + audit. Application submission, the `note` action,
+and joint invites write **no** ledger entry. A test asserts the system-wide settled
+total moves by **exactly** the funded amount; balances stay derived. Provisioning is
+atomic and precondition-guarded (duplicate email blocked + rolled back).
+
+### Security review (pre-gate, read-only) — ✅ PASS
+The Security/Permissions reviewer verified all seven focus areas: the applicant
+password is bcrypt-hashed immediately and **never** serialized into any DTO/queue
+payload (regression-tested); every new route is correctly gated (public submit
+creates nothing on its own; **owner-only** invite; accept is strictly
+invitee-email-gated and can't grant arbitrary access; admin-only create-user + note
+ops-only); money discipline + audit coverage hold; all free text is length-bounded
+twice (shared validator + route slice) and email normalized; messaging is
+`SimulatedEvent`-only with no real-provider code and the disclaimer is present in
+the new UI; v0.2.0 auth / v0.3.0 isolation / the `/api/admin/users` no-hash
+guarantee / v0.5.0 socket-room RBAC are intact. **Verdict: PASS — no Critical /
+High / Medium findings.** The prior v0.5.0 **Low SEC-4** (cap a user-supplied
+applicant name) is **closed** — `validateOpenAccount` bounds the name (≤80) and all
+free text. New **Low** hardening notes (all accepted for a local simulation):
+
+| ID | Item | Disposition | Target |
+| --- | --- | --- | --- |
+| SEC-5 | The public `POST /api/onboarding/applications` is unauthenticated + unthrottled (a loop could flood the queue); does **not** enable user enumeration (generic response either way) | Accepted for the simulation; first route to cover if a project-wide rate-limit lands | v1.0.0 hardening (with SEC-3) |
+| SEC-6 | An admin can create another `admin`/`ops_agent` via the console | Accepted — intended "create demo user of any role"; admin is already fully trusted and the action is audited (`admin_create_user`) | — (by design) |
+| SEC-7 | An invite to an email with no user yet persists until that user exists; acceptance is still strictly email-gated | Accepted — matches the "invite then they join" flow; no access leak | — (by design) |
+
+(SEC-4 from v0.5.0 is closed this milestone. The reviewer's seed-integrity note —
+assert a seeded applicant email isn't an existing seeded user — was **applied** in
+`assertSeedOnboardingIntegrity`. The earlier **Low** follow-ups SEC-1 CSRF / SEC-2
+config-driven cookie `secure` / SEC-3 helmet + rate-limit remain accepted and
+tracked; v0.6.0 adds a public + several authed `POST`s, but they are validated,
+audited where stateful, and `SameSite=Lax` + the CORS allowlist still mitigate CSRF
+on localhost — SEC-1 stays targeted at v0.7.0.)
+
+### Dependency audit
+- **No new runtime advisories.** v0.6.0 added no runtime dependencies. The prior
+  **dev/test-tooling advisories** (vite, vitest, esbuild — dev-only) are unchanged
+  and tracked in the v0.1.0 section for the v1.0.0 hardening pass.
+
+### Known limitations / deferred
+- **Deposit posting (pending → posted) is v0.7.0** — approving an existing pending
+  mobile-check-deposit does not yet update the customer's line (it is money
+  movement). Recorded as an explicit v0.7.0 acceptance note (the v0.5.0 review's
+  Q-01). v0.6.0 only creates money for **account opening**.
+- **Customer-facing MFA/2FA at login** stays deferred; v0.6.0 uses the
+  simulated-messaging seam for **onboarding** identity/MFA only (the v0.5.0 review's
+  Q-02). Login-time 2FA arrives with the auth follow-ups.
+- **Frontend component unit tests** remain deferred; the new UI is covered by build
+  + the Playwright journeys + the backend/contract tests (+ the pure onboarding
+  validators are unit-tested in shared). Revisit at a UI-heavy milestone.
+
+### Sandbox-only notes (do not affect users/CI)
+- Prisma engines curl-mirrored (query-engine library + schema-engine for
+  `debian-openssl-3.0.x`) and Playwright pointed at the pre-installed Chromium —
+  same approach as Sessions 1–5. This session also created the real `onboarding`
+  migration through the mirrored schema engine; standard installs / `npx playwright
+  install` work elsewhere.
+
+### Overall
+**v0.6.0 meets the quality bar.** Gate green (189 + 30 tests, 0 lint warnings), the
+open-account flow feeds the operations queue and an approval provisions a real
+account with **bank-originated, audited** initial funding (money discipline asserted),
+the two v0.5.0 review fixes (B-01, B-02) shipped with e2e coverage, the two review
+questions answered in the review docs, security review PASS, open items tracked
+honestly. No blockers.
+
+---
+
 ## v0.5.0 — Operations simulator core — 2026-06-25
 
 ### Gate: `npm run verify` ✅ PASS

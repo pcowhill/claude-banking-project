@@ -6,26 +6,35 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.5.0` — Operations simulator core (complete).
-  The annotated tag `v0.5.0` was created locally on the milestone commit; pushing
+- **Current version / tag:** `v0.6.0` — Onboarding and account opening (complete).
+  The annotated tag `v0.6.0` was created locally on the milestone commit; pushing
   tags is blocked by this environment's git policy (HTTP 403), so the tag must be
   (re)created/pushed by the human on merge to `main` — see the milestone report
   for the exact command.
-- **Next milestone:** `v0.6.0` — Onboarding and account opening (not started).
-- **Working branch (this session):** `claude/epic-noether-wk05jc` (the Claude
+- **Next milestone:** `v0.7.0` — Money movement (not started). Carries the v0.5.0
+  review's **Q-01 acceptance note**: approving a deposit-review request must post
+  the pending deposit (pending → posted) so the customer's line stops reading
+  *Pending* and the available balance updates.
+- **Working branch (this session):** `claude/jolly-ritchie-jue5dr` (the Claude
   Code Cloud session branch, used as the milestone branch; intended milestone
-  name `milestone/v0.5-operations-core`).
-- **Gate status:** `npm run verify` ✅ passes. **145** unit/integration tests + **25**
-  Playwright e2e tests green. Additive `operations_core` migration (first since
-  v0.2.0; money/auth tables untouched); no new runtime audit advisories. Security
-  review of v0.5.0: PASS (its one Medium — a test for the socket-room RBAC — was
-  added this milestone).
+  name `milestone/v0.6-onboarding`).
+- **Gate status:** `npm run verify` ✅ passes. **189** unit/integration tests + **30**
+  Playwright e2e tests green. Additive `onboarding` migration (second since
+  v0.2.0; money/auth/ops tables untouched); no new runtime audit advisories.
+  Security review of v0.6.0: PASS (no Critical/High/Medium; the v0.5.0 Low "cap a
+  user-supplied applicant name" closed).
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
-  `npm run dev`. Sign in to the operations console at `:5174` with a seeded staff
-  login (Sam operator / Riley admin — see `README.md`) to work the live queue.
-- **Money discipline preserved:** operator actions change a request's workflow
-  status + write an audit row — they NEVER post to the ledger (money movement is
-  v0.7.0). Balances stay derived; a test asserts no ledger write on action.
+  `npm run dev`. Try the headline flow: apply at `:5173/open-account`, approve it in
+  the ops console at `:5174` as Sam, then sign in as the new customer. (Or approve
+  the seeded Taylor Prospect application and sign in with `Prospect123!`.)
+- **Money discipline preserved — and first exercised on an approval.** Most operator
+  actions still change workflow status + write an audit row only. The new exception
+  is an **onboarding approval**, which provisions a user/account and posts the
+  opening deposit as an explicit **bank-originated, posted `deposit`** ledger entry
+  (audited, atomic, duplicate-email-guarded); admin-funded users post an audited
+  `adjustment` requiring a reason. Value enters ONLY via these bank-originated
+  events; balances stay derived; a test asserts the settled total moves by exactly
+  the funded amount. (Deposit *posting* — pending→posted — is still v0.7.0.)
 
 ## What exists today
 
@@ -125,6 +134,35 @@
   - Sidebar nav is real `NavLink`s (Dashboard / Request queues / Simulated
     messaging); simulation banner + footer disclaimer throughout.
 
+### Onboarding & account opening (v0.6.0)
+- **Open-account flow (customer):** `/open-account` is a real, clearly-simulated
+  application (applicant details, product, simulated opening deposit, optional
+  joint-owner invite, consent) → public `POST /api/onboarding/applications` →
+  confirmation. Submitting **queues** an `onboarding` work item on the v0.5.0 ops
+  queue (pushed live) + onboarding `SimulatedEvent`s (application-received /
+  identity / MFA); it creates no user/account/money.
+- **Approval → provisioning (operator):** approving an `onboarding` request creates
+  the `User` + `Account` + owner grant and posts any opening deposit as an explicit
+  **bank-originated, posted `deposit`** ledger entry — atomically, audited,
+  precondition-guarded (blocked + rolled back if the email already exists).
+  Rejecting marks the application declined. Reuses `OperationsRequest` + the action
+  service + the real-time channel (no new ops endpoint/socket event).
+- **Joint invitations:** owner-only `POST /api/accounts/:id/invitations`;
+  `GET /api/invitations`; `accept|decline`. Accepting creates a `joint`
+  `AccountAccess` grant. Customer UI: an invite form on account detail + an
+  invitations inbox on the dashboard.
+- **Admin-created demo users:** `POST /api/admin/users` (admin) creates a user and
+  optionally opens + funds an account (funding = audited `adjustment` requiring a
+  reason); an admin-only **Create demo user** page in the ops console.
+- **Add-note-anytime (B-02):** a non-decision `note` action (audited, no status
+  change, allowed on terminal) + an always-available "Add note" button.
+- **Detail-panel live sync (B-01 fix):** the ops request detail panel reads the
+  live shared queue state, so its status badge + buttons deactivate from anywhere
+  (queue card, socket, another operator).
+- New models: `OnboardingApplication` (1:1 with its request; bcrypt hash held
+  server-side, never in a DTO) + `AccountInvitation` (additive `onboarding`
+  migration). Shared `@simbank/shared/onboarding` holds the DTOs + pure validators.
+
 ### Branding & assets
 - `assets/brand/` logo SVGs (horizontal/mark/mono-light) + README.
 - `assets/prompts/IMAGE_GENERATION_PROMPTS.md` (5 marketing prompts).
@@ -137,17 +175,15 @@
 - `.claude/agents/` role definitions for the controlled multi-agent workflow.
 
 ## NOT built yet (by design — future milestones)
-- **Onboarding / account opening** (open-account flow, identity verification,
-  initial funding, joint-account invitation, ops approval feeding the queue,
-  admin-created users) — **v0.6.0 (next)**. Today the operations queue is seeded;
-  v0.6.0 makes a real customer flow feed it.
-- **Money movement** (transfers, ACH, wires, deposit, bill pay) — which is what
-  will create *new* transactions and give operator approvals their **ledger**
-  effects; today's transaction history is seeded and operator actions are
-  workflow-only (v0.7.0).
-- **MFA, password reset, remember-device, new-device alerts** (deferred within the
-  auth theme; the v0.5.0 queue already models the requests, but the customer-facing
-  flows that raise them land later).
+- **Money movement** (transfers, ACH, wires, **mobile check deposit posting**, bill
+  pay) — what creates *new* transactions and gives most operator approvals their
+  **ledger** effects — **v0.7.0 (next)**. Carries the v0.5.0 review's **Q-01**: an
+  existing pending deposit does not yet flip to *Posted* on approval (that is money
+  movement). v0.6.0 only creates money for **account opening**.
+- **MFA / 2FA at login, password reset, remember-device, new-device alerts**
+  (deferred within the auth theme). v0.6.0 uses the simulated-messaging seam for
+  **onboarding** identity/MFA (the review's **Q-02**); customer-facing login-time
+  2FA — which will create a `SimulatedEvent` OTP per the same seam — lands later.
 - Cards, fraud, loans, CDs, simulated time + real statement cycles (v0.8.0–v0.9.0).
 - Frontend component unit tests (still deferred; auth + dashboard + ops console UIs
   are covered by build + Playwright journeys + backend/contract tests for now — see

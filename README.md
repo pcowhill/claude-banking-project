@@ -13,7 +13,7 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.5.0 — Operations simulator core` (see `ROADMAP.md`).
+**Current milestone:** `v0.6.0 — Onboarding and account opening` (see `ROADMAP.md`).
 
 ## Tech stack
 
@@ -75,6 +75,38 @@ Run `npm run db:reset` first to seed these users.
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
+
+### New in v0.6.0 (onboarding & account opening)
+
+- **Open a (simulated) account end-to-end.** On the customer app, go to
+  **Open an account** (`/open-account`) and submit a simulated application — name,
+  email, a password you choose, a product, an opening deposit, optionally invite a
+  joint owner, accept the simulated terms. You get a reference; **nothing real is
+  created yet**.
+- **Approve it as an operator.** Sign in to the operations console (`:5174`) as
+  **Sam**, open **Request queues → Onboarding & identity**, open the application
+  (the detail panel shows its product / opening deposit), and click **Approve**.
+  That provisions the **User + Account** and posts the opening deposit as an
+  explicit **bank-originated** ledger entry (audited; balances stay derived). Now
+  sign in to the customer app with the **email + password you chose**.
+  - Shortcut: the seed already includes **one approvable application** — Taylor
+    Prospect (`taylor.prospect@example.com`, $250 opening deposit). Approve it as
+    Sam, then sign in as Taylor with **`Prospect123!`**.
+- **Joint-account invitations.** As **Avery**, open the **Goal Savings** account and
+  **invite a joint owner**. As the invitee (e.g. **Jordan** — the seed includes a
+  pending Avery→Jordan invite), the **Dashboard** shows an **Invitations** inbox —
+  **Accept** and the account appears.
+- **Admin-created demo users.** As **Riley (admin)**, an admin-only **Create demo
+  user** page provisions a user (optionally with a funded account — funding requires
+  a reason and is an audited adjustment) and shows the non-secret demo password.
+- **Two fixes from the v0.5.0 review:** the request detail-panel buttons now
+  deactivate correctly when a request is resolved from anywhere (**B-01**), and you
+  can **add a note at any time, including after a decision** (**B-02**).
+- **Money discipline:** the only ways money is created are **account-opening initial
+  funding** and an **admin funded account** — both posted, bank-originated, audited
+  ledger entries. Everything else (submitting an application, adding a note, a joint
+  invite) moves no money. (Posting an existing *pending* deposit — the customer's
+  "Pending" line — is **money movement**, coming in v0.7.0.)
 
 ### New in v0.5.0 (operations simulator core)
 
