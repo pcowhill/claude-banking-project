@@ -13,7 +13,9 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.6.0 — Onboarding and account opening` (see `ROADMAP.md`).
+**Current milestone:** `v0.6.2 — Operations sign-in fix` (a patch on
+`v0.6.1`/`v0.6.0 — Onboarding and account opening`; see `ROADMAP.md` and
+`docs/process/MILESTONE_REPORT_v0.6.2.md`).
 
 ## Tech stack
 

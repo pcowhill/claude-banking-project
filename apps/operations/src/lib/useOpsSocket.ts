@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import {
+  AUTH,
   SOCKET_EVENTS,
   type OpsExternalEventPayload,
   type OpsRequestChangedPayload,
@@ -29,6 +30,10 @@ export function useOpsSocket(handlers: OpsSocketHandlers): { connected: boolean 
     const socket: Socket = io(API_URL, {
       withCredentials: true,
       path: '/socket.io',
+      // Declare the surface on the (polling) handshake so the backend admits this
+      // operator to the ops room even when the browser omits Origin on a
+      // same-origin handshake — same reasoning as the REST surface header.
+      extraHeaders: { [AUTH.surfaceHeader]: 'operations' },
     });
 
     socket.on('connect', () => setConnected(true));

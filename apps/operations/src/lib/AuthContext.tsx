@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { SessionUser } from '@simbank/shared';
-import { fetchMe, login as apiLogin, logout as apiLogout } from './api';
+import { fetchMe, login as apiLogin, logout as apiLogout, setSessionInvalidHandler } from './api';
 import { AuthContext, type AuthContextValue } from './auth-context';
 
 /**
@@ -14,6 +14,7 @@ import { AuthContext, type AuthContextValue } from './auth-context';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   // Restore the session on mount: ask the backend who, if anyone, is signed in.
   useEffect(() => {
@@ -29,15 +30,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // If any authenticated call is rejected because the session is gone (expired
+  // cookie, backend restart/reseed, stale session from an earlier version),
+  // sign the operator out in the UI so they see the login screen with a clear
+  // message — instead of an authenticated-looking console whose data calls all
+  // fail with "Not authenticated" (B-04).
+  useEffect(() => {
+    setSessionInvalidHandler(() => {
+      setUser(null);
+      setSessionEnded(true);
+    });
+    return () => setSessionInvalidHandler(null);
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     const me = await apiLogin(email, password);
     setUser(me);
+    setSessionEnded(false);
     return me;
   }, []);
 
   const logout = useCallback(async () => {
     await apiLogout();
     setUser(null);
+    setSessionEnded(false);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -46,8 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, loading, login, logout, refresh }),
-    [user, loading, login, logout, refresh],
+    () => ({ user, loading, sessionEnded, login, logout, refresh }),
+    [user, loading, sessionEnded, login, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

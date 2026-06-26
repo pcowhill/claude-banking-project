@@ -52,7 +52,7 @@ function messageForCode(code: string): string {
  * a customer login is immediately signed back out and rejected.
  */
 export function Login() {
-  const { login, logout } = useAuth();
+  const { login, logout, sessionEnded } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorCode, setErrorCode] = useState<string | null>(null);
@@ -106,6 +106,16 @@ export function Login() {
               accounts or money.
             </p>
           </div>
+
+          {sessionEnded && !errorCode && (
+            <div
+              role="status"
+              className="mb-4 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-sm text-amber-100"
+            >
+              Your operator session has ended (it expired or you were signed out). Please sign in
+              again to continue — your queues and actions will load once you do.
+            </div>
+          )}
 
           <Card>
             <form onSubmit={handleSubmit} className="space-y-4">

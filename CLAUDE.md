@@ -134,4 +134,5 @@ emulate the same plan → implement → test → review → scribe steps in sequ
 ---
 
 _Current milestone: see `docs/PROJECT_STATE.md`. As of this writing the project
-is at **v0.6.0 — Onboarding and account opening** (complete); next is v0.7.0._
+is at **v0.6.1 — Operations console fixes** (a patch on v0.6.0, complete); next is
+v0.7.0._

@@ -6,23 +6,46 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.6.0` — Onboarding and account opening (complete).
-  The annotated tag `v0.6.0` was created locally on the milestone commit; pushing
-  tags is blocked by this environment's git policy (HTTP 403), so the tag must be
-  (re)created/pushed by the human on merge to `main` — see the milestone report
-  for the exact command.
-- **Next milestone:** `v0.7.0` — Money movement (not started). Carries the v0.5.0
-  review's **Q-01 acceptance note**: approving a deposit-review request must post
-  the pending deposit (pending → posted) so the customer's line stops reading
-  *Pending* and the available balance updates.
-- **Working branch (this session):** `claude/jolly-ritchie-jue5dr` (the Claude
-  Code Cloud session branch, used as the milestone branch; intended milestone
-  name `milestone/v0.6-onboarding`).
-- **Gate status:** `npm run verify` ✅ passes. **189** unit/integration tests + **30**
-  Playwright e2e tests green. Additive `onboarding` migration (second since
-  v0.2.0; money/auth/ops tables untouched); no new runtime audit advisories.
-  Security review of v0.6.0: PASS (no Critical/High/Medium; the v0.5.0 Low "cap a
-  user-supplied applicant name" closed).
+- **Current version / tag:** `v0.6.2` — Operations sign-in fix (a patch on top of
+  v0.6.1). The annotated tag `v0.6.2` was created locally on the patch commit;
+  pushing tags is blocked by this environment's git policy (HTTP 403), so the tag
+  must be (re)created/pushed by the human on merge to `main` — see
+  `docs/process/MILESTONE_REPORT_v0.6.2.md` for the exact command. (The previous
+  feature milestone, `v0.6.0` — Onboarding and account opening, remains the last
+  feature release; v0.6.1 and v0.6.2 are bug-fix patches on it.)
+- **What v0.6.2 fixed (from the v0.6.1 review):** **B-06** — a blocking regression
+  from the v0.6.1 B-04 fix: the operator could not sign in at all (the dashboard
+  flashed, then the console looped back to the sign-in screen with "Your operator
+  session has ended…", for both Sam and the Administrator, even after clearing
+  cookies). Root cause: the backend chose the per-surface session cookie from the
+  request **`Origin`** header, which browsers **omit on same-origin GETs**, so the
+  console's authenticated `/api/ops/*` GETs read the empty customer cookie → 401 →
+  the v0.6.1 recovery handler looped. Fix: each app declares its surface via an
+  explicit **`x-meridian-surface`** header the backend trusts ahead of `Origin`
+  (Origin kept as a fallback); the ops client sends it on every REST call + the
+  socket handshake. **No schema / migration / ledger / money-contract change**; the
+  v0.3.0 session isolation is preserved. The customer portal was left unchanged.
+- **What v0.6.1 fixed (still in place):** **B-03** — narrow-window top-bar menu (☰)
+  so all sections stay reachable at any width; **B-04** — the console reconciles a
+  genuinely invalid/expired session (HTTP 401) and returns the operator to sign-in
+  with a clear notice, recovering on re-login. (v0.6.2 fixes the case where that
+  recovery fired on a *valid* session because the cookie was read wrong.)
+- **Next milestone:** `v0.7.0` — Money movement (not started; deferred by the human
+  until v0.6.2 is reviewed). Carries the v0.5.0 review's **Q-01 acceptance note**:
+  approving a deposit-review request must post the pending deposit (pending →
+  posted) so the customer's line stops reading *Pending* and the available balance
+  updates.
+- **Working branch (this session):** `claude/gracious-fermi-5cfomj` (the Claude
+  Code Cloud session branch, used as the patch branch; intended name
+  `milestone/v0.6.2-ops-signin`). NOTE: this branch was cut from `main` (v0.6.0)
+  without the v0.6.1 commit, which lived unmerged on `claude/dreamy-maxwell-njcxe7`;
+  this session fast-forwarded it in, so the branch contains v0.6.0 + v0.6.1 + v0.6.2.
+- **Gate status:** `npm run verify` ✅ passes. **201** unit/integration tests (was
+  189; +12 for the B-06 reproduction + cookie-resolution unit tests) + **33**
+  Playwright e2e tests green (was 32; +1 same-origin sign-in regression). No
+  schema/migration change this patch; no new runtime audit advisories. (v0.6.0's
+  security review remains PASS; v0.6.2 changed the shared auth contract + backend
+  session-cookie/real-time resolution + the operations-app client only.)
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
   `npm run dev`. Try the headline flow: apply at `:5173/open-account`, approve it in
   the ops console at `:5174` as Sam, then sign in as the new customer. (Or approve
@@ -133,6 +156,14 @@
     generators + a live event feed (never a real provider).
   - Sidebar nav is real `NavLink`s (Dashboard / Request queues / Simulated
     messaging); simulation banner + footer disclaimer throughout.
+  - **Responsive nav (v0.6.1, B-03):** below the `lg` breakpoint the sidebar is
+    replaced by an accessible top-bar menu (☰) opening the same links (shared
+    `NavList`), so every section stays reachable at any width.
+  - **Session recovery (v0.6.1, B-04):** an authentication failure (HTTP 401
+    `unauthenticated`/`session_expired`) on any `/api/ops/*` call signs the operator
+    out in the UI and returns them to the sign-in screen with a clear notice
+    (`api.ts` `setSessionInvalidHandler` → `AuthContext` `sessionEnded`), instead of
+    stranding them on an authenticated-looking console whose data calls all fail.
 
 ### Onboarding & account opening (v0.6.0)
 - **Open-account flow (customer):** `/open-account` is a real, clearly-simulated

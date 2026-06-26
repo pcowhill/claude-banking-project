@@ -187,6 +187,43 @@ dependencies · status · result/outcome · related commit/tag.
 | N-12 | Tests (unit/integration + e2e) + verify | Testing/QA | Shared: onboarding validators + `note` helpers unit-tested. Backend integration: submit→queue item; **approve→user+account+bank-originated funding** with the money invariant held (settled total moves only by the deposit; balances derived); reject→no user; invite→accept→grant + RBAC (non-owner invite 403); admin create (+funded requires reason); `note` on pending and on terminal; RBAC matrix on the new routes. Playwright: open-account journey, operator approves onboarding, note-after-decision, button-deactivation regression. `npm run verify` green | N-01..N-11 | Done | +shared +backend Vitest; +e2e specs; full RBAC + money-invariant coverage; verify green |
 | N-13 | Security review + milestone handoff | Security Reviewer + Process Scribe | Read-only security/simulation-safety audit (public submit can't escalate; password hash never serialized; provisioning + admin funding audited with reason; invite acceptance can't grant arbitrary access; RBAC on every new route; ledger discipline held; no secrets); then update ALL handoff docs (report, review incl. `Q-01`/`Q-02`, next prompt, state/next, board, experiment log, changelog, quality report), bump version to 0.6.0, annotated tag `v0.6.0` | N-01..N-12 | Done | Security review **PASS**; handoff docs + version 0.6.0 + tag `v0.6.0` |
 
+## Milestone v0.6.1 — Operations console fixes (patch)  ✅ Done (tag `v0.6.1`)
+
+> **Re-scoped by the human** (see `feedback/FEEDBACK_v0.6_2026-06-26_1710.md`): do
+> NOT start v0.7.0; ship a patch release fixing only the two reported Meridian
+> Operations bugs, with v0.6.1-named docs, for the human to test. Both reported
+> issues were confirmed **real bugs** and fixed. Changes are confined to the
+> **operations app** + the shared version string — **no backend / schema / ledger /
+> contract change**, so money discipline, auth, the public site, the customer
+> dashboard, and onboarding are untouched. v0.7.0 (and the carried `Q-01`) remain
+> deferred to the next session, pending the human's v0.6.1 review.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| B-03 | Restore navigation at narrow widths | Frontend Operations | The operations console must let an operator switch between Dashboard / Request queues / Simulated messaging (and, for admins, Create demo user) **at any window width**. Previously the left sidebar was `lg:block`-only and simply hidden below `lg` with no replacement control. Add an accessible responsive menu; desktop sidebar unchanged; nav links shared between both surfaces so they can't drift; e2e at a narrow viewport | v0.6.0 | Done | `OpsLayout.tsx`: shared `NavList`; `lg:hidden` ☰/✕ toggle in the header → panel with the same links; auto-closes on navigate + route change; `aria-expanded`/`aria-controls`; e2e in `operations.spec.ts` |
+| B-04 | Recover from an expired/rejected operator session (no dead "Not authenticated") | Frontend Operations | Root-cause the "Not authenticated" in Request queues. Backend + onboarding-approval verified correct end-to-end (submit→approve→provision→customer-sign-in over HTTP, and a clean-browser queue load). Real defect: the console rendered the authenticated shell from optimistic in-memory state and never reconciled an API **401**, stranding the operator. Fix: detect 401 `unauthenticated`/`session_expired` on ops calls → sign out in the UI → return to the sign-in screen with a clear notice → recover on re-login; a failed login (`invalid_credentials`) must NOT trigger it; e2e | v0.6.0 | Done | `api.ts` `setSessionInvalidHandler` + code-guarded trigger; `AuthContext`/`auth-context` reconcile + `sessionEnded`; `Login.tsx` notice; recovery verified in real Chromium; e2e in `operations.spec.ts` |
+| B-05 | Regression coverage + gate | Testing/QA | Deterministic e2e for both fixes; `npm run verify` green; no test regression | B-03,B-04 | Done | **+2** e2e (32 total, was 30): narrow-width nav + 401→sign-in recovery (via route interception); **189** Vitest unchanged; verify green |
+| DOC-061 | Patch handoff docs + tag | Process Scribe | Save feedback verbatim; v0.6.1-named human review (with the bug explanations the human asked for) + milestone report + next-session prompt; update PROJECT_STATE / NEXT_SESSION / TASK_BOARD / EXPERIMENT_LOG / CHANGELOG / QUALITY_REPORT / README; bump version to 0.6.1; annotated tag `v0.6.1` | B-03,B-04,B-05 | Done | `HUMAN_REVIEW_v0.6.1.md`, `MILESTONE_REPORT_v0.6.1.md`, `NEXT_SESSION_PROMPT_v0.6.1.md`; state/next/board/changelog/experiment-log/quality-report/README updated; version 0.6.1; tag `v0.6.1` |
+
+## Milestone v0.6.2 — Operations sign-in fix (patch)  ✅ Done (tag `v0.6.2`)
+
+> **Re-scoped by the human** (see `feedback/FEEDBACK_v0.6.1_2026-06-26_1852.md`): a
+> NEW blocking regression from the v0.6.1 B-04 fix made the operator unable to sign
+> in at all — the dashboard flashes, then the console bounces back to the sign-in
+> screen ("Your operator session has ended…") in an unrecoverable loop, for both Sam
+> and the Administrator. Fix ONLY this bug, ship **v0.6.2**, and do **not** start
+> v0.7.0 (which waits for the human to test v0.6.2). Confirmed a **real bug**; fixed.
+> The change touches the **shared auth contract + backend session-cookie/real-time
+> resolution + the operations app client** — no schema / migration / ledger / money
+> change, so money discipline, the public site, the customer dashboard, and
+> onboarding are untouched, and the v0.3.0 session isolation is preserved.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| B-06 | Operator cannot sign in — session lost on Origin-less requests (login loop) | Backend/API + Shared + Frontend Operations (risky, serial) | Root-cause the v0.6.1 login loop and fix it within session/auth discipline. Real defect: the backend picks the per-surface session cookie from the request **`Origin`**, defaulting to the **customer** cookie when `Origin` is absent — but browsers **omit `Origin` on same-origin GETs**, so the console's authenticated `/api/ops/*` GETs read the empty `mer_session` and 401'd; the v0.6.1 recovery handler then looped to sign-in. Fix: each app declares its surface via an explicit **`AUTH.surfaceHeader`** (`x-meridian-surface`) the backend trusts **ahead of** `Origin` (Origin kept as fallback so the socket handshake, cross-origin dev, and existing tests are unchanged); the ops client sends it on every REST call + the socket handshake; the backend resolves the cookie + ops-room from it. **Session isolation (v0.3.0) must stay green.** Reproduce + guard with tests | v0.6.1 | Done | `shared/auth.ts` (`surfaceHeader` + `isSessionAudience`); `backend/auth/cookies.ts` (`sessionAudienceFromHeader`, header-first `sessionAudienceForRequest`); `backend/realtime.ts` (handshake header-first); `operations/lib/api.ts` + `useOpsSocket.ts` (send the header); customer app intentionally unchanged (least-privileged `customer` default already correct) |
+| B-06-T | Reproduce + regression coverage | Testing/QA | An empirical reproduction (the surface-header request 401'd pre-fix, 200 post-fix) plus durable guards; `npm run verify` + `npm run test:e2e` green; no regression to auth/dashboard/public-site/onboarding/ops or the session-isolation test | B-06 | Done | `ops-session-origin.test.ts` (5 integration), `auth/cookies.test.ts` (7 unit) → **201** Vitest (was 189); `operations.spec.ts` +1 same-origin e2e (strips `Origin` on GETs in real Chromium, self-validating) → **33** e2e (was 32); CORS preflight for the new header handled by `@fastify/cors` (204), no CORS change |
+| DOC-062 | Patch handoff docs + tag | Process Scribe | Save feedback verbatim; v0.6.2-named human review (plain-language bug explanation + exact test steps for Sam + Admin) + milestone report + next-session prompt; update PROJECT_STATE / NEXT_SESSION / TASK_BOARD / EXPERIMENT_LOG / CHANGELOG / QUALITY_REPORT / README; bump version to 0.6.2; annotated tag `v0.6.2` | B-06,B-06-T | Done | `HUMAN_REVIEW_v0.6.2.md`, `MILESTONE_REPORT_v0.6.2.md`, `NEXT_SESSION_PROMPT_v0.6.2.md`; state/next/board/changelog/experiment-log/quality-report/README updated; version 0.6.2; tag `v0.6.2` |
+
 > Later milestones (v0.7.0–v1.0.0) are summarized in `ROADMAP.md` and will be
 > decomposed into tasks here when they become the active milestone. **v0.7.0
 > carries an explicit acceptance note from this review (`Q-01`):** deposit-review

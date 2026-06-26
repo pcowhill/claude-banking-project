@@ -1,6 +1,15 @@
-import type { AuthResponse, SessionUser, StatusResponse } from '@simbank/shared';
+import { AUTH, type AuthResponse, type SessionUser, type StatusResponse } from '@simbank/shared';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+
+/**
+ * Header that tells the backend this is the OPERATIONS console, so it reads the
+ * `mer_ops_session` cookie regardless of whether the browser sent an `Origin`
+ * (it omits it on same-origin GETs). Sent on every authenticated call — without
+ * it the backend defaults to the customer cookie and 401s, which is what trapped
+ * the console in a sign-in loop in v0.6.1 (fixed in v0.6.2).
+ */
+const SURFACE_HEADERS: Record<string, string> = { [AUTH.surfaceHeader]: 'operations' };
 
 /** Fetch backend status; returns null when the API is unreachable. */
 export async function fetchStatus(): Promise<StatusResponse | null> {
@@ -56,11 +65,31 @@ async function readJson(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
+/**
+ * Optional listener invoked when an authenticated call is rejected because the
+ * session is missing or expired (HTTP 401 with `unauthenticated` / `session_expired`).
+ * The auth provider registers one so the console can drop back to the sign-in
+ * screen instead of leaving a logged-out operator staring at a dead
+ * "Not authenticated" error (B-04). A failed LOGIN (`invalid_credentials`) is a
+ * 401 too, but it carries a different code and must NOT trigger this.
+ */
+let onSessionInvalid: (() => void) | null = null;
+
+export function setSessionInvalidHandler(handler: (() => void) | null): void {
+  onSessionInvalid = handler;
+}
+
+/** Codes that mean "your session is gone" (as opposed to e.g. bad credentials). */
+const SESSION_INVALID_CODES = new Set(['unauthenticated', 'session_expired']);
+
 /** Turn a non-OK response into an {@link ApiError} with the backend's code. */
 async function toApiError(res: Response): Promise<ApiError> {
   const body = await readJson(res);
   const code = typeof body.code === 'string' ? body.code : 'unknown_error';
   const message = typeof body.error === 'string' ? body.error : `Request failed (${res.status}).`;
+  if (res.status === 401 && SESSION_INVALID_CODES.has(code)) {
+    onSessionInvalid?.();
+  }
   return new ApiError(res.status, code, message);
 }
 
@@ -74,6 +103,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     credentials: 'include',
     ...init,
     headers: {
+      ...SURFACE_HEADERS,
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init.headers ?? {}),
     },
@@ -94,7 +124,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 export async function login(email: string, password: string): Promise<SessionUser> {
   const res = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...SURFACE_HEADERS },
     credentials: 'include',
     body: JSON.stringify({ email, password }),
   });
@@ -108,6 +138,7 @@ export async function logout(): Promise<void> {
   await fetch(`${API_URL}/api/auth/logout`, {
     method: 'POST',
     credentials: 'include',
+    headers: { ...SURFACE_HEADERS },
   });
 }
 
@@ -117,7 +148,10 @@ export async function logout(): Promise<void> {
  */
 export async function fetchMe(): Promise<SessionUser | null> {
   try {
-    const res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      credentials: 'include',
+      headers: { ...SURFACE_HEADERS },
+    });
     if (!res.ok) return null;
     const data = (await res.json()) as AuthResponse;
     return data.user;
@@ -131,7 +165,10 @@ export async function fetchMe(): Promise<SessionUser | null> {
  * Throws {@link ApiError} on 403 (forbidden) so the caller can react.
  */
 export async function fetchOpsSummary(): Promise<OpsSummary> {
-  const res = await fetch(`${API_URL}/api/ops/summary`, { credentials: 'include' });
+  const res = await fetch(`${API_URL}/api/ops/summary`, {
+    credentials: 'include',
+    headers: { ...SURFACE_HEADERS },
+  });
   if (!res.ok) throw await toApiError(res);
   return (await res.json()) as OpsSummary;
 }
