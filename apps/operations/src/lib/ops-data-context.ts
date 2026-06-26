@@ -31,6 +31,11 @@ export interface OpsDataValue {
   refresh: () => Promise<void>;
   /** Apply an operator action; resolves with the updated request. Throws ApiError. */
   act: (id: string, action: OpsAction, note?: string) => Promise<OperationsRequestDTO>;
+  /**
+   * Reverse an already-posted money movement (post-decision capability, not one
+   * of the four decisions). Resolves with the updated request. Throws ApiError.
+   */
+  reverse: (id: string, reason: string) => Promise<OperationsRequestDTO>;
   /** Generate a SIMULATED external event; resolves with it. Throws ApiError. */
   simulate: (input: SimulateEventRequest) => Promise<SimulatedEventDTO>;
 }

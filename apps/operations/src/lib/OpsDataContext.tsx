@@ -7,7 +7,13 @@ import {
   type SimulatedEventDTO,
 } from '@simbank/shared';
 import { ApiError } from './api';
-import { applyOpsAction, fetchOpsEvents, fetchOpsRequests, simulateEvent } from './opsApi';
+import {
+  applyOpsAction,
+  fetchOpsEvents,
+  fetchOpsRequests,
+  reverseMovement,
+  simulateEvent,
+} from './opsApi';
 import { OpsDataContext, type OpsDataValue } from './ops-data-context';
 import { useOpsSocket } from './useOpsSocket';
 
@@ -80,6 +86,15 @@ export function OpsDataProvider({ children }: { children: ReactNode }) {
     [upsertRequest],
   );
 
+  const reverse = useCallback(
+    async (id: string, reason: string) => {
+      const updated = await reverseMovement(id, reason);
+      upsertRequest(updated); // socket echo upserts the same change idempotently by id
+      return updated;
+    },
+    [upsertRequest],
+  );
+
   const simulate = useCallback(
     async (input: SimulateEventRequest) => {
       const event = await simulateEvent(input);
@@ -90,8 +105,8 @@ export function OpsDataProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<OpsDataValue>(
-    () => ({ requests, counts, events, loading, error, connected, refresh, act, simulate }),
-    [requests, counts, events, loading, error, connected, refresh, act, simulate],
+    () => ({ requests, counts, events, loading, error, connected, refresh, act, reverse, simulate }),
+    [requests, counts, events, loading, error, connected, refresh, act, reverse, simulate],
   );
 
   return <OpsDataContext.Provider value={value}>{children}</OpsDataContext.Provider>;

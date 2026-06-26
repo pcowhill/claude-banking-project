@@ -6,6 +6,7 @@ import {
   OPS_REQUEST_PRIORITIES,
   OPS_REQUEST_STATUSES,
   OPS_REQUEST_TYPES,
+  REVIEWABLE_MOVEMENT_OPS_TYPE,
   SIM_EVENT_CHANNELS,
   SIM_EVENT_DIRECTIONS,
   SIM_EVENT_STATUSES,
@@ -46,6 +47,12 @@ export interface SeedLedgerEntry {
    * balance — and the data stays fresh on every `db:reset`.
    */
   daysAgo?: number;
+  /**
+   * Optional stable key (v0.7.0) so a reviewable money-movement queue item can be
+   * LINKED to the pending ledger entry it will post on approval (see
+   * {@link SeedOperationsRequest.linkLedgerEntryKeys}). Must be unique.
+   */
+  key?: string;
 }
 
 export interface SeedAccount {
@@ -90,6 +97,13 @@ export interface SeedOperationsRequest {
   subjectName?: string;
   subjectEmail?: string;
   payload?: Record<string, unknown>;
+  /**
+   * Optional {@link SeedLedgerEntry.key}s of the pending ledger entries this
+   * (reviewable money-movement) request will post on approval (v0.7.0). The seed
+   * writer resolves them to real ids and merges them into the request payload's
+   * `ledgerEntryIds`, so approving the seeded item posts the seeded pending entry.
+   */
+  linkLedgerEntryKeys?: string[];
   /** Days before "seed time" the request was raised (default 0 = today). */
   daysAgo?: number;
 }
@@ -234,8 +248,9 @@ export function buildSeedPlan(): SeedPlan {
     origin: LedgerOrigin,
     description: string,
     daysAgo: number,
+    key?: string,
   ): void => {
-    entries.push({ accountKey, amountMinor: toMinor(major), direction, status, origin, description, daysAgo });
+    entries.push({ accountKey, amountMinor: toMinor(major), direction, status, origin, description, daysAgo, key });
   };
 
   // --- Opening (bank-originated seed funding) --------------------------------
@@ -302,8 +317,14 @@ export function buildSeedPlan(): SeedPlan {
 
   // --- Current pending / held activity (reduces AVAILABLE, not current) ------
   unsettled(CHECKING, 5.75, 'debit', 'pending', 'card', 'Coffee Roasters (pending authorization)', 0);
-  unsettled(CHECKING, 320, 'credit', 'pending', 'deposit', 'Mobile check deposit (pending)', 1);
   unsettled(CHECKING, 75, 'debit', 'held', 'card', 'Rental hold — DriveEasy Cars', 2);
+
+  // --- Reviewable money movements (v0.7.0): each is a PENDING ledger entry that
+  //     its linked ops queue item posts on operator APPROVAL (pending → posted).
+  //     Keyed so the seed writer can wire the request → entry link.
+  unsettled(CHECKING, 320, 'credit', 'pending', 'deposit', 'Mobile check deposit', 1, 'pending-mobilecheck');
+  unsettled(CHECKING, 450, 'debit', 'pending', 'payment', 'ACH payment to External Savings ••1234', 2, 'pending-ach-outbound');
+  unsettled(CHECKING, 75.5, 'debit', 'pending', 'payment', 'Bill payment — City Power & Light', 0, 'pending-billpay');
 
   // --- Operations queue (v0.5.0) --------------------------------------------
   // A realistic, varied queue for the operations console. SIMULATION: these are
@@ -348,10 +369,24 @@ export function buildSeedPlan(): SeedPlan {
       key: 'deposit-mobilecheck',
       type: 'deposit',
       summary: 'Mobile check deposit awaiting review ($320.00)',
-      detail: 'A mobile check deposit is pending operator review before the hold is released.',
+      detail:
+        'A mobile check deposit is pending operator review. Approving POSTS the deposit (pending → posted) so it stops reading “Pending” and the available balance updates (simulated).',
       subjectName: AVERY,
       subjectEmail: AVERY_EMAIL,
-      payload: { amountMinor: 32000, instrument: 'mobile_check' },
+      // v0.7.0 money-movement payload — `ledgerEntryIds` is filled by the seed
+      // writer from `linkLedgerEntryKeys` so approving this item posts the
+      // linked pending deposit (the carried-forward Q-01).
+      payload: {
+        kind: 'mobile_check_deposit',
+        amountMinor: 32000,
+        direction: 'inbound',
+        accountId: '',
+        counterparty: null,
+        memo: null,
+        ledgerEntryIds: [],
+        reference: 'MOV-SEED01',
+      },
+      linkLedgerEntryKeys: ['pending-mobilecheck'],
       daysAgo: 1,
     },
     {
@@ -405,11 +440,43 @@ export function buildSeedPlan(): SeedPlan {
       type: 'ach',
       status: 'on_hold',
       summary: 'Outbound ACH needs review ($450.00)',
-      detail: 'An outbound ACH transfer is on hold pending operator review.',
+      detail:
+        'An outbound ACH transfer is on hold pending operator review. Approving POSTS the debit; rejecting marks it failed and releases the reserved funds (simulated).',
       subjectName: AVERY,
       subjectEmail: AVERY_EMAIL,
-      payload: { amountMinor: 45000, direction: 'outbound' },
+      payload: {
+        kind: 'external_ach',
+        amountMinor: 45000,
+        direction: 'outbound',
+        accountId: '',
+        counterparty: 'External Savings ••1234',
+        memo: null,
+        ledgerEntryIds: [],
+        reference: 'MOV-SEED02',
+      },
+      linkLedgerEntryKeys: ['pending-ach-outbound'],
       daysAgo: 2,
+    },
+    {
+      key: 'billpay-citypower',
+      type: 'bill_pay',
+      summary: 'Bill payment to City Power & Light ($75.50)',
+      detail:
+        'A bill payment is awaiting operator review before it posts to the ledger (simulated). Approving posts the debit.',
+      subjectName: AVERY,
+      subjectEmail: AVERY_EMAIL,
+      payload: {
+        kind: 'bill_pay',
+        amountMinor: 7550,
+        direction: 'outbound',
+        accountId: '',
+        counterparty: 'City Power & Light',
+        memo: null,
+        ledgerEntryIds: [],
+        reference: 'MOV-SEED03',
+      },
+      linkLedgerEntryKeys: ['pending-billpay'],
+      daysAgo: 0,
     },
     {
       key: 'dispute-trattoria',
@@ -674,6 +741,52 @@ export function assertSeedOnboardingIntegrity(plan: SeedPlan): void {
     }
     if (invite.status && !INVITATION_STATUSES.includes(invite.status)) {
       throw new Error(`Seed invariant violated: invitation has unknown status '${invite.status}'.`);
+    }
+  }
+}
+
+/**
+ * Money-movement integrity invariants the seed must satisfy (v0.7.0). Throws on
+ * violation. Ensures every reviewable money-movement queue item is correctly
+ * wired to a PENDING ledger entry it can post on approval:
+ *
+ *  1. Ledger-entry keys are unique.
+ *  2. Every `linkLedgerEntryKeys` key references a declared, **pending** entry.
+ *  3. A linking request is one of the money-movement types (deposit/ach/wire/bill_pay).
+ *
+ * This is what makes the seeded deposit/ACH/bill-pay demos approvable end-to-end
+ * (and underwrites the carried-forward Q-01: approving a deposit posts it).
+ */
+export function assertSeedMovementIntegrity(plan: SeedPlan): void {
+  const entryByKey = new Map<string, SeedLedgerEntry>();
+  for (const entry of plan.entries) {
+    if (entry.key == null) continue;
+    if (entryByKey.has(entry.key)) {
+      throw new Error(`Seed invariant violated: duplicate ledger-entry key '${entry.key}'.`);
+    }
+    entryByKey.set(entry.key, entry);
+  }
+
+  const movementTypes = new Set<string>(Object.values(REVIEWABLE_MOVEMENT_OPS_TYPE));
+  for (const request of plan.operationsRequests) {
+    if (!request.linkLedgerEntryKeys || request.linkLedgerEntryKeys.length === 0) continue;
+    if (!movementTypes.has(request.type)) {
+      throw new Error(
+        `Seed invariant violated: request '${request.key}' links ledger entries but is not a money-movement type ('${request.type}').`,
+      );
+    }
+    for (const key of request.linkLedgerEntryKeys) {
+      const entry = entryByKey.get(key);
+      if (!entry) {
+        throw new Error(
+          `Seed invariant violated: request '${request.key}' links unknown ledger-entry key '${key}'.`,
+        );
+      }
+      if (entry.status !== 'pending') {
+        throw new Error(
+          `Seed invariant violated: request '${request.key}' links non-pending ledger entry '${key}' (status '${entry.status}').`,
+        );
+      }
     }
   }
 }

@@ -5,6 +5,7 @@ import { hashPassword } from './auth/password';
 import {
   assertSeedAccessIntegrity,
   assertSeedInvariants,
+  assertSeedMovementIntegrity,
   assertSeedOnboardingIntegrity,
   assertSeedOpsIntegrity,
   type SeedPlan,
@@ -38,6 +39,7 @@ export async function applySeedPlan(
   assertSeedAccessIntegrity(plan);
   assertSeedOpsIntegrity(plan);
   assertSeedOnboardingIntegrity(plan);
+  assertSeedMovementIntegrity(plan);
 
   await prisma.loginEvent.deleteMany();
   await prisma.session.deleteMany();
@@ -90,13 +92,16 @@ export async function applySeedPlan(
   }
 
   const DAY_MS = 24 * 60 * 60 * 1000;
+  // Track created ledger-entry ids by their seed key so a money-movement queue
+  // item can be LINKED to the pending entry it posts on approval (v0.7.0).
+  const ledgerEntryIdByKey = new Map<string, string>();
   for (const e of plan.entries) {
     const accountId = accountIdByKey.get(e.accountKey);
     if (!accountId) throw new Error(`Seed references an unknown account key: ${e.accountKey}`);
     const isSettled = e.status === 'posted' || e.status === 'disputed';
     // Date the entry relative to seed time so the demo shows realistic history.
     const occurredAt = new Date(now.getTime() - (e.daysAgo ?? 0) * DAY_MS);
-    await prisma.ledgerEntry.create({
+    const created = await prisma.ledgerEntry.create({
       data: {
         accountId,
         amountMinor: e.amountMinor,
@@ -108,6 +113,7 @@ export async function applySeedPlan(
         createdAt: occurredAt,
       },
     });
+    if (e.key) ledgerEntryIdByKey.set(e.key, created.id);
   }
 
   // Operations queue work items (v0.5.0). Each gets an intake audit row so the
@@ -118,6 +124,17 @@ export async function applySeedPlan(
   for (const r of plan.operationsRequests) {
     const occurredAt = new Date(now.getTime() - (r.daysAgo ?? 0) * DAY_MS);
     const status = (r.status ?? 'pending') as OpsRequestStatus;
+    // Merge resolved ledger-entry ids into the payload so approving a reviewable
+    // money movement posts its seeded pending entry (v0.7.0 / Q-01).
+    let payload = r.payload ?? null;
+    if (r.linkLedgerEntryKeys && r.linkLedgerEntryKeys.length > 0) {
+      const ledgerEntryIds = r.linkLedgerEntryKeys.map((k) => {
+        const id = ledgerEntryIdByKey.get(k);
+        if (!id) throw new Error(`Seed references an unknown ledger-entry key: ${k}`);
+        return id;
+      });
+      payload = { ...(r.payload ?? {}), ledgerEntryIds };
+    }
     const request = await prisma.operationsRequest.create({
       data: {
         type: r.type,
@@ -127,7 +144,7 @@ export async function applySeedPlan(
         detail: r.detail ?? null,
         subjectName: r.subjectName ?? null,
         subjectEmail: r.subjectEmail ?? null,
-        payload: r.payload ? JSON.stringify(r.payload) : null,
+        payload: payload ? JSON.stringify(payload) : null,
         resolvedAt: isTerminalOpsStatus(status) ? occurredAt : null,
         createdAt: occurredAt,
         updatedAt: occurredAt,
@@ -220,7 +237,7 @@ export async function applySeedPlan(
       action: 'seed_database',
       entity: 'system',
       reason:
-        'Demo seed (v0.6.0: demo users + access grants + dated transaction history + operations queue + simulated events + an approvable onboarding application + a pending joint invitation)',
+        'Demo seed (v0.7.0: demo users + access grants + dated transaction history + operations queue + simulated events + an approvable onboarding application + a pending joint invitation + reviewable money movements — a mobile-check deposit, an outbound ACH, and a bill payment — each linked to its pending ledger entry)',
     },
   });
 

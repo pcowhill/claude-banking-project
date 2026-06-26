@@ -16,3 +16,4 @@ export * from './auth';
 export * from './transactions';
 export * from './operations';
 export * from './onboarding';
+export * from './money-movement';

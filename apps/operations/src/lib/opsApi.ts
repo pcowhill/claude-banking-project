@@ -6,6 +6,7 @@ import type {
   OperatorActionRequest,
   OperatorActionResponse,
   OperationsRequestDTO,
+  ReverseMovementRequest,
   SimulateEventRequest,
   SimulateEventResponse,
   SimulatedEventDTO,
@@ -67,4 +68,24 @@ export async function simulateEvent(input: SimulateEventRequest): Promise<Simula
 export async function fetchOpsEvents(limit = 50): Promise<SimulatedEventDTO[]> {
   const res = await apiRequest<SimulatedEventsResponse>(`/api/ops/events?limit=${limit}`);
   return res.events;
+}
+
+/**
+ * POST /api/ops/movements/:requestId/reverse — reverse an already-POSTED money
+ * movement (pending → posted → reversed). Operator/admin only (RBAC enforced
+ * server-side). The `reason` is required; the backend flips the linked ledger
+ * entry to `reversed` (balances stay derived — nothing is edited) and marks the
+ * request's payload `reversed: true`. Returns the updated request. Throws
+ * {@link ApiError} on `not_a_movement` (400), `nothing_to_reverse` (409), etc.
+ * This reverses a SIMULATED ledger entry only — no real funds ever move.
+ */
+export async function reverseMovement(
+  requestId: string,
+  reason: string,
+): Promise<OperationsRequestDTO> {
+  const res = await apiRequest<{ request: OperationsRequestDTO }>(
+    `/api/ops/movements/${encodeURIComponent(requestId)}/reverse`,
+    { method: 'POST', body: JSON.stringify({ reason } satisfies ReverseMovementRequest) },
+  );
+  return res.request;
 }

@@ -205,7 +205,14 @@ dependencies · status · result/outcome · related commit/tag.
 | B-05 | Regression coverage + gate | Testing/QA | Deterministic e2e for both fixes; `npm run verify` green; no test regression | B-03,B-04 | Done | **+2** e2e (32 total, was 30): narrow-width nav + 401→sign-in recovery (via route interception); **189** Vitest unchanged; verify green |
 | DOC-061 | Patch handoff docs + tag | Process Scribe | Save feedback verbatim; v0.6.1-named human review (with the bug explanations the human asked for) + milestone report + next-session prompt; update PROJECT_STATE / NEXT_SESSION / TASK_BOARD / EXPERIMENT_LOG / CHANGELOG / QUALITY_REPORT / README; bump version to 0.6.1; annotated tag `v0.6.1` | B-03,B-04,B-05 | Done | `HUMAN_REVIEW_v0.6.1.md`, `MILESTONE_REPORT_v0.6.1.md`, `NEXT_SESSION_PROMPT_v0.6.1.md`; state/next/board/changelog/experiment-log/quality-report/README updated; version 0.6.1; tag `v0.6.1` |
 
-## Milestone v0.6.2 — Operations sign-in fix (patch)  ✅ Done (tag `v0.6.2`)
+## Milestone v0.6.2 — Operations sign-in fix (patch)  ✅ Done (tag pending human)
+
+> NOTE (v0.7.0 session): the v0.6.2 commits are present on this branch, but the
+> human confirmed at the v0.6.2 review that they have **not tagged** v0.6.2, and no
+> tag exists in-repo (`git tag -l` is empty). The earlier "tag `v0.6.2`" wording
+> referred to a local-only annotated tag created in the prior sandbox that was never
+> pushed (tag push is blocked by this environment's git policy). The human tags on
+> merge to `main`.
 
 > **Re-scoped by the human** (see `feedback/FEEDBACK_v0.6.1_2026-06-26_1852.md`): a
 > NEW blocking regression from the v0.6.1 B-04 fix made the operator unable to sign
@@ -224,9 +231,44 @@ dependencies · status · result/outcome · related commit/tag.
 | B-06-T | Reproduce + regression coverage | Testing/QA | An empirical reproduction (the surface-header request 401'd pre-fix, 200 post-fix) plus durable guards; `npm run verify` + `npm run test:e2e` green; no regression to auth/dashboard/public-site/onboarding/ops or the session-isolation test | B-06 | Done | `ops-session-origin.test.ts` (5 integration), `auth/cookies.test.ts` (7 unit) → **201** Vitest (was 189); `operations.spec.ts` +1 same-origin e2e (strips `Origin` on GETs in real Chromium, self-validating) → **33** e2e (was 32); CORS preflight for the new header handled by `@fastify/cors` (204), no CORS change |
 | DOC-062 | Patch handoff docs + tag | Process Scribe | Save feedback verbatim; v0.6.2-named human review (plain-language bug explanation + exact test steps for Sam + Admin) + milestone report + next-session prompt; update PROJECT_STATE / NEXT_SESSION / TASK_BOARD / EXPERIMENT_LOG / CHANGELOG / QUALITY_REPORT / README; bump version to 0.6.2; annotated tag `v0.6.2` | B-06,B-06-T | Done | `HUMAN_REVIEW_v0.6.2.md`, `MILESTONE_REPORT_v0.6.2.md`, `NEXT_SESSION_PROMPT_v0.6.2.md`; state/next/board/changelog/experiment-log/quality-report/README updated; version 0.6.2; tag `v0.6.2` |
 
-> Later milestones (v0.7.0–v1.0.0) are summarized in `ROADMAP.md` and will be
-> decomposed into tasks here when they become the active milestone. **v0.7.0
-> carries an explicit acceptance note from this review (`Q-01`):** deposit-review
-> approval must post the pending deposit (pending→posted) so the customer's line
-> stops reading *Pending* and the available balance updates — within ledger
-> discipline (audited, bank-originated; no stored/edited balance).
+## Milestone v0.7.0 — Money movement  ▶️ In progress
+
+> Approved to start by the human (see `feedback/FEEDBACK_v0.6.2_2026-06-26_2025.md` —
+> "The fixes look good to me! We should be good to move onto v0.7.0."). **No
+> re-scope** beyond one transparent deferral: **recurring/scheduled payments** are
+> deferred to **v0.9.0** because they require the simulation clock / scheduled-event
+> processing already roadmapped there (building them now would be a non-functional
+> stub) — see `M-09` and the human review. This milestone is where an operator
+> **approval first MOVES money**. The **risky shared areas** are the shared contract
+> (`M-01`), the **ledger** posting/reversal logic + the **routing** of the new
+> endpoints + the **real-time** wiring (`M-02`/`M-03`), and the **seed** linkage
+> (`M-04`); these are built **serially, first, and reviewed**, and the API + payload
+> contract is **locked** before the two frontends (`M-05`/`M-06`) are parallelized.
+>
+> **MONEY DISCIPLINE (enforced + tested):** money moves ONLY via explicit
+> `LedgerEntry` rows — never a stored/edited balance. Internal transfers post BOTH
+> legs (`transfer`, posted) and **net to zero**. External value enters only via a
+> bank-originated **posted credit** (`deposit`) and leaves only via a **posted
+> debit** (`payment`). An **approval posts** the movement (pending→posted); a
+> **rejection fails** it (pending→`failed`); a **reversal** flips a settled entry to
+> `reversed` (reason + audit). Balances stay DERIVED. **No Prisma migration** is
+> needed — `LedgerEntry` already carries the needed `status`/`origin`/`reason`, and
+> the `OperationsRequest.payload` JSON carries the movement context + linked
+> `ledgerEntryIds`. The simulation disclaimer stays visible; v0.2.0 auth / v0.3.0
+> site / v0.4.0 dashboard / v0.5.0 ops console / v0.6.0 onboarding (incl. v0.6.1 +
+> v0.6.2 fixes) are not regressed.
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| M-01 | Money-movement contract (shared DTOs + validators) | Backend/Shared (risky, serial) | New `packages/shared/src/money-movement.ts`: movement-kind enum (`internal_transfer`/`external_ach`/`wire`/`mobile_check_deposit`/`bill_pay`), per-kind direction + ledger origin, funding bounds, `TransferRequest`/`ExternalMovementRequest` + responses, the `MovementPayload` (carries `kind`/`amountMinor`/`direction`/account ids/counterparty/`ledgerEntryIds`), PURE validators (`validateTransfer`, `validateExternalMovement`) reused client+server, labels, and `movementOpsType(kind)`. Add **`bill_pay`** to `OPS_REQUEST_TYPES` (+ label + the `money` queue lane). Dependency-free; unit-tested; **contract locked before UI** | v0.6.2 | In progress | |
+| M-02 | Money-movement service (the ledger heart) | Backend/API (risky, serial) | `apps/backend/src/money/movements.ts`: `createTransfer` (validate ownership of BOTH accounts + sufficient available; post a `transfer` **debit + credit** atomically; nets to zero), `createExternalMovement` (create the **pending** ledger entry — credit for inbound `deposit`, debit for outbound `payment` — + a linked ops request whose payload carries `ledgerEntryIds`; reserves available for outbound), `postApprovedMovement` (pending→`posted`, set `postedAt`, audit), `failMovement` (pending→`failed`, audit), `reverseMovement` (posted→`reversed`, **reason required** + audit). Typed errors; balances stay DERIVED; settled total moves only by bank-originated credit / posted debit | M-01 | Pending | |
+| M-03 | Routes + approval branches + real-time | Backend/API (risky, serial) | Extend `applyOperatorAction`: approving a money-movement request (`deposit`/`ach`/`wire`/`bill_pay`) with a movement payload **posts** the linked pending entries; rejecting **fails** them (atomic, audited) — mirrors the v0.6.0 onboarding branch. New `routes/money.ts`: `POST /api/transfers` (auth; internal transfer), `POST /api/movements` (auth; external reviewable movement, scoped to the user's source account). Ops `POST /api/ops/movements/:requestId/reverse` (ops/admin; reason). Register in `routes/index.ts`; all mutations **emit to the operators room** via `app.opsRealtime`. **API + payload contract locked here** before frontends | M-02 | Pending | |
+| M-04 | Seed: wire Q-01 + ACH/bill-pay demos | Backend/API | Give the seeded **pending mobile-check deposit** ($320 credit) a key and **link** it to the `deposit-mobilecheck` request (so approving it posts → closes **Q-01**); add a **pending outbound ACH debit** ($450) linked to `ach-outbound`; add a **bill-pay** demo queue item + its pending debit; thread `ledgerEntryIds` into the request payload at apply time (new `key`/`linkLedgerEntryKeys` seed fields). `assertSeedInvariants` (transfers net to zero; settled credits bank-originated/transfer) still green; `db:reset` works | M-01,M-02 | Pending | |
+| M-05 | Customer money-movement UI | Frontend Customer | `lib/money.ts` client (`createTransfer`, `createMovement`, discriminated results, `credentials:'include'`); a **Move money** surface with tabs — Transfer between own accounts (immediate), Mobile check deposit, External ACH/wire, Pay a bill (reviewable) — reusing the shared validators; reachable from the Dashboard quick links + AccountDetail. Confirmation states; an internal transfer updates balances immediately; a reviewable movement shows as **Pending** in `TransactionList` until an operator posts it. Loading/error/offline states; disclaimer prominent; public site + protected routes not regressed | M-03 | Pending | |
+| M-06 | Ops money-movement context + reverse | Frontend Operations | `RequestDetailPanel` shows **money-movement context** (amount, direction, source/destination or biller, instrument) for `deposit`/`ach`/`wire`/`bill_pay` items — following the onboarding-context pattern, lifted defensively from `payload` — with copy that approving **posts** the movement (simulated); a **Reverse movement** affordance (reason required → `POST /api/ops/movements/:id/reverse` via `opsApi`) shown only for an **approved + posted** movement. Live sync + disclaimer not regressed | M-03 | Pending | |
+| M-07 | Tests (unit/integration + e2e) + verify | Testing/QA | Shared: money-movement validators/bounds/`movementOpsType` unit-tested. Backend integration: internal transfer posts both legs & **settled total unchanged** (nets to zero) + RBAC (can't transfer from an unowned account) + **insufficient-funds** rejected; external movement queues + writes a **pending** entry; operator **approve posts** it (incl. the seeded mobile-check deposit: pending→posted, customer line stops reading *Pending*, available updates — **Q-01**) with the money invariant held; **reject→failed**; **reverse→reversed**; audit rows; real-time emits; RBAC on every new route. seed-plan tests for the links. Playwright: a customer transfer journey + an operator approving a deposit so the customer sees it post. `npm run verify` + `npm run test:e2e` green | M-01..M-06 | Pending | |
+| M-08 | Security review + milestone handoff | Security Reviewer + Process Scribe | Read-only security/simulation-safety audit (RBAC on every new route + the reverse endpoint; a customer can only move their own funds; no balance is ever stored/edited; transfers net to zero; reversal requires a reason + audit; no secrets; ledger discipline held). Then update ALL handoff docs (report, review incl. the `M-09` deferral, next prompt, state/next, board, experiment log, changelog, quality report, roadmap history), correct the stale "v0.6.2 tagged" wording, bump version to 0.7.0, annotated tag `v0.7.0` | M-01..M-07 | Pending | |
+| M-09 | Recurring/scheduled payments — DEFERRED to v0.9.0 | Milestone Planner | Recurring/scheduled payments require the **simulation clock + scheduled-event processing** that the roadmap already places in **v0.9.0**; building a scheduler now (with no clock to fire it) would be a non-functional stub. Deferred transparently and carried forward; the human can pull it earlier if desired (raised in the v0.7.0 human review) | v0.7.0 | Deferred | Deferred to v0.9.0 (clock-dependent); documented in HUMAN_REVIEW_v0.7.0 + ROADMAP_HISTORY |
+
+> Later milestones (v0.8.0–v1.0.0) are summarized in `ROADMAP.md` and will be
+> decomposed into tasks here when they become the active milestone.
