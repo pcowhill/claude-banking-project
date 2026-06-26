@@ -5,89 +5,77 @@
 
 ## Where we are
 
-`v0.6.2 — Operations sign-in fix` (a **patch** on top of v0.6.1) is **complete** and
-tagged. It fixed ONE blocking regression and started **no** new feature work:
+`v0.7.0 — Money movement` is **complete** and tagged (annotated tag created locally;
+the human pushes it on merge to `main` — tag push is blocked in this environment).
+It is the first milestone where an operator approval **MOVES money**, always via the
+append-only ledger:
 
-- **B-06** — after the v0.6.1 B-04 fix, the operator could not sign in at all: the
-  dashboard flashed, then the console looped back to the sign-in screen ("Your
-  operator session has ended…"), for both Sam and the Administrator, even after
-  clearing cookies. Root cause: the backend chose the per-surface session cookie
-  from the request **`Origin`** header, which browsers **omit on same-origin GETs**,
-  so the console's authenticated `/api/ops/*` GETs read the empty customer cookie →
-  401 → the v0.6.1 recovery handler looped. Fix: each app declares its surface via
-  an explicit **`x-meridian-surface`** header the backend trusts ahead of `Origin`
-  (Origin kept as a fallback); the ops client sends it on every REST call + the
-  socket handshake. **No schema / migration / ledger / money-contract change**; the
-  v0.3.0 session isolation is preserved; the customer portal is unchanged.
+- **Internal transfers** (`POST /api/transfers`) post BOTH legs and net to zero.
+- **Reviewable external movements** (`POST /api/movements` — mobile check deposit,
+  external ACH, wire, bill pay) write a **pending** ledger entry + a linked ops-queue
+  item; an operator **approve** posts it (pending→posted), **reject** fails it
+  (pending→failed, releasing reserved funds), **hold/request-info** leave it pending.
+- **Reversal** (`POST /api/ops/movements/:id/reverse`, ops/admin, reason required)
+  flips a posted entry to `reversed`.
+- Customer **/move-money** UI (tabbed) + operator money-movement context + reverse
+  affordance. **Carried Q-01 closed:** approving the seeded mobile-check deposit flips
+  the customer's line Pending→Posted and updates available.
+- **No Prisma migration** was needed. Gate: **240** unit/integration + **37** e2e
+  green; security review **PASS-with-findings** (all Low/tracked).
 
-The v0.6.1 fixes (**B-03** narrow-width ☰ menu, **B-04** expired-session recovery)
-are still in place. The last **feature** milestone, **`v0.6.0 — Onboarding and
-account opening`**, remains the last feature release (a real open-account flow
-feeding the v0.5.0 ops queue; an operator **approval** that provisions a `User` +
-`Account` + **initial funding** via a bank-originated, posted `deposit`, audited,
-balances DERIVED; **joint-account invitations**; **admin-created demo users**; and
-the v0.5.0 fixes B-01/B-02). The next planned milestone is **`v0.7.0 — Money
-movement`** (deferred by the human until v0.6.2 is reviewed).
+The earlier patches (v0.6.1 B-03/B-04, v0.6.2 B-06) and v0.6.0 onboarding are all
+intact. **One scope item was deferred:** **recurring/scheduled payments** moved to
+**v0.9.0** (they need the simulation clock; see `HUMAN_REVIEW_v0.7.0.md`). The next
+planned milestone is **`v0.8.0 — Cards, fraud, disputes`**.
 
 ## Session-start protocol (must do, in order)
 
 1. Read `CLAUDE.md`, then `docs/PROJECT_STATE.md`, then this file.
 2. **Save the human's pasted feedback VERBATIM** to
-   `docs/process/feedback/FEEDBACK_v0.6.2_<YYYY-MM-DD_HHMM>.md` BEFORE acting on it.
-   Use the structure in `docs/process/HUMAN_FEEDBACK_LOG.md`. The raw block is
-   never edited afterward.
+   `docs/process/feedback/FEEDBACK_v0.7.0_<YYYY-MM-DD_HHMM>.md` BEFORE acting on it.
+   Use the structure in `docs/process/HUMAN_FEEDBACK_LOG.md`. The raw block is never
+   edited afterward.
    - If the feedback is only "continue" (or similar), still save it verbatim and
-     treat it as approval to proceed with v0.7.0.
-3. Interpret the feedback in that file (accepted / deferred / rejected with
-   reasons / questions carried forward); update `docs/process/HUMAN_FEEDBACK_LOG.md`.
+     treat it as approval to proceed with v0.8.0.
+3. Interpret the feedback in that file (accepted / deferred / rejected with reasons /
+   questions carried forward); update `docs/process/HUMAN_FEEDBACK_LOG.md`.
 4. Update `docs/process/TASK_BOARD.md` (source of truth), and the roadmap/process
-   logs if the feedback changes scope.
-5. Do **only** v0.7.0 (or the re-scoped milestone the feedback approves).
+   logs if the feedback changes scope. **If the human asks to pull recurring/scheduled
+   payments forward, fold it into this session** (it pairs with the simulation clock,
+   so consider whether to bring a minimal clock forward or keep execution manual).
+5. Do **only** v0.8.0 (or the re-scoped milestone the feedback approves).
 6. Stop at the next gate and produce the milestone handoff docs.
 
-## Planned scope for v0.7.0 — Money movement
+## Planned scope for v0.8.0 — Cards, fraud, disputes
 
 Acceptance targets (refine from feedback before building):
 
-- **Internal transfers** between a customer's own accounts — each posts **both
-  legs** (debit one, credit the other) so transfers **net to zero**; balances stay
-  DERIVED.
-- **External ACH transfers / wires / bill pay / mobile check deposit** — value
-  enters/leaves only via explicit **bank-originated** ledger events; outbound money
-  leaves via a posted debit; clearly simulated, no real rails.
-- **Approvals, failures, reversals, holds** — money-movement requests that need
-  review feed the v0.5.0 **operations queue** (reuse `OperationsRequest` + the
-  action service + the real-time channel + the v0.6.0 "approval has a ledger effect"
-  path). An approval **posts** the movement; a reversal/failure is modeled with
-  ledger statuses (`reversed`/`failed`), never by editing a balance.
-- **CARRIED FORWARD FROM THE v0.5.0 REVIEW (Q-01):** approving a **deposit-review**
-  request must **post** the pending deposit (status pending → posted) so the
-  customer's transaction line stops reading *Pending* and the **available balance**
-  updates — within ledger discipline (audited, bank-originated; no stored/edited
-  balance). The seed already has a pending "Mobile check deposit" + a `deposit`
-  ops request to wire this to.
-- **Customer money-movement UI** (transfer/deposit/bill-pay forms) + the operator
-  side; keep `npm run verify` green; keep the simulation disclaimer visible; do not
-  regress v0.2.0 auth, the v0.3.0 public site, the v0.4.0 dashboard, the v0.5.0 ops
-  console, or v0.6.0 onboarding.
+- **Cards:** issue a (simulated) debit/credit card for an account; **freeze/unfreeze**;
+  **lost/stolen** flow (replace → new card number, old one frozen); **travel notices**.
+  Card activity already exists as a `card`-origin ledger entry — build the card
+  **lifecycle** on top.
+- **Fraud:** suspicious-transaction **alerts** feeding the v0.5.0 operations queue
+  (reuse the queue + action service + real-time channel); a customer can confirm/deny;
+  an operator can act. The seed already has a `fraud_alert` item to build on.
+- **Disputes:** a customer **disputes** a posted transaction → a `dispute` ops item;
+  the operator can resolve it, which may **reverse** the disputed entry (reuse the
+  v0.7.0 reversal: posted→`reversed`, reason+audit) or mark it `disputed`. The ledger
+  already supports the `disputed` status (treated as posted, flagged) — wire it.
+- **Money discipline unchanged:** any money effect (a fraud reversal, a dispute credit)
+  goes through the **ledger** (status change or a bank-originated entry), never a
+  balance edit; reversals keep the reason + audit.
 
 ### Suggested first steps
 
 1. Plan tasks with the Milestone Planner role; record them in `TASK_BOARD.md`.
-2. This spans `packages/shared` (money-movement DTOs + any new request payload
-   shapes + pure transfer/posting helpers), `apps/backend` (schema/seed if a
-   transfer/movement model is needed, the posting service + routes, the
-   approval→post path, the deposit pending→posted transition — **schema + routing +
-   real-time + the LEDGER are risky shared areas, so serialize any change**),
-   `apps/customer` (the money-movement UI), and `apps/operations` (the
-   money-movement queue actions, which largely already exist). Lock the API + any
-   socket-event additions before parallelizing.
-3. Reuse, don't reinvent: the **operations queue + action service + audit + the
-   real-time channel** (v0.5.0), the **"approval has a ledger effect"** path and the
-   atomic, audited, bank-originated funding pattern (v0.6.0), the **access
-   primitives** + `requireRole` (v0.2.0), and the **disciplined ledger** + the
-   `deriveBalances`/`settledTotalMinor` invariants (a transfer posts both legs and
-   nets to zero; value enters/leaves only via bank-originated events).
+2. Decide the schema delta early (a `Card` model is likely the one **risky migration**
+   this milestone — serialize it). Fraud/dispute may need only new ops request
+   subtypes + payload (no migration), like v0.7.0.
+3. Reuse, don't reinvent: the **operations queue + action service + audit + real-time**
+   (v0.5.0); the **approval→ledger** + **reversal** paths (v0.6.0 / v0.7.0); the
+   **disciplined ledger** (`disputed`/`reversed` statuses already exist); the **access
+   primitives** + `requireRole`. Lock the API + any socket-event additions before
+   parallelizing the two frontends.
 
 ## Guardrails
 - Serialize risky shared areas (schema, auth, routing, real-time, **ledger**, CI,
@@ -96,18 +84,27 @@ Acceptance targets (refine from feedback before building):
 - Maintain the simulation disclaimer in README and both apps.
 - Money moves ONLY via explicit ledger entries (never a stored/edited balance);
   transfers net to zero; value enters/leaves only via bank-originated events; admin
-  adjustments require a reason + audit. Balances stay DERIVED.
-- Truthful state: if blocked, file a blocker and stop — do not tag the milestone.
+  adjustments + reversals require a reason + audit. Balances stay DERIVED.
+- Truthful state: if blocked, file a blocker under `docs/process/blockers/` and stop —
+  do not tag the milestone.
+
+## Open follow-ups to consider (tracked, non-blocking)
+- **Recurring/scheduled payments** — deferred to v0.9.0 (needs the sim clock).
+- **SEC-1 (CSRF token / SameSite=Strict)** — accepted for the local sim
+  (SameSite=Lax + CORS mitigate it); targeted at the v1.0.0 hardening pass.
+- **TOCTOU on the money funds-check** (v0.7.0 review F-2) — Low; fold into a v0.8.0+
+  ledger-hardening pass (move the available check inside the write path).
+- Dev-tooling npm-audit advisories (vite/vitest/esbuild) — v1.0.0 hardening.
 
 ## Sandbox note (Claude Code Cloud only)
-Prisma's engine download and the Playwright Chromium build may not match through
-the egress proxy. Mirror the Prisma engine binaries via curl + `PRISMA_*` env vars
+Prisma's engine download and the Playwright Chromium build may not match through the
+egress proxy. Mirror the Prisma engine binaries via curl + `PRISMA_*` env vars
 (query-engine library + schema-engine for `debian-openssl-3.0.x`), and point
 Playwright at the pre-installed Chromium via `PLAYWRIGHT_CHROMIUM_PATH` — see
-`docs/process/EXPERIMENT_LOG.md` (Sessions 1–8). (v0.6.2 needed no migration; the
-prior `onboarding` migration is in place.) None of this affects normal machines or
-CI.
+`docs/process/EXPERIMENT_LOG.md` (Sessions 1–9). v0.7.0 needed **no** migration; if
+v0.8.0 adds a `Card` model it will need the mirrored schema engine for the migration.
+None of this affects normal machines or CI.
 
 ## The copy/paste starter prompt
 A ready-to-use prompt for a brand-new Claude Code Cloud session lives at
-`docs/process/NEXT_SESSION_PROMPT_v0.6.2.md` (it includes the feedback placeholder).
+`docs/process/NEXT_SESSION_PROMPT_v0.7.0.md` (it includes the feedback placeholder).

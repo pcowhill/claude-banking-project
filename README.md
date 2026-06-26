@@ -13,9 +13,9 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.6.2 — Operations sign-in fix` (a patch on
-`v0.6.1`/`v0.6.0 — Onboarding and account opening`; see `ROADMAP.md` and
-`docs/process/MILESTONE_REPORT_v0.6.2.md`).
+**Current milestone:** `v0.7.0 — Money movement` (builds on `v0.6.0 — Onboarding
+and account opening` + the v0.6.1/v0.6.2 ops-console patches; see `ROADMAP.md` and
+`docs/process/MILESTONE_REPORT_v0.7.0.md`).
 
 ## Tech stack
 
@@ -78,6 +78,27 @@ Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
 
+### New in v0.7.0 (money movement)
+
+- **Move money as a customer.** Sign in as **Avery** (`avery.customer@example.com` /
+  `Customer123!`) and open **Move money** (`/move-money`, also from the dashboard
+  quick links). Four flows:
+  - **Transfer** between your own accounts — **instant**; both ledger legs post and
+    **net to zero** (no money is created).
+  - **Deposit a check**, **Send money** (external ACH / wire), **Pay a bill** — these
+    are **reviewable**: they show as **Pending** until an operator posts them.
+- **An operator approval POSTS the movement.** Sign in to the operations console
+  (`:5174`) as **Sam**, open **Request queues**, open a money item (e.g. the seeded
+  **"Mobile check deposit awaiting review ($320.00)"**) — the detail panel shows the
+  **money-movement context** — and click **Approve**. The customer's line flips
+  **Pending → Posted** and the balance updates. **Reject** instead marks it failed
+  (and releases reserved funds); after approving, a **Reverse movement** action (reason
+  required) flips a posted movement back.
+- **Money discipline:** every movement is an explicit **ledger** entry — a transfer's
+  two legs, a bank-originated `deposit` credit in, a `payment` debit out — and
+  failures/reversals are ledger **status** changes (`failed`/`reversed`). **No balance
+  is ever stored or edited;** balances stay derived. No database migration was needed.
+
 ### New in v0.6.0 (onboarding & account opening)
 
 - **Open a (simulated) account end-to-end.** On the customer app, go to
@@ -108,7 +129,7 @@ recorded; the customer dashboard shows recent sign-in activity.
   funding** and an **admin funded account** — both posted, bank-originated, audited
   ledger entries. Everything else (submitting an application, adding a note, a joint
   invite) moves no money. (Posting an existing *pending* deposit — the customer's
-  "Pending" line — is **money movement**, coming in v0.7.0.)
+  "Pending" line — is **money movement**, delivered in **v0.7.0** above.)
 
 ### New in v0.5.0 (operations simulator core)
 

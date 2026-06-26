@@ -6,58 +6,57 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.6.2` — Operations sign-in fix (a patch on top of
-  v0.6.1). The annotated tag `v0.6.2` was created locally on the patch commit;
-  pushing tags is blocked by this environment's git policy (HTTP 403), so the tag
-  must be (re)created/pushed by the human on merge to `main` — see
-  `docs/process/MILESTONE_REPORT_v0.6.2.md` for the exact command. (The previous
-  feature milestone, `v0.6.0` — Onboarding and account opening, remains the last
-  feature release; v0.6.1 and v0.6.2 are bug-fix patches on it.)
-- **What v0.6.2 fixed (from the v0.6.1 review):** **B-06** — a blocking regression
-  from the v0.6.1 B-04 fix: the operator could not sign in at all (the dashboard
-  flashed, then the console looped back to the sign-in screen with "Your operator
-  session has ended…", for both Sam and the Administrator, even after clearing
-  cookies). Root cause: the backend chose the per-surface session cookie from the
-  request **`Origin`** header, which browsers **omit on same-origin GETs**, so the
-  console's authenticated `/api/ops/*` GETs read the empty customer cookie → 401 →
-  the v0.6.1 recovery handler looped. Fix: each app declares its surface via an
-  explicit **`x-meridian-surface`** header the backend trusts ahead of `Origin`
-  (Origin kept as a fallback); the ops client sends it on every REST call + the
-  socket handshake. **No schema / migration / ledger / money-contract change**; the
-  v0.3.0 session isolation is preserved. The customer portal was left unchanged.
-- **What v0.6.1 fixed (still in place):** **B-03** — narrow-window top-bar menu (☰)
-  so all sections stay reachable at any width; **B-04** — the console reconciles a
-  genuinely invalid/expired session (HTTP 401) and returns the operator to sign-in
-  with a clear notice, recovering on re-login. (v0.6.2 fixes the case where that
-  recovery fired on a *valid* session because the cookie was read wrong.)
-- **Next milestone:** `v0.7.0` — Money movement (not started; deferred by the human
-  until v0.6.2 is reviewed). Carries the v0.5.0 review's **Q-01 acceptance note**:
-  approving a deposit-review request must post the pending deposit (pending →
-  posted) so the customer's line stops reading *Pending* and the available balance
-  updates.
-- **Working branch (this session):** `claude/gracious-fermi-5cfomj` (the Claude
-  Code Cloud session branch, used as the patch branch; intended name
-  `milestone/v0.6.2-ops-signin`). NOTE: this branch was cut from `main` (v0.6.0)
-  without the v0.6.1 commit, which lived unmerged on `claude/dreamy-maxwell-njcxe7`;
-  this session fast-forwarded it in, so the branch contains v0.6.0 + v0.6.1 + v0.6.2.
-- **Gate status:** `npm run verify` ✅ passes. **201** unit/integration tests (was
-  189; +12 for the B-06 reproduction + cookie-resolution unit tests) + **33**
-  Playwright e2e tests green (was 32; +1 same-origin sign-in regression). No
-  schema/migration change this patch; no new runtime audit advisories. (v0.6.0's
-  security review remains PASS; v0.6.2 changed the shared auth contract + backend
-  session-cookie/real-time resolution + the operations-app client only.)
+- **Current version / tag:** `v0.7.0` — Money movement (a **feature** milestone, the
+  first where an operator approval MOVES money). An annotated tag `v0.7.0` is created
+  locally on the milestone commit; **pushing tags is blocked by this environment's
+  git policy (HTTP 403)**, so the human (re)creates/pushes the tag on merge to `main`
+  — see `docs/process/MILESTONE_REPORT_v0.7.0.md` for the exact command. (Builds on
+  v0.6.0 onboarding + the v0.6.1/v0.6.2 ops-console patches.)
+- **Tag-history note:** the prior session's v0.6.2 tag was a *local-only* sandbox tag
+  that was never pushed; **no v0.6.2 tag exists in-repo** (the human confirmed they
+  had not tagged it). Earlier docs that said v0.6.2 was "tagged" referred to that
+  local tag — corrected here and in the task board.
+- **What v0.7.0 added:** customer **money movement** where an operator approval first
+  has a true **ledger** effect. **Internal transfers** (`POST /api/transfers`) post
+  BOTH `transfer` legs and net to zero. **Reviewable external movements**
+  (`POST /api/movements` — mobile check deposit, external ACH, wire, bill pay) write
+  a **pending** ledger entry + a linked ops-queue item; an operator **approve** posts
+  it (pending→posted), **reject** fails it (pending→failed, releasing reserved
+  funds), **hold/request-info** leave it pending. A **reversal**
+  (`POST /api/ops/movements/:id/reverse`, ops/admin, reason required) flips a posted
+  entry to `reversed`. Customer **/move-money** UI (tabbed) + operator
+  money-movement context + reverse affordance. **Closes the carried Q-01:** approving
+  the seeded mobile-check deposit flips the customer's line Pending→Posted and updates
+  available. **No Prisma migration** (the ledger + `OperationsRequest.payload` already
+  sufficed).
+- **What v0.6.x fixed (still in place):** **B-03** narrow-width ☰ nav; **B-04**
+  expired-session recovery; **B-06** the surface-header session resolution (operator
+  sign-in). All green.
+- **Next milestone:** `v0.8.0` — Cards, fraud, disputes (not started). Also **carries
+  recurring/scheduled payments**, deferred from v0.7.0 to **v0.9.0** (they need the
+  simulation clock; see the human review + roadmap history).
+- **Working branch (this session):** `claude/sweet-newton-44widz` (the Claude Code
+  Cloud session branch; intended milestone name `milestone/v0.7.0-money-movement`).
+  This branch was cut from `main` and **already contained** v0.6.0 + v0.6.1 + v0.6.2
+  (verified via `git log`), so no fast-forward was needed this session.
+- **Gate status:** `npm run verify` ✅ passes. **240** unit/integration tests (was
+  201; **+39**: 16 shared money-movement, 18 backend money integration, 5 seed-plan)
+  + **37** Playwright e2e green (was 33; **+4** money-movement journeys). **0 lint
+  warnings.** No schema/migration change; **runtime `npm audit` = 0**. Security review
+  **PASS-with-findings** (all Low/tracked; SEC-1 CSRF re-affirmed as Lax+CORS-mitigated
+  for the sim → v1.0.0; a TOCTOU funds-check note for the v0.8.0+ ledger pass).
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
-  `npm run dev`. Try the headline flow: apply at `:5173/open-account`, approve it in
-  the ops console at `:5174` as Sam, then sign in as the new customer. (Or approve
-  the seeded Taylor Prospect application and sign in with `Prospect123!`.)
-- **Money discipline preserved — and first exercised on an approval.** Most operator
-  actions still change workflow status + write an audit row only. The new exception
-  is an **onboarding approval**, which provisions a user/account and posts the
-  opening deposit as an explicit **bank-originated, posted `deposit`** ledger entry
-  (audited, atomic, duplicate-email-guarded); admin-funded users post an audited
-  `adjustment` requiring a reason. Value enters ONLY via these bank-originated
-  events; balances stay derived; a test asserts the settled total moves by exactly
-  the funded amount. (Deposit *posting* — pending→posted — is still v0.7.0.)
+  `npm run dev`. Try the headline flow: as **Avery** at `:5173/move-money`, transfer
+  between your accounts (instant) or submit a **mobile check deposit**; then as **Sam**
+  in the ops console (`:5174` → Request queues) **approve** it and watch the customer's
+  line flip Pending→Posted — and optionally **reverse** it.
+- **Money discipline — now exercised on real movement.** Money moves ONLY via explicit
+  `LedgerEntry` rows; **no balance is ever stored or edited.** Transfers post both legs
+  and net to zero; external value enters only via a bank-originated posted `deposit`
+  credit and leaves only via a posted `payment` debit; failures/reversals are ledger
+  **status** changes (`failed`/`reversed`), never balance edits; reversal requires a
+  reason + audit. Balances stay DERIVED; a test asserts the system settled total moves
+  by exactly the posted amount (and is unchanged by a transfer).
 
 ## What exists today
 
@@ -68,7 +67,7 @@
 - CI: `.github/workflows/ci.yml` (verify job + Playwright job).
 
 ### packages/shared (`@simbank/shared`)
-- `version.ts` (APP_VERSION 0.5.0, milestone meta, `IS_SIMULATION`), `brand.ts`
+- `version.ts` (APP_VERSION 0.7.0, milestone meta, `IS_SIMULATION`), `brand.ts`
   (Meridian tokens), `constants.ts` (ports, socket events — now incl. the ops
   events + `OPS_REALTIME_ROOM`), `types.ts` (roles, account/ops enums-as-unions,
   API DTOs), `money.ts`, `ledger.ts`,
@@ -81,7 +80,10 @@
   **state machine** — `nextStatusForAction` / `isTerminalOpsStatus` /
   `canApplyAction` — `OperationsRequestDTO` + detail + `OperatorActionLogDTO` +
   `SimulatedEventDTO`, the API + socket payload DTOs, and label/`OPS_QUEUES`/
-  `countRequestsByStatus` helpers).
+  `countRequestsByStatus` helpers; v0.7.0 adds the `bill_pay` type), and
+  **`money-movement.ts`** (v0.7.0: movement kinds, direction/origin mapping, bounds,
+  the `MovementPayload` + `asMovementPayload`, and the pure `validateTransfer` /
+  `validateExternalMovement` validators + `movementOpsType`).
 - **Money/ledger + transaction-derivation logic is the tested core** (see
   TEST_STRATEGY); the ops contract is likewise pure + unit-tested.
 
@@ -111,9 +113,11 @@
   `SimulatedEvent`**; three migrations (`init`, `auth_roles_sessions`,
   **`operations_core`** — additive; money/auth tables untouched).
 - Seed: `prisma/seed.ts` → shared `src/seed-apply.ts` + pure `src/seed-plan.ts`
-  (4 demo users, hashed passwords, owner+joint grants, **56 dated ledger entries**
-  incl. pending/held, **plus a 10-item dated operations queue + 4 simulated events**
-  with intake audit rows) with money + access + **ops-integrity** invariant guards.
+  (4 demo users, hashed passwords, owner+joint grants, **58 dated ledger entries**
+  incl. pending/held, **plus an 11-item dated operations queue + 4 simulated events**
+  with intake audit rows — incl. v0.7.0 reviewable money movements: a mobile-check
+  deposit, an outbound ACH, and a bill payment, each linked to its pending entry)
+  with money + access + **ops-integrity** + **movement-integrity** invariant guards.
   `npm run db:reset` works.
 
 ### apps/customer (React + Vite + Tailwind)
@@ -194,6 +198,35 @@
   server-side, never in a DTO) + `AccountInvitation` (additive `onboarding`
   migration). Shared `@simbank/shared/onboarding` holds the DTOs + pure validators.
 
+### Money movement (v0.7.0)
+- **Internal transfers (immediate):** `POST /api/transfers` posts BOTH `transfer`
+  legs (debit source + credit destination) atomically so a transfer **nets to
+  zero**; validated for non-viewer access to both accounts + sufficient available.
+- **Reviewable external movements:** `POST /api/movements` (mobile check deposit /
+  external ACH in-out / wire / bill pay) writes a **pending** `LedgerEntry` (a
+  bank-originated `deposit` credit for inbound, a `payment` debit for outbound) + a
+  linked `OperationsRequest` whose `payload` carries the movement context + the
+  `ledgerEntryIds`. A pending debit reserves available immediately (a hold).
+- **Approval has a ledger effect:** `applyOperatorAction` posts the linked pending
+  entries on **approve** (pending→posted), fails them on **reject**
+  (pending→failed), leaves them pending on **hold/request-info** — reusing the
+  v0.6.0 approval→ledger pattern, atomic + audited. **Reversal:**
+  `POST /api/ops/movements/:requestId/reverse` (ops/admin, **reason required**)
+  flips posted entries to `reversed`.
+- **Customer UI:** `/move-money` (tabbed: Transfer / Deposit a check / Send money /
+  Pay a bill), reached from the dashboard quick links + account detail; reviewable
+  movements then show as **Pending** in the transaction list until posted.
+- **Operator UI:** the request detail panel shows the money-movement context
+  (type/amount/direction/counterparty/memo + a "Reversed" indicator) and a
+  **Reverse movement** affordance for an approved+posted movement.
+- **No schema change** — the disciplined ledger (`status`/`origin`/`reason`) +
+  `OperationsRequest.payload` already sufficed. Shared `@simbank/shared/money-movement`
+  holds the kinds, the `MovementPayload`, and the pure `validateTransfer` /
+  `validateExternalMovement` validators; `bill_pay` was added to the ops types.
+- **The carried Q-01 is closed:** the seeded "Mobile check deposit" is linked to its
+  review item, so approving it flips the customer's line **Pending → Posted** and
+  updates the available balance.
+
 ### Branding & assets
 - `assets/brand/` logo SVGs (horizontal/mark/mono-light) + README.
 - `assets/prompts/IMAGE_GENERATION_PROMPTS.md` (5 marketing prompts).
@@ -206,11 +239,12 @@
 - `.claude/agents/` role definitions for the controlled multi-agent workflow.
 
 ## NOT built yet (by design — future milestones)
-- **Money movement** (transfers, ACH, wires, **mobile check deposit posting**, bill
-  pay) — what creates *new* transactions and gives most operator approvals their
-  **ledger** effects — **v0.7.0 (next)**. Carries the v0.5.0 review's **Q-01**: an
-  existing pending deposit does not yet flip to *Posted* on approval (that is money
-  movement). v0.6.0 only creates money for **account opening**.
+- **Recurring / scheduled payments** — deferred from v0.7.0 to **v0.9.0** because
+  they require the **simulation clock + scheduled-event processing** roadmapped
+  there (a scheduler with nothing to fire it would be a non-functional stub).
+  One-off money movement (transfers, ACH, wires, mobile-check deposit, bill pay) is
+  **done in v0.7.0**; the carried **Q-01** (deposit pending→posted on approval) is
+  **closed**.
 - **MFA / 2FA at login, password reset, remember-device, new-device alerts**
   (deferred within the auth theme). v0.6.0 uses the simulated-messaging seam for
   **onboarding** identity/MFA (the review's **Q-02**); customer-facing login-time

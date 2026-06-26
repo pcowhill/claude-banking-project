@@ -38,3 +38,32 @@ v0.2.0 review reported a cross-app session-bleed bug; rather than defer it, the 
 well-scoped auth fix and a prerequisite for shipping a public site whose login
 entry points must behave correctly). The 10-milestone plan is unchanged; v0.3.0 is
 now complete and v0.4.0 (Customer banking dashboard) is next.
+
+---
+
+## 2026-06-26 — patch releases v0.6.1 + v0.6.2 (no structural change)
+
+Two human-requested **patch releases** were inserted on top of the v0.6.0 feature
+milestone to fix operations-console bugs found in review — **v0.6.1** (B-03
+narrow-width nav, B-04 expired-session recovery) and **v0.6.2** (B-06 operator
+sign-in / surface-header session resolution). These are patches on v0.6.0, not new
+milestones; the 10-milestone feature plan is unchanged. The last **feature**
+milestone remained v0.6.0 until v0.7.0.
+
+---
+
+## 2026-06-26 — recurring/scheduled payments moved from v0.7.0 to v0.9.0
+
+**What changed:** the **recurring / scheduled payments** sub-item, originally listed
+under **v0.7.0 — Money movement**, is moved to **v0.9.0 — Loans, CDs, simulated time**.
+
+**Why:** a scheduled/recurring payment needs a **clock** to fire it on a future date,
+and the **simulation clock + scheduled-event processing** is already planned for
+**v0.9.0**. Implementing a scheduler in v0.7.0 with nothing to execute it would be a
+non-functional stub. Moving it next to the clock that powers it keeps each milestone
+shippable and honest. All other money movement (one-off internal transfers, external
+ACH, wires, mobile-check deposit, bill pay, with approvals/failures/reversals/holds)
+**shipped in v0.7.0**. The milestone **structure and order are unchanged**; only this
+sub-item's home moved. Raised in `HUMAN_REVIEW_v0.7.0.md` so the human can pull it
+forward (with a minimal clock) if they prefer. v0.7.0 is complete; v0.8.0 (Cards,
+fraud, disputes) is next.
