@@ -6,23 +6,34 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.6.0` — Onboarding and account opening (complete).
-  The annotated tag `v0.6.0` was created locally on the milestone commit; pushing
-  tags is blocked by this environment's git policy (HTTP 403), so the tag must be
-  (re)created/pushed by the human on merge to `main` — see the milestone report
-  for the exact command.
-- **Next milestone:** `v0.7.0` — Money movement (not started). Carries the v0.5.0
-  review's **Q-01 acceptance note**: approving a deposit-review request must post
-  the pending deposit (pending → posted) so the customer's line stops reading
-  *Pending* and the available balance updates.
-- **Working branch (this session):** `claude/jolly-ritchie-jue5dr` (the Claude
-  Code Cloud session branch, used as the milestone branch; intended milestone
-  name `milestone/v0.6-onboarding`).
-- **Gate status:** `npm run verify` ✅ passes. **189** unit/integration tests + **30**
-  Playwright e2e tests green. Additive `onboarding` migration (second since
-  v0.2.0; money/auth/ops tables untouched); no new runtime audit advisories.
-  Security review of v0.6.0: PASS (no Critical/High/Medium; the v0.5.0 Low "cap a
-  user-supplied applicant name" closed).
+- **Current version / tag:** `v0.6.1` — Operations console fixes (a patch on top of
+  v0.6.0). The annotated tag `v0.6.1` was created locally on the patch commit;
+  pushing tags is blocked by this environment's git policy (HTTP 403), so the tag
+  must be (re)created/pushed by the human on merge to `main` — see
+  `docs/process/MILESTONE_REPORT_v0.6.1.md` for the exact command. (The previous
+  feature milestone, `v0.6.0` — Onboarding and account opening, remains the last
+  feature release.)
+- **What v0.6.1 fixed (from the v0.6.0 review):** **B-03** — on a narrow window the
+  operations console's left sidebar disappeared with no alternative; added an
+  accessible top-bar menu (☰) so all sections stay reachable at any width. **B-04**
+  — the ops console showed "Not authenticated" in Request queues and blocked
+  approvals when the operator session was invalid/expired/stale; it now reconciles
+  a rejected session (HTTP 401) and returns the operator to the sign-in screen with
+  a clear notice, recovering on re-login. The backend + onboarding-approval path
+  were verified correct end-to-end — the defect was client-side session handling
+  only. **No backend / schema / ledger / contract change.**
+- **Next milestone:** `v0.7.0` — Money movement (not started; deferred by the human
+  until v0.6.1 is reviewed). Carries the v0.5.0 review's **Q-01 acceptance note**:
+  approving a deposit-review request must post the pending deposit (pending →
+  posted) so the customer's line stops reading *Pending* and the available balance
+  updates.
+- **Working branch (this session):** `claude/dreamy-maxwell-njcxe7` (the Claude
+  Code Cloud session branch, used as the patch branch; intended name
+  `milestone/v0.6.1-ops-fixes`).
+- **Gate status:** `npm run verify` ✅ passes. **189** unit/integration tests
+  (unchanged) + **32** Playwright e2e tests green (was 30; +2 for the v0.6.1 fixes).
+  No schema/migration change this patch; no new runtime audit advisories. (v0.6.0's
+  security review remains PASS; v0.6.1 changed only operations-app client code.)
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
   `npm run dev`. Try the headline flow: apply at `:5173/open-account`, approve it in
   the ops console at `:5174` as Sam, then sign in as the new customer. (Or approve
@@ -133,6 +144,14 @@
     generators + a live event feed (never a real provider).
   - Sidebar nav is real `NavLink`s (Dashboard / Request queues / Simulated
     messaging); simulation banner + footer disclaimer throughout.
+  - **Responsive nav (v0.6.1, B-03):** below the `lg` breakpoint the sidebar is
+    replaced by an accessible top-bar menu (☰) opening the same links (shared
+    `NavList`), so every section stays reachable at any width.
+  - **Session recovery (v0.6.1, B-04):** an authentication failure (HTTP 401
+    `unauthenticated`/`session_expired`) on any `/api/ops/*` call signs the operator
+    out in the UI and returns them to the sign-in screen with a clear notice
+    (`api.ts` `setSessionInvalidHandler` → `AuthContext` `sessionEnded`), instead of
+    stranding them on an authenticated-looking console whose data calls all fail.
 
 ### Onboarding & account opening (v0.6.0)
 - **Open-account flow (customer):** `/open-account` is a real, clearly-simulated

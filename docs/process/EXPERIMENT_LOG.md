@@ -6,6 +6,72 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 7 — v0.6.1 Operations console fixes (patch) — 2026-06-26
+
+**Goal:** The human's v0.6.0 review reported two Meridian Operations bugs and
+**explicitly re-scoped the session away from v0.7.0** to a patch release `v0.6.1`
+fixing only those bugs (with v0.6.1-named docs) for them to test. So: do NOT start
+Money movement; fix the two bugs, prove them, document, tag.
+
+**Bug 1 (B-03) — nav disappears on a narrow window:** confirmed real. The ops
+console sidebar was `lg:block`-only and hidden below `lg` with **no** replacement
+control, so sections were unreachable on a narrow window. Fixed with an accessible
+top-bar menu (☰) that opens the same links (factored into a shared `NavList` used by
+both the desktop sidebar and the mobile panel), auto-closing on navigation.
+
+**Bug 2 (B-04) — "Not authenticated" in Request queues; can't approve:** the
+interesting one. The v0.6.0 e2e (which loads the queue as an operator) had passed
+30/30, so the bug had to be environment/session-state-sensitive. Diagnosis by
+reproduction, escalating fidelity:
+- **Backend over HTTP (curl cookie jar, ops origin):** login sets `mer_ops_session`;
+  `/api/auth/me` 200; `/api/ops/requests` 200 with the full queue. Backend correct.
+- **Full onboarding loop over HTTP:** submit → operator approve → provisioned
+  user/account → new customer signs in to the funded account. Approval path correct.
+- **Real Chromium, clean profile:** queue renders all cards; every `/api/ops/*`
+  call carries the cookie and returns 200. No bug in a clean session.
+- **Real Chromium, invalid session mid-use** (cleared cookie / deleted session):
+  the console kept rendering the authenticated shell while data calls 401'd —
+  **reproducing the user's dead-end "Not authenticated".**
+
+**Root cause (B-04):** the ops console decided it was signed in purely from
+optimistic in-memory React state (the login response / the mount-time `fetchMe`) and
+**never reconciled a subsequent API 401**. So any invalid/expired/stale operator
+session (easy to hit across versions + backend restarts, or after the 8-hour TTL)
+left the operator stranded — the queue page showed the raw "Not authenticated"; the
+dashboard just looked empty; there was no path back. **The backend/cookie/auth code
+was unchanged since v0.5.0 and is correct** — this was a client-side resilience gap.
+
+**Fix (B-04):** the API client now recognises 401 `unauthenticated`/`session_expired`
+(and ONLY those — a failed login's `invalid_credentials` is excluded) and invokes a
+registered handler; `AuthContext` clears the user + sets `sessionEnded`, so the
+existing gate shows the sign-in screen (tearing down the data provider + socket); the
+login screen shows a clear "your session has ended" notice; a fresh sign-in recovers
+the queue. Verified deterministically in real Chromium via Playwright route
+interception forcing `/api/ops/**` → 401 (bounce + notice + recovery), plus a
+clean-session regression (queue still loads).
+
+**Discipline kept:** changes confined to the operations app + the shared version
+string. No backend / schema / migration / ledger / contract / auth change; money
+discipline, the public site, the customer dashboard, and onboarding untouched.
+
+**Surprises / environment friction (sandbox only):** same Prisma engine-download
+block as Sessions 1–6 (ECONNRESET to `binaries.prisma.sh`); resolved the documented
+way (`npm install --ignore-scripts` + curl-mirror the query-engine library +
+schema-engine for `debian-openssl-3.0.x` + `PRISMA_*` env vars). Prisma 5.22.0,
+engine `605197351a3c8bdd595af2d2a9bc3025bca48ea2`. Playwright used the pre-installed
+Chromium via `PLAYWRIGHT_CHROMIUM_PATH`. None of this affects normal machines or CI.
+Also hit a transient false failure while iterating: Vite HMR left a stale module so a
+mid-edit Playwright check failed; a clean dev-server restart confirmed the fix — a
+test-harness artifact, not a product issue.
+
+**Outcome:** `npm run verify` passes; **189** unit/integration tests (unchanged) +
+**32** Playwright e2e (was 30; +2 for the fixes) green. No schema change this patch.
+Version bumped to 0.6.1; annotated tag `v0.6.1` created locally (tag push blocked by
+env policy — HTTP 403 — so the human pushes it on merge; see the milestone report).
+Stopped at the patch gate; did **not** start v0.7.0.
+
+---
+
 ## Session 6 — v0.6.0 Onboarding and account opening — 2026-06-26
 
 **Goal:** Complete only `v0.6.0 — Onboarding and account opening` (a real,

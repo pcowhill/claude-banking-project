@@ -5,6 +5,56 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.6.1 — Operations console fixes (patch) — 2026-06-26
+
+A patch release fixing the two v0.6.0-review bugs in the operations console. Changes
+are confined to the **operations app** + the shared version string — no backend,
+schema, migration, ledger, contract, auth, public-site, dashboard, or onboarding
+change.
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **189 passed / 189** (unchanged; this patch
+  added no unit tests and regressed none — the fixes are in the operations app,
+  which is covered by build + Playwright).
+- **Build** — backend (tsup) + customer (vite) + operations (vite) all build.
+
+### E2E (Playwright) ✅ PASS
+- **32 passed / 32** (30 + **2 new** in `operations.spec.ts`):
+  - **B-04 regression** — "an expired/rejected ops session returns the operator to
+    sign-in (no dead 'Not authenticated')": after a normal operator login, force
+    every `/api/ops/**` call to **401** (route interception, simulating an
+    expired/rejected session), reload, and assert the app **bounces to the sign-in
+    screen** with the "session has ended" notice and shows **no** dead
+    "Not authenticated" text; then re-login and confirm the live queue loads.
+  - **B-03 regression** — "the menu toggle reveals navigation and can switch
+    sections": at a 600px viewport, assert the sidebar links are hidden, the ☰
+    toggle is visible, opening it navigates to Request queues, and the menu
+    auto-closes after navigating.
+
+### Diagnosis evidence (B-04 — why it wasn't a backend bug)
+Reproduced in escalating fidelity: backend over HTTP (curl cookie jar) returns the
+full queue for a logged-in operator; the full submit→approve→provision→customer-
+sign-in loop works over HTTP; a clean Chromium profile loads the queue with all
+cards; only an **invalid/expired session mid-use** reproduced the dead-end. The fix
+targets that client-side reconciliation gap.
+
+### Security / safety
+No security-surface change. No money-path, auth, RBAC, schema, or socket change; no
+secrets added; `.env` still ignored; simulation disclaimer still visible in both
+apps + README. The v0.6.0 security review (PASS) still stands.
+
+### Known issues / follow-ups (unchanged from v0.6.0)
+- Pre-existing hardening follow-ups (CSRF token, config-driven cookie `secure`,
+  helmet + login rate-limit) and the dev-tooling npm-audit advisories (vite, vitest,
+  esbuild) remain tracked for a hardening pass; runtime audit clean.
+- Frontend component **unit** tests remain deferred; the apps are covered by build +
+  Playwright journeys + backend/contract tests. (The two new e2e tests extend that
+  coverage to the ops console's responsive nav and session-recovery behavior.)
+
+---
+
 ## v0.6.0 — Onboarding and account opening — 2026-06-26
 
 ### Gate: `npm run verify` ✅ PASS

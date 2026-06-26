@@ -20,6 +20,13 @@ export interface AuthContextValue {
   /** True until the initial `GET /api/auth/me` resolves. */
   loading: boolean;
   /**
+   * True when the operator was signed out because the backend rejected the
+   * session (expired / missing cookie) mid-use, rather than by an explicit
+   * logout. The sign-in screen uses it to explain why they're back here (B-04).
+   * Cleared on the next successful login.
+   */
+  sessionEnded: boolean;
+  /**
    * Authenticate against the backend. Resolves with the user so the caller can
    * inspect the role (and reject non-operator logins). Throws `ApiError` on
    * failure so the login form can show a specific message.

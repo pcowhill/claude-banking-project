@@ -13,6 +13,43 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
   post the pending deposit (pending → posted) so the customer's line stops reading
   *Pending* and the available balance updates — within ledger discipline.
 
+## [0.6.1] — 2026-06-26 — Operations console fixes
+
+A focused **patch release** fixing the two Meridian Operations bugs from the
+v0.6.0 review. No new product scope; **v0.7.0 was not started.** Changes are
+confined to the operations app (+ the shared version string) — no backend, schema,
+ledger, contract, auth, public-site, dashboard, or onboarding changes. Still a
+local SIMULATION; money discipline untouched (balances stay derived).
+
+### Fixed
+
+- **Navigation disappears on a narrow window (B-03).** The operations console's
+  left sidebar was shown only at the `lg` breakpoint and simply hidden below it,
+  with no replacement — so on a narrow window there was no way to switch between
+  Dashboard / Request queues / Simulated messaging. Added an accessible **top-bar
+  menu (☰)** that opens the same navigation on narrow widths (auto-closing on
+  navigation; `aria-expanded`/`aria-controls`); the desktop sidebar is unchanged.
+  The nav links are now shared between both surfaces so they can't drift.
+- **"Not authenticated" in Request queues; approvals unreachable (B-04).** The
+  backend and the onboarding-approval path were verified correct end-to-end
+  (submit → operator approve → provisioned user/account → new customer signs in).
+  The defect was in the operations web app: it rendered the signed-in console from
+  its own in-memory state and **never reconciled an API authentication failure**,
+  so an invalid/expired/stale operator session left every `/api/ops/*` call
+  returning "Not authenticated" with no way forward. The console now detects a
+  **401** (`unauthenticated` / `session_expired`) on any ops call, **returns the
+  operator to the sign-in screen** with a clear "your session has ended" notice,
+  and **recovers on re-login** (the queue then loads and applications can be
+  approved). A failed login (`invalid_credentials`) is unaffected.
+
+### Tests
+
+- **+2 Playwright e2e** (30 → **32**): an expired/rejected ops session returns the
+  operator to sign-in (no dead "Not authenticated") and recovers on re-login; and
+  the narrow-width menu toggle reveals navigation and switches sections.
+- **189** Vitest unit/integration tests unchanged (no regression); `npm run verify`
+  green.
+
 ## [0.6.0] — 2026-06-26 — Onboarding and account opening
 
 A real, clearly-**simulated** account-opening flow that **feeds the v0.5.0

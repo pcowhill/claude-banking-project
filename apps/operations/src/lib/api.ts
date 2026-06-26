@@ -56,11 +56,31 @@ async function readJson(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
+/**
+ * Optional listener invoked when an authenticated call is rejected because the
+ * session is missing or expired (HTTP 401 with `unauthenticated` / `session_expired`).
+ * The auth provider registers one so the console can drop back to the sign-in
+ * screen instead of leaving a logged-out operator staring at a dead
+ * "Not authenticated" error (B-04). A failed LOGIN (`invalid_credentials`) is a
+ * 401 too, but it carries a different code and must NOT trigger this.
+ */
+let onSessionInvalid: (() => void) | null = null;
+
+export function setSessionInvalidHandler(handler: (() => void) | null): void {
+  onSessionInvalid = handler;
+}
+
+/** Codes that mean "your session is gone" (as opposed to e.g. bad credentials). */
+const SESSION_INVALID_CODES = new Set(['unauthenticated', 'session_expired']);
+
 /** Turn a non-OK response into an {@link ApiError} with the backend's code. */
 async function toApiError(res: Response): Promise<ApiError> {
   const body = await readJson(res);
   const code = typeof body.code === 'string' ? body.code : 'unknown_error';
   const message = typeof body.error === 'string' ? body.error : `Request failed (${res.status}).`;
+  if (res.status === 401 && SESSION_INVALID_CODES.has(code)) {
+    onSessionInvalid?.();
+  }
   return new ApiError(res.status, code, message);
 }
 

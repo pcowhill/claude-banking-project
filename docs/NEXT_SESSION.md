@@ -5,24 +5,33 @@
 
 ## Where we are
 
-`v0.6.0 — Onboarding and account opening` is **complete** and tagged. It delivered a
-real, clearly-simulated open-account flow that **feeds the v0.5.0 operations queue**;
-an operator **approval** that provisions a `User` + `Account` + **initial funding**
-(funding enters only via a bank-originated, posted `deposit` ledger entry, audited;
-balances stay DERIVED); **joint-account invitations** (accept → a `joint`
-`AccountAccess` grant); **admin-created demo users** (funding is an audited
-`adjustment` requiring a reason); and the two v0.5.0 review fixes — the operations
-**detail-panel buttons now deactivate from live state (B-01)** and operators can
-**add a note at any time, including after a decision, via a non-decision `note`
-action (B-02)**. It added the second additive Prisma migration (`onboarding`:
-`OnboardingApplication` + `AccountInvitation`). The next planned milestone is
-**`v0.7.0 — Money movement`**.
+`v0.6.1 — Operations console fixes` (a **patch** on top of v0.6.0) is **complete**
+and tagged. It addressed the two bugs from the v0.6.0 review and started **no** new
+feature work:
+
+- **B-03** — on a narrow window the operations console's left sidebar disappeared
+  with no alternative; added an accessible top-bar menu (☰) so Dashboard / Request
+  queues / Simulated messaging stay reachable at any width.
+- **B-04** — the ops console showed "Not authenticated" in Request queues and
+  blocked approvals when the operator session was invalid/expired/stale; it now
+  reconciles a rejected session (HTTP 401) and returns the operator to the sign-in
+  screen with a clear notice, recovering on re-login. The backend + onboarding-
+  approval path were verified correct end-to-end — the defect was client-side
+  session handling only. **No backend / schema / ledger / contract change.**
+
+The previous feature milestone, **`v0.6.0 — Onboarding and account opening`**,
+remains the last feature release (a real open-account flow feeding the v0.5.0 ops
+queue; an operator **approval** that provisions a `User` + `Account` + **initial
+funding** via a bank-originated, posted `deposit`, audited, balances DERIVED;
+**joint-account invitations**; **admin-created demo users**; and the v0.5.0 fixes
+B-01/B-02). The next planned milestone is **`v0.7.0 — Money movement`** (deferred by
+the human until v0.6.1 is reviewed).
 
 ## Session-start protocol (must do, in order)
 
 1. Read `CLAUDE.md`, then `docs/PROJECT_STATE.md`, then this file.
 2. **Save the human's pasted feedback VERBATIM** to
-   `docs/process/feedback/FEEDBACK_v0.6_<YYYY-MM-DD_HHMM>.md` BEFORE acting on it.
+   `docs/process/feedback/FEEDBACK_v0.6.1_<YYYY-MM-DD_HHMM>.md` BEFORE acting on it.
    Use the structure in `docs/process/HUMAN_FEEDBACK_LOG.md`. The raw block is
    never edited afterward.
    - If the feedback is only "continue" (or similar), still save it verbatim and
@@ -93,10 +102,10 @@ Prisma's engine download and the Playwright Chromium build may not match through
 the egress proxy. Mirror the Prisma engine binaries via curl + `PRISMA_*` env vars
 (query-engine library + schema-engine for `debian-openssl-3.0.x`), and point
 Playwright at the pre-installed Chromium via `PLAYWRIGHT_CHROMIUM_PATH` — see
-`docs/process/EXPERIMENT_LOG.md` (Sessions 1–6). This session also created a real
-Prisma **migration** (`onboarding`) through the mirrored schema engine. None of
-this affects normal machines or CI.
+`docs/process/EXPERIMENT_LOG.md` (Sessions 1–7). (v0.6.1 needed no migration; the
+prior `onboarding` migration is in place.) None of this affects normal machines or
+CI.
 
 ## The copy/paste starter prompt
 A ready-to-use prompt for a brand-new Claude Code Cloud session lives at
-`docs/process/NEXT_SESSION_PROMPT_v0.6.md` (it includes the feedback placeholder).
+`docs/process/NEXT_SESSION_PROMPT_v0.6.1.md` (it includes the feedback placeholder).
