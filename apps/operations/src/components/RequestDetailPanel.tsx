@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  asDisputePayload,
+  asFraudPayload,
   asMovementPayload,
+  DISPUTE_REASON_LABELS,
   formatMinor,
+  FRAUD_RESPONSE_LABELS,
   isOnboardingProduct,
+  isRequestReversed,
   isTerminalOpsStatus,
   MOVEMENT_DIRECTION_LABELS,
   MOVEMENT_TEXT,
@@ -10,6 +15,8 @@ import {
   ONBOARDING_PRODUCT_LABELS,
   opsActionLabel,
   opsTypeLabel,
+  type DisputePayload,
+  type FraudPayload,
   type MovementPayload,
   type OperationsRequestDetailDTO,
   type OpsAction,
@@ -20,7 +27,7 @@ import { fetchOpsRequestDetail } from '../lib/opsApi';
 import { useOpsData } from '../lib/ops-data-context';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
-import { StatusBadge, PriorityBadge } from './badges';
+import { StatusBadge, PriorityBadge, ReversedBadge } from './badges';
 import { ActionBar } from './ActionBar';
 import { OpsActivityFeed } from './OpsActivityFeed';
 import { relativeTime } from '../lib/format';
@@ -96,7 +103,18 @@ export function RequestDetailPanel({
   // The money-movement context, read from the LIVE payload (falling back to the
   // loaded detail) so the amount, the "Reversed" indicator, and the reverse
   // affordance all reflect socket echoes (e.g. another operator's reversal).
-  const movement: MovementPayload | null = asMovementPayload(live?.payload ?? detail?.payload);
+  const livePayload = live?.payload ?? detail?.payload ?? null;
+  const movement: MovementPayload | null = asMovementPayload(livePayload);
+
+  // Fraud + dispute context, read from the LIVE payload (falling back to the
+  // loaded detail) so the customer's response, the resolution, and the "Reversed"
+  // indicator all reflect socket echoes (e.g. another operator's decision).
+  const fraud: FraudPayload | null = detail?.type === 'fraud_alert' ? asFraudPayload(livePayload) : null;
+  const dispute: DisputePayload | null = detail?.type === 'dispute' ? asDisputePayload(livePayload) : null;
+
+  // Whether this request's money movement was reversed (operator reversal,
+  // dispute upheld, or confirmed fraud). Shown ALONGSIDE the terminal status.
+  const reversed = isRequestReversed(livePayload);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -212,6 +230,7 @@ export function RequestDetailPanel({
         <>
           <div className="flex flex-wrap items-center gap-1.5">
             <StatusBadge status={liveStatus} />
+            {reversed && <ReversedBadge />}
             <PriorityBadge priority={detail.priority} />
           </div>
 
@@ -305,6 +324,106 @@ export function RequestDetailPanel({
                   </div>
                 )}
               </dl>
+            </section>
+          )}
+
+          {/* Fraud-alert context (v0.8.0) */}
+          {fraud && (
+            <section className="rounded-md border border-white/10 bg-brand-navy-deep/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Fraud alert
+                </h4>
+                {reversed && (
+                  <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                    Reversed
+                  </span>
+                )}
+              </div>
+              <dl className="mt-2 space-y-1 text-xs text-slate-400">
+                {fraud.merchant && (
+                  <div>
+                    <dt className="inline text-slate-500">Merchant: </dt>
+                    <dd className="inline text-slate-200">{fraud.merchant}</dd>
+                  </div>
+                )}
+                {typeof fraud.amountMinor === 'number' && (
+                  <div>
+                    <dt className="inline text-slate-500">Amount: </dt>
+                    <dd className="inline text-slate-200">{formatMinor(fraud.amountMinor)}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="inline text-slate-500">Customer response: </dt>
+                  <dd className="inline text-slate-200">
+                    {fraud.customerResponse
+                      ? FRAUD_RESPONSE_LABELS[fraud.customerResponse]
+                      : 'No response yet'}
+                  </dd>
+                </div>
+                {fraud.resolution && (
+                  <div>
+                    <dt className="inline text-slate-500">Resolution: </dt>
+                    <dd className="inline text-slate-200">
+                      {fraud.resolution === 'confirmed_fraud' ? 'Confirmed fraud' : 'Dismissed'}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Approve = confirm fraud (reverses the charge + freezes the card); Reject = dismiss as
+                legitimate. Simulated — no real fraud network is contacted.
+              </p>
+            </section>
+          )}
+
+          {/* Dispute context (v0.8.0) */}
+          {dispute && (
+            <section className="rounded-md border border-white/10 bg-brand-navy-deep/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Disputed transaction
+                </h4>
+                {reversed && (
+                  <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                    Reversed
+                  </span>
+                )}
+              </div>
+              <dl className="mt-2 space-y-1 text-xs text-slate-400">
+                {dispute.description && (
+                  <div>
+                    <dt className="inline text-slate-500">Transaction: </dt>
+                    <dd className="inline text-slate-200">{dispute.description}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="inline text-slate-500">Amount: </dt>
+                  <dd className="inline text-slate-200">{formatMinor(dispute.amountMinor)}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-slate-500">Reason: </dt>
+                  <dd className="inline text-slate-200">{DISPUTE_REASON_LABELS[dispute.reason]}</dd>
+                </div>
+                {dispute.details && (
+                  <div>
+                    <dt className="inline text-slate-500">Details: </dt>
+                    <dd className="inline text-slate-200">{dispute.details}</dd>
+                  </div>
+                )}
+                {dispute.resolution && (
+                  <div>
+                    <dt className="inline text-slate-500">Resolution: </dt>
+                    <dd className="inline text-slate-200">
+                      {dispute.resolution === 'upheld' ? 'Upheld' : 'Denied'}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Approve = uphold (reverses the charge); Reject = deny (the charge stands). Simulated —
+                balances stay derived from the ledger.
+              </p>
             </section>
           )}
 

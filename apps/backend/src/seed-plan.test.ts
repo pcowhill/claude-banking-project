@@ -9,6 +9,7 @@ import {
 } from '@simbank/shared';
 import {
   assertSeedAccessIntegrity,
+  assertSeedCardIntegrity,
   assertSeedInvariants,
   assertSeedMovementIntegrity,
   assertSeedOnboardingIntegrity,
@@ -278,5 +279,48 @@ describe('seed plan money movements (v0.7.0)', () => {
     const deposit = tampered.operationsRequests.find((r) => r.key === 'deposit-mobilecheck');
     deposit!.linkLedgerEntryKeys = ['no-such-entry'];
     expect(() => assertSeedMovementIntegrity(tampered)).toThrow(/unknown ledger-entry key/i);
+  });
+});
+
+describe('seed plan cards, fraud & disputes (v0.8.0)', () => {
+  const plan = buildSeedPlan();
+
+  it('seeds cards on declared accounts/cardholders', () => {
+    expect(plan.cards.length).toBeGreaterThanOrEqual(1);
+    const accountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+    const emails = new Set(plan.users.map((u) => u.email.toLowerCase()));
+    for (const card of plan.cards) {
+      expect(accountKeys.has(card.accountKey)).toBe(true);
+      expect(emails.has(card.cardholderEmail.toLowerCase())).toBe(true);
+    }
+  });
+
+  it('links the fraud alert to a card + ledger entry, and the dispute to a disputed entry', () => {
+    const fraud = plan.operationsRequests.find((r) => r.key === 'fraud-card');
+    expect(fraud?.type).toBe('fraud_alert');
+    expect(fraud?.linkCardKey).toBe('card-debit');
+    expect(plan.entries.find((e) => e.key === fraud?.linkLedgerEntryKey)?.status).toBe('posted');
+
+    const dispute = plan.operationsRequests.find((r) => r.key === 'dispute-trattoria');
+    expect(dispute?.type).toBe('dispute');
+    const entry = plan.entries.find((e) => e.key === dispute?.linkLedgerEntryKey);
+    expect(entry?.status).toBe('disputed');
+  });
+
+  it('passes the card-integrity invariants', () => {
+    expect(() => assertSeedCardIntegrity(plan)).not.toThrow();
+  });
+
+  it('rejects a card on an unknown account', () => {
+    const tampered = buildSeedPlan();
+    tampered.cards[0].accountKey = 'no-such-account';
+    expect(() => assertSeedCardIntegrity(tampered)).toThrow(/unknown account/i);
+  });
+
+  it('rejects a request linking an unknown card key', () => {
+    const tampered = buildSeedPlan();
+    const fraud = tampered.operationsRequests.find((r) => r.key === 'fraud-card');
+    fraud!.linkCardKey = 'no-such-card';
+    expect(() => assertSeedCardIntegrity(tampered)).toThrow(/unknown card key/i);
   });
 });

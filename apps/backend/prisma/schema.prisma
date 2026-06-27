@@ -42,6 +42,7 @@ model User {
   accountAccess   AccountAccess[]
   loginEvents     LoginEvent[]
   sentInvitations AccountInvitation[] @relation("InvitedBy")
+  cards           Card[]              @relation("CardHolder")
 }
 
 /// A server-side session. The opaque token lives ONLY in the user's httpOnly
@@ -113,6 +114,7 @@ model Account {
   ledgerEntries LedgerEntry[]
   access        AccountAccess[]
   invitations   AccountInvitation[]
+  cards         Card[]
 
   @@index([userId])
 }
@@ -268,4 +270,52 @@ model AccountInvitation {
 
   @@index([inviteeEmail])
   @@index([accountId])
+}
+
+/// A SIMULATED payment card on an account (v0.8.0). Card SPEND already exists as
+/// `card`-origin LedgerEntry rows; this model is the card LIFECYCLE — issue,
+/// freeze/unfreeze, report lost/stolen (which issues a replacement), travel
+/// notices. SIMULATION: `last4` is fake; there is NEVER a real PAN, network, or
+/// issuer. Acting on a card changes its lifecycle state + writes an audit row —
+/// it NEVER posts to the ledger, so balances stay derived.
+model Card {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // The cardholder (the account owner / accessor who holds the card).
+  userId    String
+  user      User    @relation("CardHolder", fields: [userId], references: [id])
+  cardType  String // debit | credit (see CardType in @simbank/shared)
+  network   String // visa | mastercard (DISPLAY ONLY; SIMULATION)
+  last4     String // simulated last four digits — never a real PAN
+  expMonth  Int
+  expYear   Int
+  status    String  @default("active") // active|frozen|lost|stolen|replaced|cancelled (CardStatus)
+  // When this card is a replacement for a reported lost/stolen card, the id of
+  // the card it replaced (self-link; SIMULATION, no FK constraint needed).
+  replacesCardId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  travelNotices CardTravelNotice[]
+
+  @@index([accountId])
+  @@index([userId])
+}
+
+/// A SIMULATED travel notice on a card (v0.8.0): the customer tells the bank they
+/// will be travelling so card activity from a destination is not flagged. No
+/// money or real systems involved.
+model CardTravelNotice {
+  id          String   @id @default(cuid())
+  cardId      String
+  card        Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  destination String
+  startsOn    DateTime
+  endsOn      DateTime
+  note        String?
+  status      String   @default("active") // active | cancelled (TravelNoticeStatus)
+  createdAt   DateTime @default(now())
+
+  @@index([cardId])
 }

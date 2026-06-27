@@ -8,9 +8,70 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.8.0 — Cards, fraud, disputes** (not started). Also carries
-  forward **recurring/scheduled payments**, deferred from v0.7.0 to **v0.9.0**
-  (they need the simulation clock / scheduled-event processing roadmapped there).
+- Next milestone: **v0.9.0** — carries **recurring/scheduled payments** (deferred
+  from v0.7.0; needs the simulation clock / scheduled-event processing roadmapped
+  there) alongside the planned v0.9.0 scope.
+
+## [0.8.0] — 2026-06-27 — Cards, fraud, disputes
+
+Cards, fraud alerts, and transaction disputes — built on the v0.5.0 operations
+queue and the v0.7.0 ledger/reversal discipline. Still a local **SIMULATION**: no
+real card networks, PANs, issuers, fraud providers, or money rails. The **only**
+schema change is an **additive** migration adding `Card` + `CardTravelNotice` (no
+existing table altered). Card lifecycle moves **no money**; every money effect
+(an upheld dispute, a confirmed fraud) is a ledger **status** change, never a
+stored/edited balance.
+
+### Added
+
+- **Cards (customer self-service).** A new `Card` model + lifecycle service:
+  **issue** a (simulated) debit/credit card on an account, **freeze/unfreeze**,
+  **report lost/stolen** (which terminates the old card and issues a **replacement**
+  linked via `replacesCardId`), and **travel notices** (add/cancel). New routes:
+  `GET /api/cards`, `GET|POST /api/accounts/:id/cards`, `POST /api/cards/:id/freeze`
+  · `/unfreeze` · `/report` · `/travel-notices` · `/travel-notices/:id/cancel`.
+  All `requireAuth`, access-scoped, audited — and **never touch the ledger**.
+  Customer UI at **`/wallet`**.
+- **Fraud alerts.** A suspicious-transaction `fraud_alert` ops item the **customer**
+  confirms/denies (`GET /api/fraud-alerts`, `POST /api/fraud-alerts/:id/respond`,
+  scoped to the alert's subject) and an **operator** resolves via the existing ops
+  action: **approve = confirm fraud** → reverse the linked entry + freeze the
+  linked card; **reject = dismiss** as legitimate (no money effect).
+- **Disputes.** A customer **disputes** a posted transaction (`POST /api/disputes`):
+  the entry flips `posted`→`disputed` (still counts as posted, shown flagged) and a
+  `dispute` ops item is queued. An operator **approve = uphold** reverses it
+  (`disputed`→`reversed`, a refund as a ledger status change); **reject = deny**
+  returns it `disputed`→`posted`.
+- **R-03 — "Reversed" tag (human request).** When a money movement is reversed, a
+  dispute upheld, or fraud confirmed, the queue item keeps its **Approved** badge
+  **and** now shows a distinct **"Reversed"** tag — in the queue, on the ops
+  dashboard, and in the detail panel — driven by the shared `isRequestReversed`
+  helper (`payload.reversed`). The request stays terminal-approved (no
+  state-machine change).
+- **Shared contracts.** `@simbank/shared/cards` (enums, labels, masking, pure
+  validators) and `@simbank/shared/risk` (fraud/dispute payloads + validators);
+  `isRequestReversed` in `operations`.
+- **Seed.** Two simulated cards for Avery; the seeded fraud alert is linked to the
+  QuickFuel charge + the debit card (so confirming reverses + freezes), and the
+  seeded Trattoria dispute is backed by a `disputed` entry (so upholding reverses).
+
+### Changed
+
+- A single **generalized** `reverseLedgerEntries` core (flips `posted`/`disputed`
+  → `reversed`) now backs the v0.7.0 movement reversal **and** dispute/fraud
+  reversals.
+- `applyOperatorAction` gained `dispute` and `fraud_alert` resolution branches
+  (atomic + audited), mirroring the v0.6.0/v0.7.0 approval-has-a-ledger-effect
+  pattern. No new ops endpoint or socket event — resolution reuses
+  `/api/ops/requests/:id/action` and `ops:request_changed`.
+
+### Notes
+
+- Gate: **281** unit/integration tests (was 240; **+41**) + **41** Playwright e2e
+  (was 37; **+4**) green; **0** lint warnings; runtime `npm audit` unchanged. One
+  additive Prisma migration (`cards`). Money discipline asserted in tests (a card
+  action writes no ledger; an upheld dispute / confirmed fraud changes only ledger
+  status; balances stay derived).
 
 ## [0.7.0] — 2026-06-26 — Money movement
 

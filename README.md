@@ -13,9 +13,8 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.7.0 — Money movement` (builds on `v0.6.0 — Onboarding
-and account opening` + the v0.6.1/v0.6.2 ops-console patches; see `ROADMAP.md` and
-`docs/process/MILESTONE_REPORT_v0.7.0.md`).
+**Current milestone:** `v0.8.0 — Cards, fraud, disputes` (builds on `v0.7.0 — Money
+movement`; see `ROADMAP.md` and `docs/process/MILESTONE_REPORT_v0.8.0.md`).
 
 ## Tech stack
 
@@ -77,6 +76,31 @@ Run `npm run db:reset` first to seed these users.
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
+
+### New in v0.8.0 (cards, fraud, disputes)
+
+- **Manage your cards.** Sign in as **Avery** and open **Cards** (`/wallet`, also from
+  the dashboard quick links). You'll see seeded **simulated** cards (masked number,
+  brand, expiry, status). Self-service lifecycle: **issue** a debit/credit card,
+  **freeze / unfreeze**, **report lost or stolen** (which terminates the old card and
+  issues a **replacement** with a new number), and add / cancel **travel notices**.
+  Card lifecycle moves **no money** — it never touches the ledger.
+- **Fraud alerts.** The bank flags suspicious activity as a fraud alert (the seed
+  includes one for a **QuickFuel** charge). On the customer dashboard you can
+  **Confirm it was me** or **Report fraud**. An operator (Sam, `:5174`) then acts on
+  the alert: **Approve = confirm fraud** — which **reverses** the suspicious charge and
+  **freezes** the linked card — or **Reject = dismiss** as legitimate.
+- **Dispute a transaction.** From an account's transaction list, **Dispute** a posted
+  charge (the seed includes an open **Trattoria Romana** dispute). Filing flags the
+  transaction **Disputed**. An operator **Approve = uphold** **reverses** the charge (a
+  refund as a ledger status change) or **Reject = deny** lets it stand.
+- **"Reversed" tag (operator console).** When a money movement is reversed, a dispute
+  upheld, or fraud confirmed, the queue item keeps its **Approved** badge **and** now
+  shows a distinct **"Reversed"** tag — in the queue, on the dashboard, and in the
+  detail panel — so a reversed outcome is visible at a glance.
+- **Money discipline (unchanged):** every money effect is a **ledger** status change
+  (`disputed`, `reversed`) or a bank-originated entry, never a stored/edited balance;
+  reversals keep a reason + audit. A `Card` model was the only schema change (additive).
 
 ### New in v0.7.0 (money movement)
 

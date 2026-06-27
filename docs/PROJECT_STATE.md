@@ -6,12 +6,26 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.7.0` — Money movement (a **feature** milestone, the
-  first where an operator approval MOVES money). An annotated tag `v0.7.0` is created
-  locally on the milestone commit; **pushing tags is blocked by this environment's
-  git policy (HTTP 403)**, so the human (re)creates/pushes the tag on merge to `main`
-  — see `docs/process/MILESTONE_REPORT_v0.7.0.md` for the exact command. (Builds on
-  v0.6.0 onboarding + the v0.6.1/v0.6.2 ops-console patches.)
+- **Current version / tag:** `v0.8.0` — Cards, fraud, disputes (a **feature**
+  milestone). An annotated tag `v0.8.0` is created locally on the milestone commit;
+  **pushing tags is blocked by this environment's git policy (HTTP 403)**, so the
+  human (re)creates/pushes the tag on merge to `main` — see
+  `docs/process/MILESTONE_REPORT_v0.8.0.md` for the exact command. (Builds on v0.7.0
+  money movement.)
+- **What v0.8.0 added:** **Cards** (a new `Card` lifecycle — issue a simulated
+  debit/credit card, freeze/unfreeze, report lost/stolen → a **replacement** card,
+  travel notices; customer UI at **/wallet**; writes **no ledger**). **Fraud**
+  (`fraud_alert` ops items the customer confirms/denies and an operator resolves —
+  approve = confirm fraud → reverse the charge + freeze the card; reject = dismiss).
+  **Disputes** (a customer disputes a posted txn → `posted`→`disputed`; operator
+  approve = uphold → `disputed`→`reversed` refund; reject = deny → back to `posted`).
+  **R-03** — a reversed movement / upheld dispute / confirmed fraud now shows a
+  **"Reversed"** tag beside **Approved** on the ops queue, dashboard, and detail.
+  **One additive Prisma migration** (`Card` + `CardTravelNotice`). A customer **cannot
+  dispute an internal transfer leg** (it must net to zero).
+- **Earlier feature milestone:** `v0.7.0` — Money movement (the first where an
+  operator approval MOVES money; internal transfers, reviewable external movements,
+  approve→post / reject→fail / reverse). Still fully in place.
 - **Tag-history note:** the prior session's v0.6.2 tag was a *local-only* sandbox tag
   that was never pushed; **no v0.6.2 tag exists in-repo** (the human confirmed they
   had not tagged it). Earlier docs that said v0.6.2 was "tagged" referred to that
@@ -32,24 +46,25 @@
 - **What v0.6.x fixed (still in place):** **B-03** narrow-width ☰ nav; **B-04**
   expired-session recovery; **B-06** the surface-header session resolution (operator
   sign-in). All green.
-- **Next milestone:** `v0.8.0` — Cards, fraud, disputes (not started). Also **carries
-  recurring/scheduled payments**, deferred from v0.7.0 to **v0.9.0** (they need the
-  simulation clock; see the human review + roadmap history).
-- **Working branch (this session):** `claude/sweet-newton-44widz` (the Claude Code
-  Cloud session branch; intended milestone name `milestone/v0.7.0-money-movement`).
-  This branch was cut from `main` and **already contained** v0.6.0 + v0.6.1 + v0.6.2
-  (verified via `git log`), so no fast-forward was needed this session.
-- **Gate status:** `npm run verify` ✅ passes. **240** unit/integration tests (was
-  201; **+39**: 16 shared money-movement, 18 backend money integration, 5 seed-plan)
-  + **37** Playwright e2e green (was 33; **+4** money-movement journeys). **0 lint
-  warnings.** No schema/migration change; **runtime `npm audit` = 0**. Security review
-  **PASS-with-findings** (all Low/tracked; SEC-1 CSRF re-affirmed as Lax+CORS-mitigated
-  for the sim → v1.0.0; a TOCTOU funds-check note for the v0.8.0+ ledger pass).
+- **Next milestone:** `v0.9.0` — simulation clock + **recurring/scheduled payments**
+  (carried from v0.7.0; they need the clock) + statement cycles (see ROADMAP).
+- **Working branch (this session):** `claude/keen-einstein-rxfkq0` (the Claude Code
+  Cloud session branch; intended milestone name `milestone/v0.8.0-cards-fraud-disputes`).
+- **Gate status:** `npm run verify` ✅ passes. **282** unit/integration tests (was
+  240; **+42**: 12 shared cards, 8 shared risk, 5 seed-plan card, 17 backend
+  cards/fraud/dispute integration) + **41** Playwright e2e green (was 37; **+4**
+  cards/fraud/dispute journeys). **0 lint warnings.** One **additive** migration
+  (`cards`); **runtime `npm audit` = 0**. Security review **PASS-with-findings** (all
+  Low/tracked; one acted on — internal transfer legs are not disputable; SEC-1 CSRF
+  still Lax+CORS-mitigated → v1.0.0; the TOCTOU note now also covers a cosmetic
+  fraud-response write).
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
-  `npm run dev`. Try the headline flow: as **Avery** at `:5173/move-money`, transfer
-  between your accounts (instant) or submit a **mobile check deposit**; then as **Sam**
-  in the ops console (`:5174` → Request queues) **approve** it and watch the customer's
-  line flip Pending→Posted — and optionally **reverse** it.
+  `npm run dev`. v0.8.0 headline flow: as **Avery** at `:5173/wallet` manage a **card**
+  (freeze / report→replace / travel notice), **dispute** a posted transaction from an
+  account, and confirm/deny the **fraud alert** on the dashboard; then as **Sam**
+  (`:5174` → Request queues) **approve** the dispute (uphold → reversed) or the fraud
+  alert (confirm → reversed + card frozen) and see the new **"Reversed"** tag. (v0.7.0
+  money movement at `/move-money` still works the same way.)
 - **Money discipline — now exercised on real movement.** Money moves ONLY via explicit
   `LedgerEntry` rows; **no balance is ever stored or edited.** Transfers post both legs
   and net to zero; external value enters only via a bank-originated posted `deposit`
@@ -110,15 +125,17 @@
 - Prisma schema: `User`, `Account`, `LedgerEntry`, `SimulationClock`, `AuditLog`,
   `Session`, `AccountAccess`, `LoginEvent`, a **fleshed-out `OperationsRequest`**
   (priority, detail, subject, last-action bookkeeping, `resolvedAt`), and **new
-  `SimulatedEvent`**; three migrations (`init`, `auth_roles_sessions`,
-  **`operations_core`** — additive; money/auth tables untouched).
+  `SimulatedEvent`**, and **`Card` + `CardTravelNotice` (v0.8.0)**; five migrations
+  (`init`, `auth_roles_sessions`, `operations_core`, `onboarding`, **`cards`** — each
+  additive; money/auth tables untouched).
 - Seed: `prisma/seed.ts` → shared `src/seed-apply.ts` + pure `src/seed-plan.ts`
   (4 demo users, hashed passwords, owner+joint grants, **58 dated ledger entries**
-  incl. pending/held, **plus an 11-item dated operations queue + 4 simulated events**
-  with intake audit rows — incl. v0.7.0 reviewable money movements: a mobile-check
-  deposit, an outbound ACH, and a bill payment, each linked to its pending entry)
-  with money + access + **ops-integrity** + **movement-integrity** invariant guards.
-  `npm run db:reset` works.
+  incl. pending/held + a `disputed` charge, **an 11-item dated operations queue + 4
+  simulated events**, **2 simulated cards (v0.8.0)**, with intake audit rows — incl.
+  v0.7.0 reviewable money movements each linked to its pending entry, and v0.8.0 a
+  **fraud alert** linked to a card + its charge and an **open dispute** on the disputed
+  charge) with money + access + **ops** + **movement** + **card** integrity invariant
+  guards. `npm run db:reset` works.
 
 ### apps/customer (React + Vite + Tailwind)
 - **Public marketing site (v0.3.0):** `/` (polished home), `/checking`, `/savings`,
@@ -227,6 +244,37 @@
   review item, so approving it flips the customer's line **Pending → Posted** and
   updates the available balance.
 
+### Cards, fraud & disputes (v0.8.0)
+- **Cards (customer self-service):** a new `Card` model + lifecycle service —
+  `issueCard` (`POST /api/accounts/:id/cards`), `freeze`/`unfreeze`, `report`
+  lost/stolen (terminates the old card, issues a **replacement** linked via
+  `replacesCardId`), and travel notices (`/travel-notices`, `/cancel`). `GET /api/cards`
+  + `GET /api/accounts/:id/cards`. All `requireAuth`, access-scoped (owner/joint/
+  authorized, not viewer), audited — and **never write the ledger**. Customer UI at
+  **`/wallet`** (masked number, brand/type, expiry, status; gated lifecycle actions).
+  Shared `@simbank/shared/cards` holds the enums, pure validators, masking + labels.
+- **Fraud:** a `fraud_alert` ops item. Customer: `GET /api/fraud-alerts` +
+  `POST /api/fraud-alerts/:id/respond` (confirm/deny, scoped to the alert subject;
+  records the response + an inbound SimulatedEvent, does not resolve). Operator (via the
+  existing `/api/ops/requests/:id/action`): **approve = confirm fraud** → reverse the
+  linked entry + freeze the linked card; **reject = dismiss**. Dashboard confirm/deny UI.
+- **Disputes:** `POST /api/disputes` flags a **posted** entry `disputed` (still counts
+  as posted, shown flagged) + queues a `dispute` item. Operator **approve = uphold** →
+  `disputed`→`reversed` (a refund as a ledger status change); **reject = deny** →
+  `disputed`→`posted`. A **transfer leg is not disputable** (must net to zero). Customer
+  UI: a **Dispute** affordance + "Disputed" badge in the transaction list.
+- **Generalized reversal:** one `reverseLedgerEntries` core (`posted`/`disputed`→
+  `reversed`) backs the v0.7.0 movement reversal **and** dispute/fraud reversals.
+  `applyOperatorAction` gained `dispute` + `fraud_alert` branches (atomic + audited).
+  **No new ops endpoint or socket event** — resolution reuses the existing action route
+  and `ops:request_changed`.
+- **R-03 — "Reversed" tag:** `isRequestReversed(payload)` (shared) drives a `ReversedBadge`
+  shown beside the **Approved** badge on the ops queue cards, dashboard lists, and detail
+  panel whenever `payload.reversed` is set. The request stays terminal-approved.
+- **Schema:** one **additive** migration `cards` (`Card` + `CardTravelNotice`); no
+  existing table altered. Shared `@simbank/shared/risk` holds the fraud/dispute payloads
+  + validators.
+
 ### Branding & assets
 - `assets/brand/` logo SVGs (horizontal/mark/mono-light) + README.
 - `assets/prompts/IMAGE_GENERATION_PROMPTS.md` (5 marketing prompts).
@@ -239,12 +287,14 @@
 - `.claude/agents/` role definitions for the controlled multi-agent workflow.
 
 ## NOT built yet (by design — future milestones)
-- **Recurring / scheduled payments** — deferred from v0.7.0 to **v0.9.0** because
-  they require the **simulation clock + scheduled-event processing** roadmapped
-  there (a scheduler with nothing to fire it would be a non-functional stub).
-  One-off money movement (transfers, ACH, wires, mobile-check deposit, bill pay) is
-  **done in v0.7.0**; the carried **Q-01** (deposit pending→posted on approval) is
-  **closed**.
+- **Recurring / scheduled payments + the simulation clock** — deferred from v0.7.0 to
+  **v0.9.0** because they require the **simulation clock + scheduled-event processing**
+  roadmapped there (a scheduler with nothing to fire it would be a non-functional stub).
+  One-off money movement is **done in v0.7.0**; **cards / fraud / disputes** are **done
+  in v0.8.0**.
+- **A dedicated `credit_card` account product** — v0.8.0 cards attach to existing
+  checking/savings accounts (the `Card.cardType` distinguishes debit/credit); a real
+  credit-account product (with a credit line) is a possible later milestone.
 - **MFA / 2FA at login, password reset, remember-device, new-device alerts**
   (deferred within the auth theme). v0.6.0 uses the simulated-messaging seam for
   **onboarding** identity/MFA (the review's **Q-02**); customer-facing login-time

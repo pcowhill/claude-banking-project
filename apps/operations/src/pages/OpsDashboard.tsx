@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import {
+  isRequestReversed,
   isTerminalOpsStatus,
   OPS_REQUEST_STATUSES,
   opsStatusLabel,
   opsTypeLabel,
 } from '@simbank/shared';
 import { Card } from '../components/ui/Card';
-import { StatusBadge, PriorityBadge } from '../components/badges';
+import { StatusBadge, PriorityBadge, ReversedBadge } from '../components/badges';
 import { OpsActivityFeed } from '../components/OpsActivityFeed';
 import { useAuth } from '../lib/auth-context';
 import { useOpsSummary } from '../lib/useOpsSummary';
@@ -130,6 +131,7 @@ export function OpsDashboard() {
                   <div className="flex shrink-0 items-center gap-1.5">
                     <PriorityBadge priority={request.priority} />
                     <StatusBadge status={request.status} />
+                    {isRequestReversed(request.payload) && <ReversedBadge />}
                     <span className="text-[10px] text-slate-500">{relativeTime(request.createdAt)}</span>
                   </div>
                 </li>

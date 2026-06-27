@@ -2,8 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   formatMinor,
+  FRAUD_RESPONSE_LABELS,
   type AccountInvitationDTO,
   type AccountSummary,
+  type FraudAlertSummary,
+  type FraudResponse,
   type LoginEventDTO,
 } from '@simbank/shared';
 import { Card, CardDescription, CardTitle } from '../components/ui/Card';
@@ -14,6 +17,7 @@ import { accountTypeLabel, RELATIONSHIP_META } from '../lib/account-display';
 import { useAuth } from '../lib/auth-context';
 import { fetchAccounts, fetchLoginHistory } from '../lib/auth';
 import { acceptInvitation, declineInvitation, fetchInvitations } from '../lib/invitations';
+import { listFraudAlerts, respondToFraudAlert } from '../lib/risk';
 
 /**
  * Authenticated dashboard — the accounts OVERVIEW (v0.4.0, task D-04). Lists
@@ -332,6 +336,129 @@ function InvitationsInbox({ onAccepted }: { onAccepted: () => void }) {
   );
 }
 
+/**
+ * Pending fraud alerts for the signed-in customer (v0.8.0). Each alert shows the
+ * merchant/amount and two responses — "Confirm — it was me" (`confirm_legit`) or
+ * "Report fraud" (`report_fraud`) — posted to the risk API. On success the row
+ * collapses to the recorded response. Renders NOTHING when there are no alerts
+ * (or while loading / when offline) so the dashboard isn't cluttered.
+ */
+function FraudAlertsSection() {
+  const [state, setState] = useState<AsyncData<FraudAlertSummary[]>>({ loading: true, data: null });
+  const [pending, setPending] = useState<Record<string, FraudResponse>>({});
+  // Locally-recorded responses, so a resolved alert shows its outcome immediately.
+  const [resolved, setResolved] = useState<Record<string, FraudResponse>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void listFraudAlerts().then((result) => {
+      if (!active) return;
+      setState({ loading: false, data: result.ok ? result.data.alerts : null });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function respond(id: string, response: FraudResponse) {
+    if (pending[id]) return;
+    setActionError(null);
+    setPending((p) => ({ ...p, [id]: response }));
+    const result = await respondToFraudAlert(id, response);
+    setPending((p) => {
+      const next = { ...p };
+      delete next[id];
+      return next;
+    });
+    if (!result.ok) {
+      setActionError(result.message);
+      return;
+    }
+    setResolved((r) => ({ ...r, [id]: result.data.response }));
+  }
+
+  // Stay quiet while loading, when offline, or when there are no alerts.
+  if (state.loading || state.data === null || state.data.length === 0) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold text-brand-navy">Security alerts</h2>
+      <p className="text-sm text-slate-600">
+        Simulated fraud alerts on recent activity. Confirm a charge was you, or report it as fraud.
+      </p>
+      {actionError && (
+        <p
+          role="alert"
+          className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+        >
+          {actionError}
+        </p>
+      )}
+      <ul className="mt-3 space-y-3">
+        {state.data.map((alert) => {
+          const recorded = resolved[alert.id] ?? alert.customerResponse;
+          const busy = pending[alert.id];
+          return (
+            <li key={alert.id}>
+              <Card className="border-amber-200 bg-amber-50/50">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-amber-900">{alert.summary}</CardTitle>
+                    <p className="mt-1 text-sm text-amber-800">
+                      {alert.merchant ?? 'Unknown merchant'}
+                      {alert.amountMinor != null && (
+                        <>
+                          {' · '}
+                          <span className="font-semibold tabular-nums">
+                            {formatMinor(alert.amountMinor)}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                    {alert.detail && (
+                      <p className="mt-1 text-xs text-amber-700">{alert.detail}</p>
+                    )}
+                  </div>
+                  {recorded ? (
+                    <span
+                      role="status"
+                      className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+                    >
+                      {FRAUD_RESPONSE_LABELS[recorded]}
+                    </span>
+                  ) : (
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={!!busy}
+                        onClick={() => void respond(alert.id, 'confirm_legit')}
+                      >
+                        {busy === 'confirm_legit' ? 'Confirming…' : 'Confirm — it was me'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={!!busy}
+                        onClick={() => void respond(alert.id, 'report_fraud')}
+                      >
+                        {busy === 'report_fraud' ? 'Reporting…' : 'Report fraud'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function Dashboard() {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<AsyncData<AccountSummary[]>>({
@@ -380,6 +507,8 @@ export function Dashboard() {
 
       <AccountsOverview state={accounts} />
 
+      <FraudAlertsSection />
+
       <InvitationsInbox onAccepted={() => void loadAccounts()} />
 
       {/* Quick links */}
@@ -408,10 +537,13 @@ export function Dashboard() {
             <div className="font-medium text-brand-navy">Statements &amp; documents</div>
             <div className="mt-0.5 text-xs text-slate-500">Monthly statements (coming soon)</div>
           </Link>
-          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-            <div className="font-medium text-slate-700">Cards &amp; fraud</div>
-            <div className="text-xs">v0.8.0</div>
-          </div>
+          <Link
+            to="/wallet"
+            className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+          >
+            <div className="font-medium text-brand-navy">Cards</div>
+            <div className="mt-0.5 text-xs text-slate-500">Freeze, replace, and travel notices</div>
+          </Link>
         </div>
       </section>
 

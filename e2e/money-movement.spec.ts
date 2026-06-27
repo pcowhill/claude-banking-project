@@ -96,8 +96,10 @@ test.describe('money movement (v0.7.0)', () => {
     await page.locator('#ops-reverse-reason').fill('E2E reversal — check returned (simulated)');
     await page.getByRole('button', { name: /^reverse movement$/i }).click();
 
-    // The movement now shows the "Reversed" indicator and the affordance is gone.
-    await expect(page.getByText('Reversed', { exact: true })).toBeVisible();
+    // The movement now shows the "Reversed" tag (v0.8.0 R-03) and the affordance
+    // is gone. Scope to THIS card — other reversed items may exist in the shared
+    // seeded DB (fraud/dispute reversals also surface a "Reversed" tag now).
+    await expect(card.getByText('Reversed', { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: /^reverse movement$/i })).toHaveCount(0);
   });
 });

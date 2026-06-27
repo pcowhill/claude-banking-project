@@ -1,6 +1,11 @@
-import { opsTypeLabel, type OperationsRequestDTO, type OpsAction } from '@simbank/shared';
+import {
+  isRequestReversed,
+  opsTypeLabel,
+  type OperationsRequestDTO,
+  type OpsAction,
+} from '@simbank/shared';
 import { Card } from './ui/Card';
-import { StatusBadge, PriorityBadge } from './badges';
+import { StatusBadge, PriorityBadge, ReversedBadge } from './badges';
 import { ActionBar } from './ActionBar';
 import { relativeTime } from '../lib/format';
 import { cn } from '../lib/cn';
@@ -48,6 +53,7 @@ export function QueueRequestCard({
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <StatusBadge status={request.status} />
+          {isRequestReversed(request.payload) && <ReversedBadge />}
           <PriorityBadge priority={request.priority} />
         </div>
       </button>

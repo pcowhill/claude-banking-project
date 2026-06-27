@@ -11,8 +11,14 @@ import {
   SIM_EVENT_DIRECTIONS,
   SIM_EVENT_STATUSES,
   toMinor,
+  CARD_NETWORKS,
+  CARD_STATUSES,
+  CARD_TYPES,
   type AccountRelationship,
   type AccountType,
+  type CardNetwork,
+  type CardStatus,
+  type CardType,
   type InvitationStatus,
   type LedgerDirection,
   type LedgerOrigin,
@@ -61,6 +67,24 @@ export interface SeedAccount {
   name: string;
 }
 
+/**
+ * A seeded SIMULATED card (v0.8.0). Gives the demo a card to freeze / report /
+ * add travel notices to, and a target for the seeded fraud alert to freeze.
+ * SIMULATION: `last4` is fake; there is never a real PAN or network.
+ */
+export interface SeedCard {
+  /** Stable key so a seeded fraud alert can reference the card it concerns. */
+  key: string;
+  accountKey: string;
+  cardholderEmail: string;
+  cardType: CardType;
+  network: CardNetwork;
+  last4: string;
+  /** Whole years from "seed time" the card expires (default 4). */
+  expiresInYears?: number;
+  status?: CardStatus; // default 'active'
+}
+
 export interface SeedUser {
   email: string;
   displayName: string;
@@ -104,6 +128,16 @@ export interface SeedOperationsRequest {
    * `ledgerEntryIds`, so approving the seeded item posts the seeded pending entry.
    */
   linkLedgerEntryKeys?: string[];
+  /**
+   * Optional SINGLE links (v0.8.0) used by fraud + dispute items. The seed writer
+   * resolves `linkLedgerEntryKey` to a real id and merges `ledgerEntryId` (plus
+   * the entry's `accountId`/`amountMinor` when absent) into the payload; it
+   * resolves `linkCardKey` to a real card id and merges `cardId`. This is what
+   * lets the seeded fraud alert reverse + freeze, and the seeded dispute reverse,
+   * end-to-end.
+   */
+  linkLedgerEntryKey?: string;
+  linkCardKey?: string;
   /** Days before "seed time" the request was raised (default 0 = today). */
   daysAgo?: number;
 }
@@ -157,6 +191,7 @@ export interface SeedPlan {
   users: SeedUser[];
   entries: SeedLedgerEntry[];
   access: SeedAccess[];
+  cards: SeedCard[];
   operationsRequests: SeedOperationsRequest[];
   simulatedEvents: SeedSimulatedEvent[];
   onboardingApplications: SeedOnboardingApplication[];
@@ -294,10 +329,14 @@ export function buildSeedPlan(): SeedPlan {
   debit(CHECKING, 5.25, 'card', 'Coffee Roasters', 60);
   debit(CHECKING, 5.75, 'card', 'Coffee Roasters', 35);
   debit(CHECKING, 6.1, 'card', 'Coffee Roasters', 9);
-  debit(CHECKING, 42.1, 'card', 'Trattoria Romana', 55);
+  // Trattoria 42.10 is seeded as DISPUTED — it backs the open `dispute-trattoria`
+  // queue item (info_requested), so the demo shows a transaction mid-dispute that
+  // an operator can uphold (reverse) or deny.
+  entries.push({ accountKey: CHECKING, amountMinor: toMinor(42.1), direction: 'debit', status: 'disputed', origin: 'card', description: 'Trattoria Romana', daysAgo: 55, key: 'card-trattoria' });
   debit(CHECKING, 38.75, 'card', 'Trattoria Romana', 25);
   debit(CHECKING, 44.3, 'card', 'QuickFuel', 50);
-  debit(CHECKING, 48.9, 'card', 'QuickFuel', 22);
+  // QuickFuel 48.90 is keyed so the seeded fraud alert can reverse it on "confirm fraud".
+  entries.push({ accountKey: CHECKING, amountMinor: toMinor(48.9), direction: 'debit', status: 'posted', origin: 'card', description: 'QuickFuel', daysAgo: 22, key: 'card-quickfuel' });
   debit(CHECKING, 60, 'card', 'ATM withdrawal — Main & 3rd', 36);
 
   // --- A simulated fee + a refund (both bank-originated) ----------------------
@@ -359,10 +398,15 @@ export function buildSeedPlan(): SeedPlan {
       type: 'fraud_alert',
       priority: 'high',
       summary: 'Unusual card activity flagged — QuickFuel',
-      detail: 'A fuel purchase fell outside the usual spending pattern and was flagged for review.',
+      detail:
+        'A fuel purchase fell outside the usual spending pattern and was flagged for review. The customer can confirm it was them or report fraud; an operator confirming fraud REVERSES the charge and FREEZES the card (simulated).',
       subjectName: AVERY,
       subjectEmail: AVERY_EMAIL,
+      // v0.8.0 fraud payload — `ledgerEntryId`/`cardId` are filled by the seed
+      // writer from the links below, so confirming fraud reverses + freezes.
       payload: { merchant: 'QuickFuel', amountMinor: 4890 },
+      linkLedgerEntryKey: 'card-quickfuel',
+      linkCardKey: 'card-debit',
       daysAgo: 0,
     },
     {
@@ -483,10 +527,14 @@ export function buildSeedPlan(): SeedPlan {
       type: 'dispute',
       status: 'info_requested',
       summary: 'Disputed card charge — Trattoria Romana ($42.10)',
-      detail: 'Customer disputes a dining charge; additional information has been requested.',
+      detail:
+        'Customer disputes a dining charge; additional information has been requested. Approving UPHOLDS the dispute (reverses the charge); rejecting DENIES it (the charge stands) — simulated.',
       subjectName: AVERY,
       subjectEmail: AVERY_EMAIL,
-      payload: { merchant: 'Trattoria Romana', amountMinor: 4210 },
+      // v0.8.0 dispute payload — `ledgerEntryId`/`accountId` are filled by the
+      // seed writer from the link below (the entry is seeded `disputed`).
+      payload: { reason: 'not_recognized', amountMinor: 4210, description: 'Trattoria Romana' },
+      linkLedgerEntryKey: 'card-trattoria',
       daysAgo: 3,
     },
   ];
@@ -562,7 +610,30 @@ export function buildSeedPlan(): SeedPlan {
     },
   ];
 
-  return { users, entries, access, operationsRequests, simulatedEvents, onboardingApplications, invitations };
+  // --- Cards (v0.8.0) --------------------------------------------------------
+  // Two SIMULATED cards on Avery's checking: a debit card (the one the seeded
+  // fraud alert freezes on "confirm fraud") and a credit card. Card SPEND already
+  // lives as `card`-origin ledger entries above; these are the card LIFECYCLE.
+  const cards: SeedCard[] = [
+    {
+      key: 'card-debit',
+      accountKey: CHECKING,
+      cardholderEmail: AVERY_EMAIL,
+      cardType: 'debit',
+      network: 'visa',
+      last4: '4821',
+    },
+    {
+      key: 'card-credit',
+      accountKey: CHECKING,
+      cardholderEmail: AVERY_EMAIL,
+      cardType: 'credit',
+      network: 'mastercard',
+      last4: '7390',
+    },
+  ];
+
+  return { users, entries, access, cards, operationsRequests, simulatedEvents, onboardingApplications, invitations };
 }
 
 /**
@@ -787,6 +858,54 @@ export function assertSeedMovementIntegrity(plan: SeedPlan): void {
           `Seed invariant violated: request '${request.key}' links non-pending ledger entry '${key}' (status '${entry.status}').`,
         );
       }
+    }
+  }
+}
+
+/**
+ * Card integrity invariants the seed must satisfy (v0.8.0). Throws on violation.
+ * Keeps the seeded cards + the fraud/dispute single-links internally consistent:
+ *
+ *  1. Card keys are unique; each references a declared account + cardholder user,
+ *     with known type/network/status.
+ *  2. A request's `linkCardKey` references a declared card; its
+ *     `linkLedgerEntryKey` references a declared ledger entry.
+ */
+export function assertSeedCardIntegrity(plan: SeedPlan): void {
+  const accountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+  const emails = new Set(plan.users.map((u) => u.email.toLowerCase()));
+  const cardKeys = new Set<string>();
+  for (const card of plan.cards) {
+    if (cardKeys.has(card.key)) {
+      throw new Error(`Seed invariant violated: duplicate card key '${card.key}'.`);
+    }
+    cardKeys.add(card.key);
+    if (!accountKeys.has(card.accountKey)) {
+      throw new Error(`Seed invariant violated: card '${card.key}' references unknown account key '${card.accountKey}'.`);
+    }
+    if (!emails.has(card.cardholderEmail.toLowerCase())) {
+      throw new Error(`Seed invariant violated: card '${card.key}' references unknown cardholder '${card.cardholderEmail}'.`);
+    }
+    if (!CARD_TYPES.includes(card.cardType)) {
+      throw new Error(`Seed invariant violated: card '${card.key}' has unknown type '${card.cardType}'.`);
+    }
+    if (!CARD_NETWORKS.includes(card.network)) {
+      throw new Error(`Seed invariant violated: card '${card.key}' has unknown network '${card.network}'.`);
+    }
+    if (card.status && !CARD_STATUSES.includes(card.status)) {
+      throw new Error(`Seed invariant violated: card '${card.key}' has unknown status '${card.status}'.`);
+    }
+  }
+
+  const entryKeys = new Set(plan.entries.map((e) => e.key).filter((k): k is string => !!k));
+  for (const request of plan.operationsRequests) {
+    if (request.linkCardKey && !cardKeys.has(request.linkCardKey)) {
+      throw new Error(`Seed invariant violated: request '${request.key}' links unknown card key '${request.linkCardKey}'.`);
+    }
+    if (request.linkLedgerEntryKey && !entryKeys.has(request.linkLedgerEntryKey)) {
+      throw new Error(
+        `Seed invariant violated: request '${request.key}' links unknown ledger-entry key '${request.linkLedgerEntryKey}'.`,
+      );
     }
   }
 }

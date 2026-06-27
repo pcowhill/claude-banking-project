@@ -5,6 +5,61 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.8.0 — Cards, fraud, disputes — 2026-06-27
+
+Cards, fraud alerts, and transaction disputes, built on the v0.5.0 ops queue and the
+v0.7.0 ledger/reversal discipline. One **additive** Prisma migration (`Card` +
+`CardTravelNotice`); fraud + disputes needed none (they ride `OperationsRequest.payload`).
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **282 passed / 282** (240 + **42 new**):
+  - `@simbank/shared` `cards.test.ts` (**12** — status guards, masking/expiry display,
+    `validateIssueCard`/`validateReportCard`/`validateTravelNotice`).
+  - `@simbank/shared` `risk.test.ts` (**8** — fraud payload parsing, dispute validator,
+    `isRequestReversed` for R-03).
+  - `@simbank/backend` `routes/cards-risk.test.ts` (**17** — card issue/freeze/unfreeze/
+    report→replace/travel-notice with NO ledger effect + RBAC + auth; dispute filing
+    flags `disputed`, **uphold reverses** (settled total moves by the amount) + **deny
+    restores posted**, transfer legs non-disputable, non-posted non-disputable, RBAC;
+    fraud list + customer respond (inbound event, not resolved) + RBAC, **confirm-fraud
+    reverses + freezes the card**, dismiss no-op).
+  - `seed-plan.test.ts` (**+5** — card integrity: cards on declared accounts/holders,
+    fraud→card+entry link, dispute→`disputed` entry link, `assertSeedCardIntegrity`).
+- **e2e** (Playwright) — **41 passed / 41** (37 + **4 new**: card freeze on `/wallet`,
+  customer dispute filing → "Disputed", operator confirm-fraud → "Reversed" tag,
+  operator uphold-dispute → "Reversed" tag). One pre-existing v0.7.0 assertion scoped to
+  its card now that the R-03 tag exists.
+- **Build** (tsup + vite × 2) — pass.
+
+### Dependency audit
+- **Runtime**: unchanged — 0 runtime advisories. Dev-tooling advisories (vite/vitest/
+  esbuild) remain, tracked for the v1.0.0 hardening pass.
+
+### Security review — PASS-with-findings
+RBAC (per-resource access checks on every new route), money discipline (card lifecycle
+writes no ledger; money effects are ledger status changes with reason+audit;
+balances derived), operator-only resolution, data exposure (only a simulated `last4`),
+and simulation safety all sound. Findings:
+- **Acted on (this milestone):** an internal **transfer leg is no longer disputable**
+  (it must net to zero) — guard + test added (`risk/disputes.ts`).
+- **Low / tracked:** a cosmetic TOCTOU on the fraud-response write (`risk/fraud.ts` —
+  no money impact; same class as the v0.7.0 funds-check note); reported cards use
+  `lost`/`stolen` rather than the available `replaced` status (intentional — more
+  informative; `replaced` reserved for a future voluntary-replace flow); a
+  defense-in-depth note to assert payload ledger/card ownership *if* a future flow ever
+  lets a customer influence a fraud payload (today only seed/operator populate it).
+
+### Known issues / watch items (carried)
+- **SEC-1** (CSRF token / SameSite=Strict) — accepted for the local sim
+  (Lax + CORS mitigate); v1.0.0 hardening.
+- **TOCTOU** on the money funds-check (v0.7.0) + the cosmetic fraud-response write
+  (v0.8.0) — Low; fold into a later ledger/ops-hardening pass.
+- Dev-tooling npm-audit advisories — v1.0.0 hardening.
+
+---
+
 ## v0.7.0 — Money movement — 2026-06-26
 
 The first **feature** milestone since v0.6.0: customer money movement where an

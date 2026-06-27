@@ -6,6 +6,66 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 10 — v0.8.0 Cards, fraud, disputes — 2026-06-27
+
+**Goal:** the human approved v0.7.0 ("Everything looks great") and made one optional
+request — when a request is reversed in Ops the badge still reads only "Approved";
+they'd like a "Reversed" tag too, left to our judgement. So: build **v0.8.0 — Cards,
+fraud, disputes**, and accept the tag request as **R-03**.
+
+**Branch:** `claude/keen-einstein-rxfkq0`.
+
+**R-03 accepted + folded in.** The reversed state already existed on the payload
+(`payload.reversed`); we added a shared `isRequestReversed(payload)` helper and a
+`ReversedBadge` rendered beside the Approved badge on the ops queue cards, dashboard,
+and detail panel. No state-machine change — the request stays terminal-approved. Folded
+into v0.8.0 because disputes + fraud also produce reversals, so the tag pays off in
+three places.
+
+**Key design decision — the only risky migration is `Card`.** Following the v0.7.0
+pattern of minimizing schema churn: cards needed a real (but **additive**) migration
+(`Card` + `CardTravelNotice`, no existing table touched), while **fraud + disputes
+needed none** — they ride the existing `OperationsRequest` (`fraud_alert` / `dispute`
+types) with their context on `payload`, exactly like v0.7.0 movements. The migration was
+created through the mirrored schema engine and reviewed (two CREATE TABLEs + indexes).
+
+**Architecture — reuse everything.** Disputes/fraud reuse the v0.5.0 ops queue + action
+service + real-time and the v0.7.0 reversal. We generalized reversal into one
+`reverseLedgerEntries` core (`posted`/`disputed`→`reversed`) now shared by the movement
+reversal, dispute uphold, and fraud confirm. `applyOperatorAction` gained `dispute` +
+`fraud_alert` branches (atomic + audited) — **no new ops endpoint or socket event**
+(resolution reuses `/api/ops/requests/:id/action` + `ops:request_changed`). Card
+lifecycle is its own service and deliberately writes **no ledger** (card spend stays as
+existing `card`-origin entries; this is the lifecycle on top).
+
+**Process — serialize the risky core, then parallelize the frontends.** Built the
+shared contracts (`cards.ts`, `risk.ts`, `isRequestReversed`) + schema migration +
+backend services/routes + seed **myself, serially**, with the API/payload/socket
+contract locked; then ran the two frontends **in parallel** (customer `/wallet` +
+dispute/fraud UI; operations context blocks + the R-03 tag) as separate agents; then
+integrated, ran the full gate + e2e, and a read-only security review.
+
+**Money discipline.** Card lifecycle writes no ledger (a test asserts the ledger count
+is unchanged across card ops). Dispute uphold / fraud confirm flip the entry to
+`reversed`; dispute deny returns it to `posted`; balances stay derived; reversals keep a
+reason + audit. Security review (PASS-with-findings) surfaced that a customer could
+dispute an internal **transfer leg** (which must net to zero) — fixed immediately with a
+guard + test. Other findings were Low/info and tracked.
+
+**Outcome.** `npm run verify` green; **282** unit/integration (+42) + **41** e2e (+4);
+0 lint warnings; one additive migration. Version bumped to 0.8.0; annotated `v0.8.0`
+tag created locally (push blocked → human tags on merge).
+
+**Surprises / environment friction (sandbox only):** same Prisma engine-download block
+as Sessions 1–9; resolved the documented way (`npm install --ignore-scripts` +
+curl-mirror the query-engine library + schema-engine for `debian-openssl-3.0.x` +
+`PRISMA_*` env vars; engine `605197351a3c8bdd595af2d2a9bc3025bca48ea2`). Created the
+real `cards` migration through the mirrored schema engine. Playwright used the
+pre-installed Chromium via `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium`. One
+pre-existing v0.7.0 e2e assertion (`getByText('Reversed')`) became ambiguous once the
+R-03 tag existed (and under parallel specs sharing the seeded DB) — scoped it to its
+specific card. **None of this affects normal machines or CI.**
+
 ## Session 9 — v0.7.0 Money movement — 2026-06-26
 
 **Goal:** the human approved v0.6.2 ("The fixes look good… move onto v0.7.0") and
