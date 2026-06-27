@@ -15,8 +15,9 @@ Status legend: ✅ complete · ▶️ in progress · ⏳ planned
 | v0.5.0 | Operations simulator core | ✅ complete |
 | **v0.6.0** | Onboarding and account opening | ✅ complete |
 | **v0.7.0** | Money movement | ✅ complete |
-| v0.8.0 | Cards, fraud, disputes | ⏳ planned (next) |
-| v0.9.0 | Loans, CDs, simulated time (+ recurring/scheduled payments) | ⏳ planned |
+| **v0.8.0** | Cards, fraud, disputes | ✅ complete |
+| v0.9.0 | Simulation clock + recurring/scheduled payments + statement cycles | ▶️ in progress |
+| _v0.9.0+_ | _Loans, CDs, interest accrual (rest of the simulated-time theme)_ | ⏳ planned |
 | v1.0.0 | Polish, hardening, final retrospective | ⏳ planned |
 
 ---

@@ -41,12 +41,30 @@ export function attachRealtime(httpServer: HttpServer, prisma: PrismaClient): So
   });
 
   const heartbeat = setInterval(() => {
-    io.emit(SOCKET_EVENTS.heartbeat, { serverTime: new Date().toISOString() });
+    void emitHeartbeat(io, prisma);
   }, 10_000);
   // Don't let the heartbeat keep the process alive during shutdown.
   heartbeat.unref();
 
   return io;
+}
+
+/**
+ * Emit a heartbeat carrying the wall-clock server time AND the current SIMULATION
+ * time (read best-effort from the clock singleton; v0.9.0). A live console uses
+ * `simulationTime` to display the simulated date and to notice when another
+ * operator has advanced the clock. The simulation date is not sensitive, so this
+ * goes to every connected client; a clock read failure simply omits the field.
+ */
+async function emitHeartbeat(io: SocketIOServer, prisma: PrismaClient): Promise<void> {
+  let simulationTime: string | undefined;
+  try {
+    const clock = await prisma.simulationClock.findUnique({ where: { id: 'singleton' } });
+    if (clock) simulationTime = clock.currentTime.toISOString();
+  } catch {
+    // best-effort — never let a heartbeat throw
+  }
+  io.emit(SOCKET_EVENTS.heartbeat, { serverTime: new Date().toISOString(), simulationTime });
 }
 
 /**

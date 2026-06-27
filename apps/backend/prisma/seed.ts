@@ -17,7 +17,8 @@ async function main(): Promise<void> {
     `Seed complete (SIMULATION — not real money): ${result.users} users, ` +
       `${result.accounts} accounts, ${result.entries} ledger entries, ${result.grants} access grants, ` +
       `${result.opsRequests} ops requests, ${result.simulatedEvents} simulated events, ` +
-      `${result.onboardingApplications} onboarding applications, ${result.invitations} invitations, ${result.cards} cards.`,
+      `${result.onboardingApplications} onboarding applications, ${result.invitations} invitations, ${result.cards} cards, ` +
+      `${result.schedules} scheduled payments.`,
   );
 }
 

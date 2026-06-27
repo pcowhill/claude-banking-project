@@ -7,6 +7,9 @@ import {
   OPS_REQUEST_STATUSES,
   OPS_REQUEST_TYPES,
   REVIEWABLE_MOVEMENT_OPS_TYPE,
+  SCHEDULE_FREQUENCIES,
+  SCHEDULE_KINDS,
+  SCHEDULE_LIMITS,
   SIM_EVENT_CHANNELS,
   SIM_EVENT_DIRECTIONS,
   SIM_EVENT_STATUSES,
@@ -27,6 +30,8 @@ import {
   type OpsRequestPriority,
   type OpsRequestStatus,
   type OpsRequestType,
+  type ScheduleFrequency,
+  type ScheduleKind,
   type SimEventChannel,
   type SimEventDirection,
   type SimEventStatus,
@@ -187,6 +192,26 @@ export interface SeedInvitation {
   status?: InvitationStatus; // default 'pending'
 }
 
+/**
+ * A seeded SIMULATED recurring/scheduled payment (v0.9.0). Owned by a demo user
+ * on one of their accounts; due `firstRunInDays` after seed time so a small clock
+ * advance FIRES it (an internal transfer posts both legs; a bill pay queues a
+ * pending review). Firing only happens through the money service — this row just
+ * holds the instruction.
+ */
+export interface SeedSchedule {
+  ownerEmail: string;
+  kind: ScheduleKind;
+  fromAccountKey: string;
+  toAccountKey?: string; // required for internal_transfer
+  counterparty?: string; // required for bill_pay
+  memo?: string;
+  amountMinor: number;
+  frequency: ScheduleFrequency;
+  /** Days after seed time the first run is due. */
+  firstRunInDays: number;
+}
+
 export interface SeedPlan {
   users: SeedUser[];
   entries: SeedLedgerEntry[];
@@ -196,6 +221,7 @@ export interface SeedPlan {
   simulatedEvents: SeedSimulatedEvent[];
   onboardingApplications: SeedOnboardingApplication[];
   invitations: SeedInvitation[];
+  schedules: SeedSchedule[];
 }
 
 export function buildSeedPlan(): SeedPlan {
@@ -633,7 +659,46 @@ export function buildSeedPlan(): SeedPlan {
     },
   ];
 
-  return { users, entries, access, cards, operationsRequests, simulatedEvents, onboardingApplications, invitations };
+  // --- Scheduled / recurring payments (v0.9.0) -------------------------------
+  // Two SIMULATED schedules for Avery, both due a few days after seed time so a
+  // small clock advance fires them: a monthly internal transfer (checking →
+  // savings, posts both legs, nets to zero) and a monthly bill pay (queues a
+  // pending review an operator approves). Firing always goes through the money
+  // service; these rows hold only the instructions.
+  const schedules: SeedSchedule[] = [
+    {
+      ownerEmail: AVERY_EMAIL,
+      kind: 'internal_transfer',
+      fromAccountKey: CHECKING,
+      toAccountKey: SAVINGS,
+      memo: 'Monthly savings plan',
+      amountMinor: toMinor(200),
+      frequency: 'monthly',
+      firstRunInDays: 3,
+    },
+    {
+      ownerEmail: AVERY_EMAIL,
+      kind: 'bill_pay',
+      fromAccountKey: CHECKING,
+      counterparty: 'City Power & Light',
+      memo: 'Electricity',
+      amountMinor: toMinor(95),
+      frequency: 'monthly',
+      firstRunInDays: 5,
+    },
+  ];
+
+  return {
+    users,
+    entries,
+    access,
+    cards,
+    operationsRequests,
+    simulatedEvents,
+    onboardingApplications,
+    invitations,
+    schedules,
+  };
 }
 
 /**
@@ -906,6 +971,53 @@ export function assertSeedCardIntegrity(plan: SeedPlan): void {
       throw new Error(
         `Seed invariant violated: request '${request.key}' links unknown ledger-entry key '${request.linkLedgerEntryKey}'.`,
       );
+    }
+  }
+}
+
+/**
+ * Schedule integrity invariants the seed must satisfy (v0.9.0). Throws on
+ * violation. Keeps seeded scheduled payments internally consistent and within the
+ * shared bounds, so firing them through the money service can never be malformed:
+ *
+ *  1. The owner email + the source account are declared.
+ *  2. Kind/frequency are known; an internal transfer has a declared, DISTINCT
+ *     destination account; a bill pay has a biller.
+ *  3. The amount is within the shared schedule bounds; `firstRunInDays` is in range.
+ */
+export function assertSeedScheduleIntegrity(plan: SeedPlan): void {
+  const accountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+  const emails = new Set(plan.users.map((u) => u.email.toLowerCase()));
+
+  for (const s of plan.schedules) {
+    if (!emails.has(s.ownerEmail.toLowerCase())) {
+      throw new Error(`Seed invariant violated: schedule references unknown owner '${s.ownerEmail}'.`);
+    }
+    if (!accountKeys.has(s.fromAccountKey)) {
+      throw new Error(`Seed invariant violated: schedule references unknown account key '${s.fromAccountKey}'.`);
+    }
+    if (!SCHEDULE_KINDS.includes(s.kind)) {
+      throw new Error(`Seed invariant violated: schedule has unknown kind '${s.kind}'.`);
+    }
+    if (!SCHEDULE_FREQUENCIES.includes(s.frequency)) {
+      throw new Error(`Seed invariant violated: schedule has unknown frequency '${s.frequency}'.`);
+    }
+    if (s.kind === 'internal_transfer') {
+      if (!s.toAccountKey || !accountKeys.has(s.toAccountKey)) {
+        throw new Error(`Seed invariant violated: internal-transfer schedule needs a declared destination account.`);
+      }
+      if (s.toAccountKey === s.fromAccountKey) {
+        throw new Error(`Seed invariant violated: schedule source and destination accounts must differ.`);
+      }
+    }
+    if (s.kind === 'bill_pay' && !s.counterparty) {
+      throw new Error(`Seed invariant violated: bill-pay schedule needs a biller.`);
+    }
+    if (s.amountMinor < SCHEDULE_LIMITS.minMinor || s.amountMinor > SCHEDULE_LIMITS.maxMinor) {
+      throw new Error(`Seed invariant violated: schedule amount ${s.amountMinor} is out of bounds.`);
+    }
+    if (s.firstRunInDays < 0 || s.firstRunInDays > SCHEDULE_LIMITS.maxFirstRunInDays) {
+      throw new Error(`Seed invariant violated: schedule firstRunInDays ${s.firstRunInDays} is out of range.`);
     }
   }
 }
