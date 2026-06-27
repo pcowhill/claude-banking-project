@@ -6,6 +6,88 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 9 — v0.7.0 Money movement — 2026-06-26
+
+**Goal:** the human approved v0.6.2 ("The fixes look good… move onto v0.7.0") and
+noted (a) the branch already has the v0.6.2 commits and (b) they had **not tagged**
+v0.6.2 (disregard the "tagged" wording). So: build **v0.7.0 — Money movement**, the
+first milestone where an operator approval MOVES money — within ledger discipline.
+
+**Branch:** `claude/sweet-newton-44widz`, cut from `main` and **already containing**
+v0.6.0 + v0.6.1 + v0.6.2 (verified via `git log` — no fast-forward needed, unlike
+Session 8). Confirmed **no tag exists in-repo** (`git tag -l` empty) and corrected the
+stale "v0.6.2 tagged" wording in the state/board docs.
+
+**Key design decision — no schema migration.** A transaction is a `LedgerEntry` row and
+balances are derived, so money movement needed **no Prisma migration**: the ledger
+already had the statuses (`pending`/`posted`/`failed`/`reversed`), origins
+(`transfer`/`deposit`/`payment`), and `reason`, and the movement context rides on the
+existing `OperationsRequest.payload` JSON. This kept the riskiest shared area untouched
+and is the second milestone (after v0.4.0) to add a feature with zero migration.
+
+**Architecture — reuse the v0.6.0 "approval has a ledger effect" path.** Two customer
+entry points: an **immediate internal transfer** (`POST /api/transfers`, posts both
+`transfer` legs → nets to zero) and a **reviewable external movement**
+(`POST /api/movements` — mobile check deposit / external ACH / wire / bill pay → a
+**pending** entry + a linked ops item carrying `ledgerEntryIds`). `applyOperatorAction`
+gained money-movement branches mirroring the onboarding approve/reject branches:
+**approve** flips the linked pending entries to `posted`, **reject** to `failed`,
+hold/request-info leave them pending. A new ops-only **reverse** endpoint flips a posted
+movement to `reversed` (reason + audit). The carried **Q-01** is closed by linking the
+seeded pending mobile-check deposit to its review item (entry ids threaded through the
+seed at apply time).
+
+**Process — serialize the risky core, then parallelize the frontends.** Built the
+shared contract → backend service → routes/branches → seed **serially myself** (ledger
++ routing + real-time are risky), wrote + ran the **18 backend integration tests** to
+lock correctness, THEN parallelized the two frontends with the customer + operations
+sub-agents against the locked contract. A green checkpoint (backend + frontends + unit/
+integration) was committed and pushed mid-session; e2e + docs followed.
+
+**Money discipline (asserted):** transfers net to zero (system settled total unchanged
+— tested); external value enters only via a bank-originated posted `deposit` credit and
+leaves only via a posted `payment` debit; failures/reversals are ledger **status**
+changes, never balance edits; reversal requires a reason + audit; a customer can only
+move money on accounts they hold (server-side, both legs). The movement payload's
+`ledgerEntryIds` are server-set, so the client can't inject them and an operator action
+can't be steered onto an unrelated entry.
+
+**Security review — PASS-with-findings (none blocking):** RBAC/IDOR + payload-trust +
+money discipline all confirmed correct. Findings all Low/tracked: **F-1 (SEC-1 CSRF)** —
+SameSite=Lax + CORS adequately mitigate the new POSTs for a local sim; re-targeted to
+v1.0.0 (does NOT block); **F-2** — a check-then-act TOCTOU on the funds gate (read
+outside the write tx); not a money-integrity break (balances derived, SQLite serializes
+writers, single-user sim) → tracked for the v0.8.0+ ledger hardening (note: a partial
+in-tx check wouldn't fully close it on SQLite, so it was tracked honestly rather than
+half-fixed); **F-3** — reversal net-zero guard for a future multi-leg movement.
+
+**Scope decision — deferred recurring/scheduled payments to v0.9.0.** The v0.7.0 list
+included recurring/scheduled payments; they need the **simulation clock + scheduled-event
+processing** already roadmapped at v0.9.0, so building a scheduler now (nothing to fire
+it) would be a non-functional stub. Deferred transparently (TASK_BOARD `M-09`,
+ROADMAP_HISTORY, raised in the human review for the human to pull forward if desired).
+
+**Surprises / environment friction (sandbox only):** same Prisma engine-download block
+as Sessions 1–8; resolved the documented way (`npm install --ignore-scripts` +
+curl-mirror the query-engine library + schema-engine for `debian-openssl-3.0.x` +
+`PRISMA_*` env vars; engine `605197351a3c8bdd595af2d2a9bc3025bca48ea2`). Playwright used
+the pre-installed Chromium via `PLAYWRIGHT_CHROMIUM_PATH` (the `/opt/pw-browsers/chromium`
+symlink → the 1194 build; Playwright expects 1228, hence the executablePath escape
+hatch). **No migration this milestone.** Two e2e selector bugs in my new spec were found
+and fixed (a `$320.00` strict-mode collision; a `<strong>`-split "Pending" text). The
+seed description for the mobile-check deposit was changed from "…(pending)" to "Mobile
+check deposit" (so it reads correctly once posted), which required updating one existing
+dashboard e2e assertion. None of this affects normal machines or CI.
+
+**Outcome:** `npm run verify` passes — **240** unit/integration tests (was 201; +39: 16
+shared, 18 backend money, +5 seed-plan), 0 lint warnings — and **37** Playwright e2e in
+real Chromium (was 33; +4 money-movement journeys). Runtime `npm audit` = 0. Version
+bumped to 0.7.0; annotated tag `v0.7.0` created locally (tag push blocked by env policy
+— HTTP 403 — so the human pushes it on merge; see the milestone report). Stopped at the
+gate; did **not** start v0.8.0.
+
+---
+
 ## Session 8 — v0.6.2 Operations sign-in fix (patch) — 2026-06-26
 
 **Goal:** The human's v0.6.1 review reported a **new, blocking regression** — they

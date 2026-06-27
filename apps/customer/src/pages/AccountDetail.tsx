@@ -39,6 +39,7 @@ function AccountHeader({ data }: { data: AccountTransactionsResponse }) {
   const { account } = data;
   const meta = RELATIONSHIP_META[account.relationship];
   const { balances } = account;
+  const canMoveMoney = account.status === 'active' && account.relationship !== 'viewer';
   return (
     <Card className="mt-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -48,14 +49,23 @@ function AccountHeader({ data }: { data: AccountTransactionsResponse }) {
           </span>
           <CardTitle className="text-xl">{account.name}</CardTitle>
         </div>
-        <span
-          className={cn(
-            'rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-            meta.className,
+        <div className="flex items-center gap-3">
+          {canMoveMoney && (
+            <Link to="/move-money" state={{ accountId: account.id }}>
+              <Button type="button" size="sm" variant="secondary">
+                Move money
+              </Button>
+            </Link>
           )}
-        >
-          {meta.label}
-        </span>
+          <span
+            className={cn(
+              'rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+              meta.className,
+            )}
+          >
+            {meta.label}
+          </span>
+        </div>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4 sm:max-w-md">

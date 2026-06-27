@@ -27,6 +27,8 @@ import {
   OpsActionError,
 } from '../ops/requests';
 import { adminCreateUser, AdminUserError } from '../ops/admin-users';
+import { reverseMovement, MovementError } from '../money/movements';
+import { MOVEMENT_TEXT } from '@simbank/shared';
 
 /**
  * Operations & admin endpoints, gated by role (ops_agent / admin). Customers and
@@ -174,6 +176,33 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
     const parsed = limit ? Number.parseInt(limit, 10) : 50;
     const events = await listSimulatedEvents(prisma, Number.isFinite(parsed) ? parsed : 50);
     return reply.send({ events });
+  });
+
+  // ---- Money-movement reversal (v0.7.0) -------------------------------------
+  // Reverse a SETTLED money movement: flips its posted ledger entry(ies) to
+  // `reversed` (removing the balance effect — never editing a balance). Requires
+  // a reason (audited), mirroring the admin-adjustment discipline. Emits a live
+  // queue update so every console re-syncs.
+  app.post('/api/ops/movements/:requestId/reverse', opsOnly, async (req, reply) => {
+    const { requestId } = req.params as { requestId: string };
+    const body = (req.body ?? {}) as { reason?: unknown };
+    const reason =
+      typeof body.reason === 'string' ? body.reason.trim().slice(0, MOVEMENT_TEXT.reasonMaxLength) : '';
+    if (!reason) {
+      return badRequest(reply, 'A reason is required to reverse a movement.');
+    }
+    try {
+      const { request, events } = await reverseMovement(requestId, req.user!, reason, new Date());
+      app.opsRealtime.requestChanged('updated', request);
+      for (const event of events) app.opsRealtime.externalEvent(event);
+      return reply.send({ request });
+    } catch (err) {
+      if (err instanceof MovementError) {
+        const code = err.code === 'not_found' ? 404 : err.code === 'nothing_to_reverse' ? 409 : 400;
+        return reply.code(code).send({ error: err.message, code: err.code } satisfies ApiErrorResponse);
+      }
+      throw err;
+    }
   });
 
   // ---- Admin ----------------------------------------------------------------

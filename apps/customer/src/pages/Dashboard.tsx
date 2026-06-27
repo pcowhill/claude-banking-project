@@ -386,25 +386,32 @@ export function Dashboard() {
       <section className="mt-8">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Link
+            to="/move-money"
+            state={{ tab: 'transfer' }}
+            className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+          >
+            <div className="font-medium text-brand-navy">Transfers</div>
+            <div className="mt-0.5 text-xs text-slate-500">Move money between your accounts</div>
+          </Link>
+          <Link
+            to="/move-money"
+            state={{ tab: 'bill' }}
+            className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+          >
+            <div className="font-medium text-brand-navy">Bill pay</div>
+            <div className="mt-0.5 text-xs text-slate-500">Pay a biller (queued for review)</div>
+          </Link>
+          <Link
             to="/statements"
             className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
           >
             <div className="font-medium text-brand-navy">Statements &amp; documents</div>
             <div className="mt-0.5 text-xs text-slate-500">Monthly statements (coming soon)</div>
           </Link>
-          {[
-            ['Transfers', 'v0.7.0'],
-            ['Bill pay', 'v0.7.0'],
-            ['Cards & fraud', 'v0.8.0'],
-          ].map(([label, milestone]) => (
-            <div
-              key={label}
-              className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500"
-            >
-              <div className="font-medium text-slate-700">{label}</div>
-              <div className="text-xs">{milestone}</div>
-            </div>
-          ))}
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
+            <div className="font-medium text-slate-700">Cards &amp; fraud</div>
+            <div className="text-xs">v0.8.0</div>
+          </div>
         </div>
       </section>
 

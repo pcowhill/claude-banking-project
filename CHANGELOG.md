@@ -8,10 +8,87 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.7.0 — Money movement** (not started). Carries an explicit
-  acceptance note from the v0.5.0 review: approving a deposit-review request must
-  post the pending deposit (pending → posted) so the customer's line stops reading
-  *Pending* and the available balance updates — within ledger discipline.
+- Next milestone: **v0.8.0 — Cards, fraud, disputes** (not started). Also carries
+  forward **recurring/scheduled payments**, deferred from v0.7.0 to **v0.9.0**
+  (they need the simulation clock / scheduled-event processing roadmapped there).
+
+## [0.7.0] — 2026-06-26 — Money movement
+
+The milestone where an operator approval first **MOVES money** — always via the
+append-only ledger, never by editing a balance. Still a local **SIMULATION**: no
+real money, payment networks, ACH/wire rails, billers, or providers. **No Prisma
+migration** — `LedgerEntry` already carried the needed `status`/`origin`/`reason`,
+and the movement context rides on the existing `OperationsRequest.payload`.
+
+### Added
+
+- **Internal transfers (immediate).** `POST /api/transfers` moves money between a
+  customer's own accounts, posting **both** `transfer` legs (a debit + a credit)
+  in one transaction so the movement **nets to zero**. Validated for ownership of
+  both accounts and sufficient available funds; balances stay derived.
+- **Reviewable external movements.** `POST /api/movements` queues a **mobile check
+  deposit**, **external ACH** (in/out), **wire** (out), or **bill payment** (out)
+  as a **pending** ledger entry plus a linked operations-queue item. The pending
+  debit immediately reserves available funds (a hold); nothing settles until an
+  operator acts.
+- **An operator approval POSTS the movement.** Approving a `deposit`/`ach`/`wire`/
+  `bill_pay` queue item with a movement payload flips its pending entry to
+  **posted** (atomic, audited) — reusing the v0.6.0 "approval has a ledger effect"
+  path. **Rejecting** flips it to **failed** (releasing any reserved funds);
+  **hold**/**request info** leave it pending.
+- **Reversal.** `POST /api/ops/movements/:requestId/reverse` (ops/admin) flips a
+  **posted** movement to **reversed** — removing its balance effect without
+  editing a balance — and **requires a reason** (audited), mirroring the
+  admin-adjustment discipline.
+- **Customer "Move money" UI** (`/move-money`): a tabbed page — Transfer, Deposit a
+  check, Send money (ACH/wire), Pay a bill — reusing the shared validators, reached
+  from the dashboard quick links and account detail. Reviewable movements show as
+  **Pending** in the transaction list until an operator posts them.
+- **Operator UI:** the request detail panel shows the **money-movement context**
+  (type, amount, direction, counterparty, memo, a "Reversed" indicator) and a
+  **Reverse movement** affordance for an approved+posted movement.
+- New shared module `@simbank/shared/money-movement` (kinds, direction/origin
+  mapping, bounds, the `MovementPayload`, and the pure `validateTransfer` /
+  `validateExternalMovement` validators) + a new `bill_pay` ops request type.
+
+### Fixed
+
+- **Q-01 (carried from the v0.5.0 review): approving a pending deposit now posts
+  it.** The seeded "Mobile check deposit" is linked to its review item, so
+  approving it flips the customer's line from **Pending → Posted** and updates the
+  available balance — within ledger discipline (bank-originated, audited; no
+  stored/edited balance).
+
+### Tests
+
+- **+39 Vitest** (201 → **240**): `@simbank/shared` `money-movement.test.ts` (16 —
+  kinds/mapping, the validators, bounds, payload parsing); `@simbank/backend`
+  `routes/money.test.ts` (18 — transfer nets to zero, RBAC/insufficient-funds,
+  reviewable movement queues a pending entry, **approve posts (incl. Q-01)**,
+  reject→failed, **reverse→reversed**, the system-settled-total money invariant,
+  audit + real-time); `seed-plan.test.ts` (+5 movement-link integrity).
+- **+4 Playwright e2e** (33 → **37**): a customer transfer; a customer mobile-check
+  deposit queued for review; the dashboard quick links; and an operator seeing the
+  movement context, **approving (posting) and then reversing** the seeded deposit.
+- `npm run verify` green (0 lint warnings); `npm run test:e2e` green in real
+  Chromium. Security review **PASS-with-findings** (all Low/tracked; none blocking).
+
+### Money / safety
+
+Money moves **only** via explicit `LedgerEntry` rows; no balance is ever stored or
+edited. Transfers net to zero; external value enters only via a bank-originated,
+posted `deposit` credit and leaves only via a posted `payment` debit; failures and
+reversals are ledger **status** changes (`failed`/`reversed`). Reversal requires a
+reason + audit. A customer can only move money on accounts they hold (owner / joint
+/ authorized — not viewer), enforced server-side on both legs. No real networks;
+the simulation disclaimer is visible in the new UI; no secrets added.
+
+### Deferred (transparently)
+
+- **Recurring/scheduled payments** moved from v0.7.0 to **v0.9.0** — they require
+  the simulation clock + scheduled-event processing already roadmapped there;
+  building a scheduler now (with nothing to fire it) would be a non-functional
+  stub. The human can pull it earlier (raised in the v0.7.0 review).
 
 ## [0.6.2] — 2026-06-26 — Operations sign-in fix
 

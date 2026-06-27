@@ -14,9 +14,9 @@ Status legend: ✅ complete · ▶️ in progress · ⏳ planned
 | v0.4.0 | Customer banking dashboard | ✅ complete |
 | v0.5.0 | Operations simulator core | ✅ complete |
 | **v0.6.0** | Onboarding and account opening | ✅ complete |
-| v0.7.0 | Money movement | ⏳ planned (next) |
-| v0.8.0 | Cards, fraud, disputes | ⏳ planned |
-| v0.9.0 | Loans, CDs, simulated time | ⏳ planned |
+| **v0.7.0** | Money movement | ✅ complete |
+| v0.8.0 | Cards, fraud, disputes | ⏳ planned (next) |
+| v0.9.0 | Loans, CDs, simulated time (+ recurring/scheduled payments) | ⏳ planned |
 | v1.0.0 | Polish, hardening, final retrospective | ⏳ planned |
 
 ---
@@ -51,13 +51,17 @@ verification events.
 Open-account flow · identity verification · initial funding request · joint
 account invitation · operations approval/rejection · admin-created demo users.
 
-### v0.7.0 — Money movement
-Internal transfers · external ACH transfers · wires · mobile check deposit ·
-bill pay · recurring/scheduled payments · approvals, failures, reversals, holds.
-**Acceptance note carried from the v0.5.0 review (Q-01):** approving a
-deposit-review request must POST the pending deposit (pending → posted) so the
-customer's line stops reading *Pending* and the available balance updates —
-within ledger discipline (audited, bank-originated; no stored/edited balance).
+### v0.7.0 — Money movement ✅
+Internal transfers (both legs, nets to zero) · external ACH transfers · wires ·
+mobile check deposit · bill pay · approvals, failures, reversals, holds — an
+operator approval POSTS the movement (pending→posted), reject fails it, reverse
+flips a posted entry to `reversed` (reason+audit). Money moves only via the
+append-only ledger; balances stay DERIVED; no Prisma migration was needed. The
+v0.5.0 review's **Q-01** is **closed** (approving the pending mobile-check deposit
+flips the customer's line Pending→Posted and updates available).
+**Deferred to v0.9.0:** *recurring/scheduled payments* — they require the
+simulation clock + scheduled-event processing landing in v0.9.0 (see
+`ROADMAP_HISTORY.md`).
 
 ### v0.8.0 — Cards, fraud, disputes
 Debit/credit cards · freeze/unfreeze · lost/stolen flow · travel notices ·
@@ -65,7 +69,9 @@ disputes · fraud alerts · suspicious transaction scenarios.
 
 ### v0.9.0 — Loans, CDs, simulated time
 Personal/auto/mortgage-style loans · payment schedules · CDs · interest accrual ·
-statement cycles · fast-forward simulation clock · scheduled event processing.
+statement cycles · fast-forward simulation clock · scheduled event processing ·
+**recurring/scheduled payments** (carried from v0.7.0 — they ride on the
+simulation clock + scheduled-event processing introduced here).
 
 ### v1.0.0 — Polish, hardening, and final retrospective
 UX cleanup · test expansion · bug fixing · performance pass · security review

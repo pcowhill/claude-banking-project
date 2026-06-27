@@ -5,6 +5,98 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.7.0 — Money movement — 2026-06-26
+
+The first **feature** milestone since v0.6.0: customer money movement where an
+operator approval has a true **ledger** effect. **No Prisma migration** — the
+disciplined ledger (`status`/`origin`/`reason`) and `OperationsRequest.payload`
+already sufficed, keeping the riskiest shared area untouched.
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **240 passed / 240** (201 + **39 new**):
+  - `@simbank/shared` `money-movement.test.ts` (**16** — movement kinds, ops-type +
+    ledger-origin mapping, the pure `validateTransfer` / `validateExternalMovement`
+    validators, bounds, `asMovementPayload`).
+  - `@simbank/backend` `routes/money.test.ts` (**18** — internal transfer posts both
+    legs & the settled total is unchanged (nets to zero), RBAC (can't move from an
+    unowned account) + insufficient-funds, a reviewable movement queues a pending
+    entry, operator **approve posts** it (incl. the seeded mobile-check deposit:
+    pending→posted, available updates — **Q-01**), **reject→failed** (funds released),
+    **reverse→reversed** (reason+audit, settled total restored), hold leaves it
+    pending, a bare deposit request with no movement payload posts nothing, audit +
+    real-time emits, full RBAC on the reverse route).
+  - `seed-plan.test.ts` (**+5** — movement-link integrity: each reviewable item wires
+    to a pending entry; the deposit links the Q-01 entry; the new invariant rejects a
+    non-movement linker / an unknown entry key).
+  - All prior suites still green.
+- **Build** — backend (tsup) + customer (vite) + operations (vite) all build.
+
+### E2E (Playwright) ✅ PASS
+- **37 passed / 37** in **real Chromium** (33 + **4 new** in
+  `e2e/money-movement.spec.ts`): a customer transfer between own accounts; a customer
+  mobile-check deposit queued for review (reference + pending note); the dashboard
+  quick links → `/move-money`; and an operator seeing the money-movement context,
+  **approving (posting) then reversing** the seeded deposit. The existing dashboard
+  "pending deposit" assertion was updated for the cleaner seed description ("Mobile
+  check deposit"); all prior specs stay green (incl. session isolation + the v0.6.x
+  ops fixes).
+
+### Money discipline (the milestone's core invariant) — asserted
+Money moves **only** by appending `LedgerEntry` rows; **no balance is stored or
+edited**. Internal transfers post both legs and **net to zero** (the system settled
+total is unchanged — tested). External value enters only via a bank-originated, posted
+`deposit` credit and leaves only via a posted `payment` debit; an approval moves the
+settled total by exactly the posted amount, a reversal restores it. Failures and
+reversals are ledger **status** changes (`failed`/`reversed`), never balance edits;
+reversal requires a reason + audit. A customer can only move money on accounts they
+hold (owner/joint/authorized — not viewer), enforced server-side on both legs.
+
+### Security review (pre-gate, read-only) — ✅ PASS-with-findings (none blocking)
+The Security/Permissions reviewer audited the money-movement surface. Confirmed
+correct: RBAC/IDOR on `/api/transfers` + `/api/movements` (both legs) and the ops-only
+reverse; **payload-trust** — the client cannot inject `ledgerEntryIds` (the customer
+routes don't accept them; approve/reject/reverse read the server-recorded payload), so
+an operator action can't be steered onto an unrelated account's entry; money discipline;
+server-side validation + amount bounds (`Number.isInteger`/`isSafeInteger`); simulation
+safety (only `SimulatedEvent`s; disclaimer in the new UI); no secrets; no regression to
+v0.2.0 / v0.3.0 / v0.5.0 / v0.6.0 guarantees. Findings (all Low/tracked):
+
+| ID | Item | Disposition | Target |
+| --- | --- | --- | --- |
+| F-1 (SEC-1) | CSRF on the new state-mutating POSTs: `SameSite=Lax` (cross-site `fetch` omits the cookie) + the credentialed CORS allowlist mitigate it; a cross-site form can't send `application/json` | **Accepted for the local simulation; does not block.** SEC-1 is consciously **re-targeted** (its prior "v0.7.0" due-marker is now met by an explicit keep-Lax+CORS decision) | CSRF token / `SameSite=Strict` at **v1.0.0** hardening |
+| F-2 | Check-then-act (TOCTOU) on the available-funds gate (read outside the write transaction); **not** a money-integrity break — balances are derived, the worst case is a transient, auditable negative available, SQLite serializes writers, single-user sim | Accepted and tracked | **v0.8.0+** ledger hardening (move the funds check into the write path) |
+| F-3 | Reversal doesn't re-assert net-zero for a (future) multi-leg movement; today each links exactly one entry, so it's correct | Accepted (add a guard when multi-leg movements arrive) | future |
+
+### Dependency audit
+- **Runtime `npm audit --omit=dev` → 0 vulnerabilities.** v0.7.0 added no runtime
+  dependencies. The prior **dev/test-tooling advisories** (vite, vitest, esbuild —
+  dev-only) are unchanged and tracked in the v0.1.0 section for the v1.0.0 hardening
+  pass.
+
+### Known limitations / deferred
+- **Recurring/scheduled payments** deferred to **v0.9.0** (need the simulation clock /
+  scheduled-event processing roadmapped there). One-off money movement is complete.
+- **SEC-1 CSRF token** and **F-2 TOCTOU funds-check** tracked above.
+- **Frontend component unit tests** remain deferred; the new UI is covered by build +
+  the Playwright money-movement journeys + the backend/contract tests (+ the pure
+  money-movement validators are unit-tested in shared).
+
+### Sandbox-only notes (do not affect users/CI)
+- Prisma engines curl-mirrored (query-engine library + schema-engine for
+  `debian-openssl-3.0.x`) and Playwright pointed at the pre-installed Chromium — same
+  approach as Sessions 1–8. **No migration this milestone.** Standard installs / `npx
+  playwright install` work elsewhere.
+
+### Overall
+**v0.7.0 meets the quality bar.** Gate green (240 + 37 tests, 0 lint warnings), money
+moves only through the disciplined ledger with the conservation invariants asserted,
+the carried Q-01 is closed, security review PASS-with-findings (all Low/tracked), open
+items tracked honestly, the recurring/scheduled deferral documented. No blockers.
+
+---
+
 ## v0.6.2 — Operations sign-in fix (patch) — 2026-06-26
 
 A patch release fixing the single blocking operator sign-in regression reported in

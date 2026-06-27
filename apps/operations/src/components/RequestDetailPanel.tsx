@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  asMovementPayload,
   formatMinor,
   isOnboardingProduct,
   isTerminalOpsStatus,
+  MOVEMENT_DIRECTION_LABELS,
+  MOVEMENT_TEXT,
+  movementKindLabel,
   ONBOARDING_PRODUCT_LABELS,
   opsActionLabel,
   opsTypeLabel,
+  type MovementPayload,
   type OperationsRequestDetailDTO,
   type OpsAction,
   type OpsRequestStatus,
@@ -76,16 +81,22 @@ export function RequestDetailPanel({
   requestId: string;
   onClose: () => void;
 }) {
-  const { act, requests } = useOpsData();
+  const { act, reverse, requests } = useOpsData();
   const [detail, setDetail] = useState<OperationsRequestDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reverseReason, setReverseReason] = useState('');
 
   // The live copy from the shared queue, if present. Drives status-dependent UI.
   const live = requests.find((r) => r.id === requestId);
   const liveStatus: OpsRequestStatus = live?.status ?? detail?.status ?? 'pending';
+
+  // The money-movement context, read from the LIVE payload (falling back to the
+  // loaded detail) so the amount, the "Reversed" indicator, and the reverse
+  // affordance all reflect socket echoes (e.g. another operator's reversal).
+  const movement: MovementPayload | null = asMovementPayload(live?.payload ?? detail?.payload);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,9 +161,32 @@ export function RequestDetailPanel({
     }
   }, [act, requestId, note, load]);
 
+  // Reverse an already-posted movement (pending → posted → reversed). This is a
+  // separate, post-decision capability (like "Add note"), NOT a fifth decision —
+  // it only appears once the movement has been APPROVED and is not yet reversed.
+  const handleReverse = useCallback(async () => {
+    const reason = reverseReason.trim();
+    if (!reason) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await reverse(requestId, reason);
+      setReverseReason('');
+      await load(); // the reversal appears in History; payload flips to reversed
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'That movement could not be reversed.');
+    } finally {
+      setBusy(false);
+    }
+  }, [reverse, requestId, reverseReason, load]);
+
   const onboarding = detail?.type === 'onboarding' ? readOnboardingContext(detail.payload) : null;
   const resolved = isTerminalOpsStatus(liveStatus);
   const canAddNote = note.trim().length > 0 && !busy;
+
+  // Reverse affordance: only a posted (approved) movement that is not yet reversed.
+  const canShowReverse = movement !== null && liveStatus === 'approved' && movement.reversed !== true;
+  const canReverse = reverseReason.trim().length > 0 && !busy;
 
   return (
     <Card className="flex flex-col gap-4">
@@ -230,6 +264,50 @@ export function RequestDetailPanel({
             </section>
           )}
 
+          {/* Money-movement context (v0.7.0) — only for linked money movements */}
+          {movement && (
+            <section className="rounded-md border border-white/10 bg-brand-navy-deep/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Money movement
+                </h4>
+                {movement.reversed && (
+                  <span className="inline-flex items-center rounded-full bg-rose-400/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-200">
+                    Reversed
+                  </span>
+                )}
+              </div>
+              <dl className="mt-2 space-y-1 text-xs text-slate-400">
+                <div>
+                  <dt className="inline text-slate-500">Type: </dt>
+                  <dd className="inline text-slate-200">{movementKindLabel(movement.kind)}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-slate-500">Amount: </dt>
+                  <dd className="inline text-slate-200">{formatMinor(movement.amountMinor)}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-slate-500">Direction: </dt>
+                  <dd className="inline text-slate-200">
+                    {MOVEMENT_DIRECTION_LABELS[movement.direction]}
+                  </dd>
+                </div>
+                {movement.counterparty && (
+                  <div>
+                    <dt className="inline text-slate-500">Counterparty: </dt>
+                    <dd className="inline text-slate-200">{movement.counterparty}</dd>
+                  </div>
+                )}
+                {movement.memo && (
+                  <div>
+                    <dt className="inline text-slate-500">Memo: </dt>
+                    <dd className="inline text-slate-200">{movement.memo}</dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
+
           {/* Optional note + actions */}
           <div className="space-y-2">
             <label htmlFor="ops-note" className="block text-xs font-medium text-slate-400">
@@ -244,6 +322,11 @@ export function RequestDetailPanel({
               placeholder="Add context for this decision…"
               className="w-full rounded-md border border-white/10 bg-brand-navy-deep/60 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
             />
+            {movement && !resolved && (
+              <p className="text-[11px] text-slate-500">
+                Approving posts this movement to the ledger (simulated); rejecting marks it failed.
+              </p>
+            )}
             <ActionBar status={liveStatus} busy={busy} size="md" onAction={handleAction} />
             <div className="flex items-center gap-2">
               <Button
@@ -262,6 +345,42 @@ export function RequestDetailPanel({
               )}
             </div>
           </div>
+
+          {/* Reverse movement — a post-decision capability, distinct from the
+              four-decision ActionBar. Only for a posted (approved) movement that
+              has not already been reversed. */}
+          {canShowReverse && (
+            <section className="space-y-2 rounded-md border border-rose-500/20 bg-rose-500/5 p-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-rose-200/90">
+                Reverse movement
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Flips the posted ledger entry to reversed (simulated) — balances stay derived,
+                nothing is edited. The reason is recorded in the audit log.
+              </p>
+              <label htmlFor="ops-reverse-reason" className="sr-only">
+                Reason for reversal
+              </label>
+              <textarea
+                id="ops-reverse-reason"
+                value={reverseReason}
+                onChange={(e) => setReverseReason(e.target.value)}
+                rows={2}
+                maxLength={MOVEMENT_TEXT.reasonMaxLength}
+                placeholder="Reason for reversal (required)…"
+                className="w-full rounded-md border border-white/10 bg-brand-navy-deep/60 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+              />
+              <Button
+                type="button"
+                variant="reject"
+                size="md"
+                disabled={!canReverse}
+                onClick={() => void handleReverse()}
+              >
+                Reverse movement
+              </Button>
+            </section>
+          )}
 
           {error && <p className="text-xs text-rose-300/90">{error}</p>}
 

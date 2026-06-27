@@ -137,6 +137,7 @@ export const OPS_REQUEST_TYPE_LABELS: Record<OpsRequestType, string> = {
   deposit: 'Deposit review',
   ach: 'ACH transfer',
   wire: 'Wire transfer',
+  bill_pay: 'Bill payment',
   fraud_alert: 'Fraud alert',
   dispute: 'Transaction dispute',
   support_message: 'Support message',
@@ -204,7 +205,7 @@ export const OPS_QUEUES: readonly OpsQueueDef[] = [
     label: 'Onboarding & identity',
     types: ['onboarding', 'identity_verification', 'mfa', 'password_reset', 'external_account_verification'],
   },
-  { key: 'money', label: 'Deposits & transfers', types: ['deposit', 'ach', 'wire'] },
+  { key: 'money', label: 'Deposits & transfers', types: ['deposit', 'ach', 'wire', 'bill_pay'] },
   { key: 'risk', label: 'Fraud & disputes', types: ['fraud_alert', 'dispute'] },
   { key: 'support', label: 'Support', types: ['support_message'] },
 ];

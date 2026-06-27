@@ -13,6 +13,7 @@ import { OpenAccount } from './pages/OpenAccount';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { AccountDetail } from './pages/AccountDetail';
+import { MoveMoney } from './pages/MoveMoney';
 import { Statements } from './pages/Statements';
 import { NotFound } from './pages/NotFound';
 
@@ -28,6 +29,7 @@ import { NotFound } from './pages/NotFound';
  *  - "/login"        simulated sign-in (v0.2.0); "already signed in" when authed
  *  - "/dashboard"    authenticated accounts overview (protected by RequireAuth)
  *  - "/accounts/:id" authenticated account detail + transactions (protected)
+ *  - "/move-money"   authenticated money movement — transfer/deposit/send/bill (protected)
  *  - "/statements"   authenticated statements/documents placeholder (protected)
  *  - "*"             not found
  *
@@ -62,6 +64,14 @@ export function App() {
               element={
                 <RequireAuth>
                   <AccountDetail />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/move-money"
+              element={
+                <RequireAuth>
+                  <MoveMoney />
                 </RequireAuth>
               }
             />

@@ -26,6 +26,7 @@ import {
   provisionApprovedOnboarding,
   rejectOnboardingApplication,
 } from './onboarding';
+import { failMovement, movementPayloadOf, postApprovedMovement } from '../money/movements';
 
 /**
  * Operations-simulator domain service (v0.5.0). The single place that reads and
@@ -322,7 +323,40 @@ export async function applyOperatorAction(
     return { request: toOperationsRequestDTO(result.updated), event: result.email };
   }
 
+  // ---- Money-movement APPROVE → post the linked pending ledger entries. ------
+  // v0.7.0: approving a deposit/ach/wire/bill_pay request that carries a movement
+  // payload settles its money (pending → posted), atomically with the status
+  // change. This is the carried-forward Q-01: an approved deposit stops reading
+  // "Pending" and the available balance updates. Balances stay derived.
+  const movement = movementPayloadOf(existing);
+  if (movement && input.action === 'approve') {
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedReq = await tx.operationsRequest.update({ where: { id: input.id }, data: decisionData });
+      await writeAudit(tx, auditFor(nextStatus));
+      const posted = await postApprovedMovement(tx, existing, input.actor, now);
+      return { updatedReq, posted };
+    });
+    return {
+      request: toOperationsRequestDTO(result.updatedReq),
+      event: null,
+      events: result.posted?.events ?? [],
+    };
+  }
+
+  // ---- Money-movement REJECT → fail the linked pending ledger entries. -------
+  if (movement && input.action === 'reject') {
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedReq = await tx.operationsRequest.update({ where: { id: input.id }, data: decisionData });
+      await writeAudit(tx, auditFor(nextStatus));
+      const failedEvent = await failMovement(tx, existing, now);
+      return { updatedReq, failedEvent };
+    });
+    return { request: toOperationsRequestDTO(result.updatedReq), event: result.failedEvent };
+  }
+
   // ---- All other decisions (unchanged workflow-only behavior). --------------
+  // Includes HOLD / REQUEST_INFO on a money movement: the request changes state
+  // but the pending ledger entry stays pending (money has not moved).
   const updated = await prisma.operationsRequest.update({ where: { id: input.id }, data: decisionData });
   await writeAudit(prisma, auditFor(nextStatus));
 

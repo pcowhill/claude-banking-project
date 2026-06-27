@@ -24,6 +24,7 @@ export const OPS_REQUEST_TYPES = [
   'deposit',
   'ach',
   'wire',
+  'bill_pay', // v0.7.0 money movement (bill payment review)
   'fraud_alert',
   'dispute',
   'support_message',

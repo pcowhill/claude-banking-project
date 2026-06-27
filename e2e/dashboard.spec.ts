@@ -42,8 +42,10 @@ test.describe('customer banking dashboard', () => {
     await expect(page.getByText('Rent — Maple Court Apartments').first()).toBeVisible();
     // The pending group with its clearly-labelled pending authorization.
     await expect(page.getByText(/coffee roasters \(pending authorization\)/i)).toBeVisible();
-    // The pending incoming deposit is visible too.
-    await expect(page.getByText(/mobile check deposit \(pending\)/i)).toBeVisible();
+    // The pending incoming deposit is visible too. (v0.7.0: the seed description is
+    // now just "Mobile check deposit" — its pending state is shown by the status
+    // badge/group, not the text, so it still reads correctly once posted.)
+    await expect(page.getByText(/mobile check deposit/i)).toBeVisible();
   });
 
   test('search and status filter narrow the transaction list', async ({ page }) => {

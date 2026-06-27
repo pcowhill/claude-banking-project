@@ -10,6 +10,7 @@ import {
 import {
   assertSeedAccessIntegrity,
   assertSeedInvariants,
+  assertSeedMovementIntegrity,
   assertSeedOnboardingIntegrity,
   assertSeedOpsIntegrity,
   buildSeedPlan,
@@ -233,5 +234,49 @@ describe('seed plan onboarding & invitations (v0.6.0)', () => {
       relationship: 'joint',
     });
     expect(() => assertSeedOnboardingIntegrity(tampered)).toThrow(/unknown account/i);
+  });
+});
+
+describe('seed plan money movements (v0.7.0)', () => {
+  const plan = buildSeedPlan();
+
+  it('wires each reviewable money-movement request to a PENDING ledger entry', () => {
+    const entryByKey = new Map(plan.entries.filter((e) => e.key).map((e) => [e.key as string, e]));
+    const linking = plan.operationsRequests.filter((r) => r.linkLedgerEntryKeys?.length);
+    // The deposit (Q-01), the outbound ACH, and the bill payment are all wired.
+    expect(linking.length).toBeGreaterThanOrEqual(3);
+    for (const request of linking) {
+      for (const key of request.linkLedgerEntryKeys ?? []) {
+        const entry = entryByKey.get(key);
+        expect(entry, `entry for ${key}`).toBeDefined();
+        expect(entry!.status).toBe('pending');
+      }
+    }
+  });
+
+  it('links the mobile-check deposit so approving it can post the pending credit (Q-01)', () => {
+    const deposit = plan.operationsRequests.find((r) => r.key === 'deposit-mobilecheck');
+    expect(deposit?.type).toBe('deposit');
+    expect(deposit?.linkLedgerEntryKeys).toContain('pending-mobilecheck');
+    const entry = plan.entries.find((e) => e.key === 'pending-mobilecheck');
+    expect(entry).toMatchObject({ direction: 'credit', status: 'pending', origin: 'deposit' });
+  });
+
+  it('passes the movement-integrity invariants', () => {
+    expect(() => assertSeedMovementIntegrity(plan)).not.toThrow();
+  });
+
+  it('rejects a non-money-movement request that links a ledger entry', () => {
+    const tampered = buildSeedPlan();
+    const support = tampered.operationsRequests.find((r) => r.type === 'support_message');
+    support!.linkLedgerEntryKeys = ['pending-mobilecheck'];
+    expect(() => assertSeedMovementIntegrity(tampered)).toThrow(/not a money-movement type/i);
+  });
+
+  it('rejects a request that links an unknown ledger-entry key', () => {
+    const tampered = buildSeedPlan();
+    const deposit = tampered.operationsRequests.find((r) => r.key === 'deposit-mobilecheck');
+    deposit!.linkLedgerEntryKeys = ['no-such-entry'];
+    expect(() => assertSeedMovementIntegrity(tampered)).toThrow(/unknown ledger-entry key/i);
   });
 });
