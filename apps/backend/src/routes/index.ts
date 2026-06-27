@@ -7,6 +7,8 @@ import { accountRoutes } from './accounts';
 import { opsRoutes } from './ops';
 import { onboardingRoutes } from './onboarding';
 import { moneyRoutes } from './money';
+import { cardRoutes } from './cards';
+import { riskRoutes } from './risk';
 
 /** Register all HTTP routes. New feature route groups are added here. */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -18,4 +20,6 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(opsRoutes);
   await app.register(onboardingRoutes);
   await app.register(moneyRoutes);
+  await app.register(cardRoutes);
+  await app.register(riskRoutes);
 }

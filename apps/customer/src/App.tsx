@@ -14,6 +14,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { AccountDetail } from './pages/AccountDetail';
 import { MoveMoney } from './pages/MoveMoney';
+import { Wallet } from './pages/Wallet';
 import { Statements } from './pages/Statements';
 import { NotFound } from './pages/NotFound';
 
@@ -30,6 +31,7 @@ import { NotFound } from './pages/NotFound';
  *  - "/dashboard"    authenticated accounts overview (protected by RequireAuth)
  *  - "/accounts/:id" authenticated account detail + transactions (protected)
  *  - "/move-money"   authenticated money movement — transfer/deposit/send/bill (protected)
+ *  - "/wallet"       authenticated cards manager — freeze/replace/travel notices (protected)
  *  - "/statements"   authenticated statements/documents placeholder (protected)
  *  - "*"             not found
  *
@@ -72,6 +74,14 @@ export function App() {
               element={
                 <RequireAuth>
                   <MoveMoney />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/wallet"
+              element={
+                <RequireAuth>
+                  <Wallet />
                 </RequireAuth>
               }
             />

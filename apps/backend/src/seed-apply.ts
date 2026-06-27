@@ -4,6 +4,7 @@ import { isTerminalOpsStatus, type OpsRequestStatus } from '@simbank/shared';
 import { hashPassword } from './auth/password';
 import {
   assertSeedAccessIntegrity,
+  assertSeedCardIntegrity,
   assertSeedInvariants,
   assertSeedMovementIntegrity,
   assertSeedOnboardingIntegrity,
@@ -28,6 +29,7 @@ export interface SeedResult {
   simulatedEvents: number;
   onboardingApplications: number;
   invitations: number;
+  cards: number;
 }
 
 export async function applySeedPlan(
@@ -40,10 +42,13 @@ export async function applySeedPlan(
   assertSeedOpsIntegrity(plan);
   assertSeedOnboardingIntegrity(plan);
   assertSeedMovementIntegrity(plan);
+  assertSeedCardIntegrity(plan);
 
   await prisma.loginEvent.deleteMany();
   await prisma.session.deleteMany();
   await prisma.accountInvitation.deleteMany();
+  await prisma.cardTravelNotice.deleteMany();
+  await prisma.card.deleteMany();
   await prisma.accountAccess.deleteMany();
   await prisma.ledgerEntry.deleteMany();
   await prisma.onboardingApplication.deleteMany();
@@ -116,6 +121,34 @@ export async function applySeedPlan(
     if (e.key) ledgerEntryIdByKey.set(e.key, created.id);
   }
 
+  // SIMULATED cards (v0.8.0). Card SPEND already lives as `card`-origin ledger
+  // entries; these are the card LIFECYCLE rows the customer can manage and the
+  // seeded fraud alert can freeze. Track ids by key for the fraud link below.
+  const YEAR_MS = 365 * DAY_MS;
+  const cardIdByKey = new Map<string, string>();
+  for (const c of plan.cards) {
+    const accountId = accountIdByKey.get(c.accountKey);
+    const userId = userIdByEmail.get(c.cardholderEmail.toLowerCase());
+    if (!accountId) throw new Error(`Seed references an unknown account key: ${c.accountKey}`);
+    if (!userId) throw new Error(`Seed references an unknown cardholder email: ${c.cardholderEmail}`);
+    const expiry = new Date(now.getTime() + (c.expiresInYears ?? 4) * YEAR_MS);
+    const card = await prisma.card.create({
+      data: {
+        accountId,
+        userId,
+        cardType: c.cardType,
+        network: c.network,
+        last4: c.last4,
+        expMonth: expiry.getMonth() + 1,
+        expYear: expiry.getFullYear(),
+        status: c.status ?? 'active',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    cardIdByKey.set(c.key, card.id);
+  }
+
   // Operations queue work items (v0.5.0). Each gets an intake audit row so the
   // request-detail history reads "created → …" from the same AuditLog trail the
   // operator actions append to. SIMULATION: seeding a request never moves money.
@@ -134,6 +167,20 @@ export async function applySeedPlan(
         return id;
       });
       payload = { ...(r.payload ?? {}), ledgerEntryIds };
+    }
+    // Single links for fraud + dispute (v0.8.0): merge the resolved ledger-entry
+    // id (+ its accountId so a DisputePayload is complete) and/or card id.
+    if (r.linkLedgerEntryKey) {
+      const entryId = ledgerEntryIdByKey.get(r.linkLedgerEntryKey);
+      if (!entryId) throw new Error(`Seed references an unknown ledger-entry key: ${r.linkLedgerEntryKey}`);
+      const entry = plan.entries.find((e) => e.key === r.linkLedgerEntryKey);
+      const accountId = entry ? accountIdByKey.get(entry.accountKey) : undefined;
+      payload = { ...(payload ?? {}), ledgerEntryId: entryId, ...(accountId ? { accountId } : {}) };
+    }
+    if (r.linkCardKey) {
+      const cardId = cardIdByKey.get(r.linkCardKey);
+      if (!cardId) throw new Error(`Seed references an unknown card key: ${r.linkCardKey}`);
+      payload = { ...(payload ?? {}), cardId };
     }
     const request = await prisma.operationsRequest.create({
       data: {
@@ -237,11 +284,11 @@ export async function applySeedPlan(
       action: 'seed_database',
       entity: 'system',
       reason:
-        'Demo seed (v0.7.0: demo users + access grants + dated transaction history + operations queue + simulated events + an approvable onboarding application + a pending joint invitation + reviewable money movements — a mobile-check deposit, an outbound ACH, and a bill payment — each linked to its pending ledger entry)',
+        'Demo seed (v0.8.0: demo users + access grants + dated transaction history + operations queue + simulated events + an approvable onboarding application + a pending joint invitation + reviewable money movements each linked to its pending ledger entry + simulated cards + a fraud alert linked to a card/charge and an open dispute on a disputed charge)',
     },
   });
 
-  const [users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations] =
+  const [users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations, cards] =
     await Promise.all([
       prisma.user.count(),
       prisma.account.count(),
@@ -251,6 +298,7 @@ export async function applySeedPlan(
       prisma.simulatedEvent.count(),
       prisma.onboardingApplication.count(),
       prisma.accountInvitation.count(),
+      prisma.card.count(),
     ]);
-  return { users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations };
+  return { users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations, cards };
 }

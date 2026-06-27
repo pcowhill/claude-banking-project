@@ -35,6 +35,16 @@ export function StatusBadge({ status }: { status: OpsRequestStatus }) {
   return <Pill className={STATUS_CLASSES[status]}>{opsStatusLabel(status)}</Pill>;
 }
 
+/**
+ * Secondary tag shown ALONGSIDE the status badge when a request's money movement
+ * was reversed (operator reversal, dispute upheld, or confirmed fraud). The
+ * request stays terminal "Approved"; this pill explains the after-the-fact undo.
+ * Decide whether to render via the shared `isRequestReversed(payload)` helper.
+ */
+export function ReversedBadge() {
+  return <Pill className="bg-amber-500/15 text-amber-200">Reversed</Pill>;
+}
+
 const PRIORITY_CLASSES: Record<OpsRequestPriority, string> = {
   high: 'bg-rose-500/20 text-rose-200',
   normal: 'bg-white/10 text-slate-300',

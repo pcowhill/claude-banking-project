@@ -342,6 +342,17 @@ export interface OpsExternalEventPayload {
   event: SimulatedEventDTO;
 }
 
+/**
+ * Whether a request's money effect has been REVERSED (v0.8.0, task R-03). A
+ * reversal — a reversed money movement, an upheld dispute, or a confirmed fraud —
+ * sets `payload.reversed = true` on the (still terminal/approved) request. The
+ * operator console renders a secondary "Reversed" tag alongside the status badge
+ * wherever this is true, so a reversed item no longer reads only "Approved".
+ */
+export function isRequestReversed(payload: Record<string, unknown> | null | undefined): boolean {
+  return !!payload && (payload as { reversed?: unknown }).reversed === true;
+}
+
 // ---- Pure aggregation -------------------------------------------------------
 
 /**

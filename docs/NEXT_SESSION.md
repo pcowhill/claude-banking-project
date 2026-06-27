@@ -5,83 +5,76 @@
 
 ## Where we are
 
-`v0.7.0 — Money movement` is **complete** and tagged (annotated tag created locally;
-the human pushes it on merge to `main` — tag push is blocked in this environment).
-It is the first milestone where an operator approval **MOVES money**, always via the
-append-only ledger:
+`v0.8.0 — Cards, fraud, disputes` is **complete** and tagged locally (annotated tag on
+the milestone commit; the human pushes it on merge to `main` — tag push is blocked in
+this environment). Built on the v0.5.0 ops queue + v0.7.0 ledger/reversal discipline,
+all keeping money discipline:
 
-- **Internal transfers** (`POST /api/transfers`) post BOTH legs and net to zero.
-- **Reviewable external movements** (`POST /api/movements` — mobile check deposit,
-  external ACH, wire, bill pay) write a **pending** ledger entry + a linked ops-queue
-  item; an operator **approve** posts it (pending→posted), **reject** fails it
-  (pending→failed, releasing reserved funds), **hold/request-info** leave it pending.
-- **Reversal** (`POST /api/ops/movements/:id/reverse`, ops/admin, reason required)
-  flips a posted entry to `reversed`.
-- Customer **/move-money** UI (tabbed) + operator money-movement context + reverse
-  affordance. **Carried Q-01 closed:** approving the seeded mobile-check deposit flips
-  the customer's line Pending→Posted and updates available.
-- **No Prisma migration** was needed. Gate: **240** unit/integration + **37** e2e
-  green; security review **PASS-with-findings** (all Low/tracked).
+- **Cards:** a new `Card` lifecycle — issue a simulated debit/credit card, freeze/
+  unfreeze, report lost/stolen → a **replacement** card, travel notices. Customer UI at
+  **/wallet**. Card lifecycle writes **no ledger** (only an additive `Card` +
+  `CardTravelNotice` migration).
+- **Fraud:** a `fraud_alert` ops item the customer confirms/denies and an operator
+  resolves — approve = confirm fraud → reverse the charge + freeze the card; reject =
+  dismiss.
+- **Disputes:** a customer disputes a posted txn → `posted`→`disputed`; operator
+  approve = uphold → `disputed`→`reversed` (refund), reject = deny → back to `posted`.
+  A transfer leg is not disputable (must net to zero).
+- **R-03 (the human's v0.7.0 request):** a reversed movement / upheld dispute /
+  confirmed fraud shows a **"Reversed"** tag beside **Approved** on the ops queue,
+  dashboard, and detail panel (`payload.reversed`; request stays terminal-approved).
+- Gate: **282** unit/integration + **41** e2e green; security review
+  **PASS-with-findings** (all Low/tracked; transfer legs made non-disputable).
 
-The earlier patches (v0.6.1 B-03/B-04, v0.6.2 B-06) and v0.6.0 onboarding are all
-intact. **One scope item was deferred:** **recurring/scheduled payments** moved to
-**v0.9.0** (they need the simulation clock; see `HUMAN_REVIEW_v0.7.0.md`). The next
-planned milestone is **`v0.8.0 — Cards, fraud, disputes`**.
+The next planned milestone is **`v0.9.0`** — the **simulation clock + recurring/
+scheduled payments** (carried from v0.7.0; they need the clock) and statement cycles.
 
 ## Session-start protocol (must do, in order)
 
 1. Read `CLAUDE.md`, then `docs/PROJECT_STATE.md`, then this file.
 2. **Save the human's pasted feedback VERBATIM** to
-   `docs/process/feedback/FEEDBACK_v0.7.0_<YYYY-MM-DD_HHMM>.md` BEFORE acting on it.
-   Use the structure in `docs/process/HUMAN_FEEDBACK_LOG.md`. The raw block is never
-   edited afterward.
-   - If the feedback is only "continue" (or similar), still save it verbatim and
-     treat it as approval to proceed with v0.8.0.
-3. Interpret the feedback in that file (accepted / deferred / rejected with reasons /
-   questions carried forward); update `docs/process/HUMAN_FEEDBACK_LOG.md`.
-4. Update `docs/process/TASK_BOARD.md` (source of truth), and the roadmap/process
-   logs if the feedback changes scope. **If the human asks to pull recurring/scheduled
-   payments forward, fold it into this session** (it pairs with the simulation clock,
-   so consider whether to bring a minimal clock forward or keep execution manual).
-5. Do **only** v0.8.0 (or the re-scoped milestone the feedback approves).
-6. Stop at the next gate and produce the milestone handoff docs.
+   `docs/process/feedback/FEEDBACK_v0.8.0_<YYYY-MM-DD_HHMM>.md` BEFORE acting on it
+   (structure in `docs/process/HUMAN_FEEDBACK_LOG.md`; raw block never edited).
+   - If the feedback is only "continue", still save it verbatim and treat it as
+     approval to proceed with v0.9.0.
+3. Interpret the feedback in that file; update `docs/process/HUMAN_FEEDBACK_LOG.md`.
+4. Update `docs/process/TASK_BOARD.md` (source of truth) + roadmap/process logs if the
+   feedback changes scope.
+5. Do **only** v0.9.0 (or the re-scoped milestone the feedback approves).
+6. Stop at the next gate and produce the milestone handoff docs + an annotated tag.
 
-## Planned scope for v0.8.0 — Cards, fraud, disputes
+## Planned scope for v0.9.0 — Simulation clock + recurring/scheduled payments
 
 Acceptance targets (refine from feedback before building):
 
-- **Cards:** issue a (simulated) debit/credit card for an account; **freeze/unfreeze**;
-  **lost/stolen** flow (replace → new card number, old one frozen); **travel notices**.
-  Card activity already exists as a `card`-origin ledger entry — build the card
-  **lifecycle** on top.
-- **Fraud:** suspicious-transaction **alerts** feeding the v0.5.0 operations queue
-  (reuse the queue + action service + real-time channel); a customer can confirm/deny;
-  an operator can act. The seed already has a `fraud_alert` item to build on.
-- **Disputes:** a customer **disputes** a posted transaction → a `dispute` ops item;
-  the operator can resolve it, which may **reverse** the disputed entry (reuse the
-  v0.7.0 reversal: posted→`reversed`, reason+audit) or mark it `disputed`. The ledger
-  already supports the `disputed` status (treated as posted, flagged) — wire it.
-- **Money discipline unchanged:** any money effect (a fraud reversal, a dispute credit)
-  goes through the **ledger** (status change or a bank-originated entry), never a
-  balance edit; reversals keep the reason + audit.
+- **Simulation clock:** a controllable clock (the `SimulationClock` singleton row
+  already exists). An operator/admin can advance it (fast-forward); "now" for
+  scheduled processing is read from the clock, not the wall clock.
+- **Recurring / scheduled payments:** a customer schedules a one-off-future or
+  recurring transfer / bill-pay; when the clock passes a due date, a **scheduler**
+  fires it as a real **ledger** entry (reuse the v0.7.0 money-movement service — a
+  reviewable schedule fires a pending entry into the ops queue; an internal scheduled
+  transfer posts both legs). Create/cancel a schedule (customer UI) + an operator view.
+- **Statement cycles (per ROADMAP):** consider deriving statement periods from the
+  clock now that time can advance.
+- **Money discipline unchanged:** every fire is an explicit ledger entry; nothing edits
+  a balance; transfers net to zero; value enters/leaves only via bank-originated events.
 
 ### Suggested first steps
 
 1. Plan tasks with the Milestone Planner role; record them in `TASK_BOARD.md`.
-2. Decide the schema delta early (a `Card` model is likely the one **risky migration**
-   this milestone — serialize it). Fraud/dispute may need only new ops request
-   subtypes + payload (no migration), like v0.7.0.
-3. Reuse, don't reinvent: the **operations queue + action service + audit + real-time**
-   (v0.5.0); the **approval→ledger** + **reversal** paths (v0.6.0 / v0.7.0); the
-   **disciplined ledger** (`disputed`/`reversed` statuses already exist); the **access
-   primitives** + `requireRole`. Lock the API + any socket-event additions before
-   parallelizing the two frontends.
+2. Decide the schema delta early — a **schedule** model is likely the one risky
+   migration (serialize it). The clock row already exists.
+3. Reuse, don't reinvent: the **money-movement service** (v0.7.0), the **ops queue +
+   action service + real-time** (v0.5.0), the **disciplined ledger**, and the access
+   primitives. The clock/scheduler is the **risky shared area** — serialize + review;
+   lock the API + any socket events before parallelizing the frontends.
 
 ## Guardrails
-- Serialize risky shared areas (schema, auth, routing, real-time, **ledger**, CI,
-  architecture).
+- Serialize risky shared areas (schema, auth, routing, real-time, **ledger**, the
+  **clock/scheduler**, CI, architecture).
 - No secrets committed; `.env` stays ignored.
-- Maintain the simulation disclaimer in README and both apps.
+- Maintain the simulation disclaimer in README + both apps.
 - Money moves ONLY via explicit ledger entries (never a stored/edited balance);
   transfers net to zero; value enters/leaves only via bank-originated events; admin
   adjustments + reversals require a reason + audit. Balances stay DERIVED.
@@ -89,22 +82,26 @@ Acceptance targets (refine from feedback before building):
   do not tag the milestone.
 
 ## Open follow-ups to consider (tracked, non-blocking)
-- **Recurring/scheduled payments** — deferred to v0.9.0 (needs the sim clock).
+- **Recurring/scheduled payments** — the headline of v0.9.0 (needs the clock).
+- **A dedicated `credit_card` account product** (v0.8.0 cards attach to checking/
+  savings) — possible later milestone.
 - **SEC-1 (CSRF token / SameSite=Strict)** — accepted for the local sim
-  (SameSite=Lax + CORS mitigate it); targeted at the v1.0.0 hardening pass.
-- **TOCTOU on the money funds-check** (v0.7.0 review F-2) — Low; fold into a v0.8.0+
-  ledger-hardening pass (move the available check inside the write path).
+  (Lax + CORS mitigate it); v1.0.0 hardening pass.
+- **TOCTOU notes** (the v0.7.0 funds-check + the cosmetic v0.8.0 fraud-response write)
+  — Low; fold into a later ledger/ops-hardening pass.
 - Dev-tooling npm-audit advisories (vite/vitest/esbuild) — v1.0.0 hardening.
 
 ## Sandbox note (Claude Code Cloud only)
-Prisma's engine download and the Playwright Chromium build may not match through the
-egress proxy. Mirror the Prisma engine binaries via curl + `PRISMA_*` env vars
-(query-engine library + schema-engine for `debian-openssl-3.0.x`), and point
-Playwright at the pre-installed Chromium via `PLAYWRIGHT_CHROMIUM_PATH` — see
-`docs/process/EXPERIMENT_LOG.md` (Sessions 1–9). v0.7.0 needed **no** migration; if
-v0.8.0 adds a `Card` model it will need the mirrored schema engine for the migration.
-None of this affects normal machines or CI.
+If Prisma's engine download or the Playwright Chromium build don't come through the
+egress proxy: mirror the Prisma engine binaries via curl + set
+`PRISMA_QUERY_ENGINE_LIBRARY` + `PRISMA_SCHEMA_ENGINE_BINARY`
+(+ `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING`) for `debian-openssl-3.0.x` (engine
+`605197351a3c8bdd595af2d2a9bc3025bca48ea2`); point Playwright at the pre-installed
+Chromium via `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium` — see
+`docs/process/EXPERIMENT_LOG.md`. v0.9.0 will likely need a Prisma migration (a
+schedule model) through the mirrored schema engine. None of this affects normal
+machines or CI.
 
 ## The copy/paste starter prompt
 A ready-to-use prompt for a brand-new Claude Code Cloud session lives at
-`docs/process/NEXT_SESSION_PROMPT_v0.7.0.md` (it includes the feedback placeholder).
+`docs/process/NEXT_SESSION_PROMPT_v0.8.0.md` (it includes the feedback placeholder).

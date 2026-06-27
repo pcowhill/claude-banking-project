@@ -30,6 +30,21 @@ _Future changes will be appended below with date, what changed, and why._
 
 ---
 
+## 2026-06-27 — v0.8.0 delivered as planned; one small UX item folded in
+
+v0.8.0 (Cards, fraud, disputes) shipped with **no scope change** from the brief. Two
+notes:
+
+- **R-03 ("Reversed" tag)** — a small operator-console UX item from the human's v0.7.0
+  review was accepted and folded into v0.8.0 (a reversed movement / upheld dispute /
+  confirmed fraud shows a "Reversed" tag beside "Approved"). Additive presentation, not
+  a roadmap change.
+- **Recurring/scheduled payments** remain deferred (from v0.7.0) to **v0.9.0**, which is
+  now framed as **simulation clock + recurring/scheduled payments (+ statement cycles)** —
+  consistent with the original "v0.9.0 — Loans, CDs, simulated time" theme (simulated
+  time is the enabling piece). Loans/CDs may share v0.9.0 or move later depending on the
+  human's priorities at the v0.8.0 review.
+
 ## 2026-06-25 — v0.3.0 absorbed a bug fix (no scope change)
 
 No change to the milestone **structure or order**. Noted for the record: the

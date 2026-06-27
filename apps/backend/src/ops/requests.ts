@@ -27,6 +27,8 @@ import {
   rejectOnboardingApplication,
 } from './onboarding';
 import { failMovement, movementPayloadOf, postApprovedMovement } from '../money/movements';
+import { denyDispute, upholdDispute } from '../risk/disputes';
+import { confirmFraud, dismissFraud } from '../risk/fraud';
 
 /**
  * Operations-simulator domain service (v0.5.0). The single place that reads and
@@ -352,6 +354,36 @@ export async function applyOperatorAction(
       return { updatedReq, failedEvent };
     });
     return { request: toOperationsRequestDTO(result.updatedReq), event: result.failedEvent };
+  }
+
+  // ---- Dispute resolution → uphold (reverse) or deny (restore). -------------
+  // v0.8.0: approving a `dispute` reverses the disputed entry (disputed→reversed,
+  // a refund as a ledger STATUS change); rejecting restores it (disputed→posted,
+  // the charge stands). Atomic with the status change; balances stay derived.
+  if (existing.type === 'dispute' && (input.action === 'approve' || input.action === 'reject')) {
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.operationsRequest.update({ where: { id: input.id }, data: decisionData });
+      await writeAudit(tx, auditFor(nextStatus));
+      return input.action === 'approve'
+        ? await upholdDispute(tx, existing, input.actor, now)
+        : await denyDispute(tx, existing, input.actor, now);
+    });
+    return { request: toOperationsRequestDTO(result.request), event: null, events: result.events };
+  }
+
+  // ---- Fraud resolution → confirm (reverse + freeze) or dismiss. ------------
+  // v0.8.0: approving a `fraud_alert` confirms fraud — reverse the suspicious
+  // entry (if linked) and freeze the linked card (if any); rejecting dismisses it
+  // as legitimate (no money effect). Atomic; balances stay derived.
+  if (existing.type === 'fraud_alert' && (input.action === 'approve' || input.action === 'reject')) {
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.operationsRequest.update({ where: { id: input.id }, data: decisionData });
+      await writeAudit(tx, auditFor(nextStatus));
+      return input.action === 'approve'
+        ? await confirmFraud(tx, existing, input.actor, now)
+        : await dismissFraud(tx, existing, input.actor, now);
+    });
+    return { request: toOperationsRequestDTO(result.request), event: null, events: result.events };
   }
 
   // ---- All other decisions (unchanged workflow-only behavior). --------------

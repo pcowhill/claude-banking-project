@@ -129,7 +129,7 @@ async function requireMovableAccount(
 }
 
 /** Create a clearly-labelled SIMULATED event row and return its DTO. */
-async function recordSimEvent(
+export async function recordSimEvent(
   db: DbClient,
   input: {
     channel: SimulatedEventDTO['channel'];
@@ -137,6 +137,7 @@ async function recordSimEvent(
     status: SimulatedEventDTO['status'];
     summary: string;
     detail?: string;
+    direction?: SimulatedEventDTO['direction'];
     requestId: string | null;
   },
   now: Date,
@@ -144,7 +145,7 @@ async function recordSimEvent(
   const created = await db.simulatedEvent.create({
     data: {
       channel: input.channel,
-      direction: 'outbound',
+      direction: input.direction ?? 'outbound',
       kind: input.kind,
       status: input.status,
       summary: input.summary,
@@ -363,6 +364,25 @@ export async function createExternalMovement(
   return { reference, request: toOperationsRequestDTO(request), events };
 }
 
+// ---- Generalized ledger reversal (shared by movements, disputes, fraud) ------
+
+/**
+ * Flip a set of SETTLED ledger entries (`posted` or `disputed`) to `reversed`,
+ * removing their balance effect — NEVER editing a balance. The single, shared
+ * primitive behind a reversed money movement (v0.7.0), an upheld dispute, and a
+ * confirmed fraud (v0.8.0). Pure ledger mechanics: the CALLER writes the
+ * domain-specific audit row (and any simulated event) so the trail stays
+ * meaningful. Returns the number of entries actually reversed.
+ */
+export async function reverseLedgerEntries(tx: DbClient, entryIds: string[]): Promise<number> {
+  if (entryIds.length === 0) return 0;
+  const result = await tx.ledgerEntry.updateMany({
+    where: { id: { in: entryIds }, status: { in: ['posted', 'disputed'] } },
+    data: { status: 'reversed' },
+  });
+  return result.count;
+}
+
 // ---- Approve / reject / reverse (the ledger effects of an operator action) ---
 
 /** Movement ops request types whose approval has a ledger effect. */
@@ -488,11 +508,8 @@ export async function reverseMovement(
   if (!payload) throw new MovementError('not_a_movement', 'That request is not a money movement.');
 
   const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.ledgerEntry.updateMany({
-      where: { id: { in: payload.ledgerEntryIds }, status: 'posted' },
-      data: { status: 'reversed' },
-    });
-    if (updated.count === 0) {
+    const reversedCount = await reverseLedgerEntries(tx, payload.ledgerEntryIds);
+    if (reversedCount === 0) {
       throw new MovementError('nothing_to_reverse', 'There is no posted movement to reverse.');
     }
 
@@ -509,7 +526,7 @@ export async function reverseMovement(
       entity: 'ledger_entry',
       entityId: payload.ledgerEntryIds[0] ?? requestId,
       reason,
-      metadata: { ...payload, reversedCount: updated.count, actorName: actor.displayName },
+      metadata: { ...payload, reversedCount, actorName: actor.displayName },
     });
 
     const event = await recordSimEvent(
