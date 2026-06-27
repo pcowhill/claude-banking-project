@@ -4,6 +4,7 @@ import { SimulationBanner } from './components/SimulationBanner';
 import { OpsDashboard } from './pages/OpsDashboard';
 import { RequestQueues } from './pages/RequestQueues';
 import { SimulatedMessaging } from './pages/SimulatedMessaging';
+import { SimulationClock } from './pages/SimulationClock';
 import { AdminUsers } from './pages/AdminUsers';
 import { Login } from './pages/Login';
 import { NotFound } from './pages/NotFound';
@@ -47,6 +48,7 @@ function OpsConsole() {
           <Route path="/" element={<OpsDashboard />} />
           <Route path="/queues" element={<RequestQueues />} />
           <Route path="/messaging" element={<SimulatedMessaging />} />
+          <Route path="/clock" element={<SimulationClock />} />
           <Route path="/admin" element={<AdminUsers />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

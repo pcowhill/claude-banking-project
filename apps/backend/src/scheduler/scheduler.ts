@@ -64,8 +64,17 @@ export async function runDueSchedules(upTo: Date): Promise<SchedulerResult> {
 
   const result: SchedulerResult = { fired: [], requests: [], events: [] };
   for (const schedule of due) {
-    const summary = await fireSchedule(schedule, upTo, result);
-    if (summary.runs > 0 || summary.skipped > 0) result.fired.push(summary);
+    // Guard per-schedule (defense-in-depth): one schedule failing unexpectedly
+    // must never strand the rest of this advance. `fireSchedule` already records
+    // per-occurrence skips and does not rethrow on a fire failure, so reaching
+    // this catch is a last resort (e.g. an audit/event write itself failing).
+    try {
+      const summary = await fireSchedule(schedule, upTo, result);
+      if (summary.runs > 0 || summary.skipped > 0) result.fired.push(summary);
+    } catch {
+      // swallow — the schedule's `nextRunAt` was already advanced at claim time,
+      // so it will not re-fire, and the remaining due schedules still process.
+    }
   }
   return result;
 }
@@ -198,30 +207,42 @@ async function fireSchedule(
       );
       sink.events.push(firedEvent);
     } catch (err) {
-      if (!(err instanceof MovementError)) throw err;
+      // The occurrence was already CLAIMED (nextRunAt advanced) before the money
+      // moved, so we must NOT rethrow — that would drop this occurrence silently
+      // and abort the rest of the advance. A funds/access failure (MovementError)
+      // is an expected skip; ANY OTHER error is recorded as an errored skip too
+      // (the v0.7.0 money writes are atomic, so a failed fire never half-posts).
+      // The audit/event writes are best-effort so a logging failure can't strand
+      // the loop either.
       skipped += 1;
+      const expected = err instanceof MovementError;
+      const reason = err instanceof Error ? err.message : 'Unknown error';
       const skipEvent = await recordSimEvent(
         prisma,
         {
           channel: 'email',
-          kind: 'schedule_skipped',
+          kind: expected ? 'schedule_skipped' : 'schedule_fire_errored',
           status: 'failed',
           summary: `Scheduled ${label.toLowerCase()} skipped — ${formatMinor(schedule.amountMinor)} (simulated)`,
-          detail: `Simulated: ${err.message}`,
+          detail: `Simulated: ${reason}`,
           requestId: null,
         },
         occurrenceAt,
-      );
-      sink.events.push(skipEvent);
+      ).catch(() => null);
+      if (skipEvent) sink.events.push(skipEvent);
       await writeAudit(prisma, {
         actorId: schedule.user.id,
         actorRole: 'system',
-        action: 'schedule_payment_skipped',
+        action: expected ? 'schedule_payment_skipped' : 'schedule_fire_errored',
         entity: 'payment_schedule',
         entityId: schedule.id,
-        reason: err.message,
-        metadata: { occurrenceISO: occurrenceAt.toISOString(), code: err.code, amountMinor: schedule.amountMinor },
-      });
+        reason,
+        metadata: {
+          occurrenceISO: occurrenceAt.toISOString(),
+          code: expected ? (err as MovementError).code : 'error',
+          amountMinor: schedule.amountMinor,
+        },
+      }).catch(() => undefined);
     }
 
     nextRunAt = following;

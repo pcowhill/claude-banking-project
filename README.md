@@ -13,8 +13,9 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.8.0 — Cards, fraud, disputes` (builds on `v0.7.0 — Money
-movement`; see `ROADMAP.md` and `docs/process/MILESTONE_REPORT_v0.8.0.md`).
+**Current milestone:** `v0.9.0 — Simulation clock & scheduled payments` (builds on
+`v0.8.0 — Cards, fraud, disputes`; see `ROADMAP.md` and
+`docs/process/MILESTONE_REPORT_v0.9.0.md`).
 
 ## Tech stack
 
@@ -76,6 +77,29 @@ Run `npm run db:reset` first to seed these users.
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
+
+### New in v0.9.0 (simulation clock, scheduled payments, statements)
+
+- **A controllable simulation clock.** Sign in to the operations console (`:5174`) as
+  **Sam** and open the new **Simulation clock** page (`/clock`). It shows the current
+  **simulated** date (seeded to the demo's seed instant) and lets you **advance time
+  forward** (forward-only, audited). `GET /api/clock` exposes the same clock to the
+  apps; the live `sim:heartbeat` now also carries the simulation time.
+- **Recurring / scheduled payments.** Sign in as **Avery** and open **Scheduled
+  payments** (`/scheduled-payments`). Create a schedule — an **internal transfer**
+  between your own accounts or a **bill pay** — running **once**, **weekly**, or
+  **monthly**; list and **cancel** schedules. **Advancing the clock fires what is now
+  due:** a transfer posts **both ledger legs** (nets to zero); a bill pay posts a
+  **Pending** entry **plus** a reviewable item in the operator queue. An occurrence with
+  insufficient funds is **skipped and audited** (never a bad balance).
+- **Statement cycles.** **Statements & documents** (`/statements`) is now real — monthly
+  statement periods derived from the **simulated** date, read-only over the posted
+  ledger (this replaces the v0.4.0 placeholder).
+- **Money discipline (unchanged):** every scheduled fire is an explicit **ledger** entry
+  posted through the same v0.7.0 money service; nothing edits a balance; balances stay
+  derived. The only schema change is the additive **`scheduled_payments`** migration; the
+  clock is **forward-only** and fires on advance (no wall-clock background timer). See
+  `docs/process/decisions/ADR-0002-simulation-clock-and-scheduler.md`.
 
 ### New in v0.8.0 (cards, fraud, disputes)
 

@@ -5,12 +5,19 @@ import {
   SOCKET_EVENTS,
   type OpsExternalEventPayload,
   type OpsRequestChangedPayload,
+  type SimHeartbeatPayload,
 } from '@simbank/shared';
 import { API_URL } from './api';
 
 export interface OpsSocketHandlers {
   onRequestChanged?: (payload: OpsRequestChangedPayload) => void;
   onExternalEvent?: (payload: OpsExternalEventPayload) => void;
+  /**
+   * Periodic server heartbeat carrying the simulation clock (v0.9.0). Lets the
+   * console show the live simulated date without polling. Optional + additive —
+   * older callers that don't pass it are unaffected.
+   */
+  onHeartbeat?: (payload: SimHeartbeatPayload) => void;
 }
 
 /**
@@ -43,6 +50,9 @@ export function useOpsSocket(handlers: OpsSocketHandlers): { connected: boolean 
     });
     socket.on(SOCKET_EVENTS.opsExternalEvent, (payload: OpsExternalEventPayload) => {
       handlersRef.current.onExternalEvent?.(payload);
+    });
+    socket.on(SOCKET_EVENTS.heartbeat, (payload: SimHeartbeatPayload) => {
+      handlersRef.current.onHeartbeat?.(payload);
     });
 
     return () => {

@@ -531,11 +531,18 @@ export function Dashboard() {
             <div className="mt-0.5 text-xs text-slate-500">Pay a biller (queued for review)</div>
           </Link>
           <Link
+            to="/scheduled-payments"
+            className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+          >
+            <div className="font-medium text-brand-navy">Scheduled payments</div>
+            <div className="mt-0.5 text-xs text-slate-500">Recurring transfers &amp; bills</div>
+          </Link>
+          <Link
             to="/statements"
             className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
           >
             <div className="font-medium text-brand-navy">Statements &amp; documents</div>
-            <div className="mt-0.5 text-xs text-slate-500">Monthly statements (coming soon)</div>
+            <div className="mt-0.5 text-xs text-slate-500">Monthly account statements</div>
           </Link>
           <Link
             to="/wallet"

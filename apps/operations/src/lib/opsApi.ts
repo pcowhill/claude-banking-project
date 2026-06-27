@@ -1,4 +1,7 @@
 import type {
+  AdvanceClockRequest,
+  AdvanceClockResponse,
+  ClockResponse,
   OperationsQueueResponse,
   OperationsRequestDetailDTO,
   OperationsRequestDetailResponse,
@@ -7,6 +10,7 @@ import type {
   OperatorActionResponse,
   OperationsRequestDTO,
   ReverseMovementRequest,
+  ScheduleDTO,
   SimulateEventRequest,
   SimulateEventResponse,
   SimulatedEventDTO,
@@ -88,4 +92,34 @@ export async function reverseMovement(
     { method: 'POST', body: JSON.stringify({ reason } satisfies ReverseMovementRequest) },
   );
   return res.request;
+}
+
+// ---- Simulation clock (v0.9.0) ----------------------------------------------
+//
+// The clock is a fake, operator-controlled "now". GET is open to any signed-in
+// user (display only); advancing and listing every customer's schedules are
+// ops_agent/admin only (RBAC enforced server-side). Advancing FIRES due
+// scheduled payments — every fire is a real SIMULATED ledger entry.
+
+/** GET /api/clock — the current simulated time + speed (display only). */
+export function fetchClock(): Promise<ClockResponse> {
+  return apiRequest<ClockResponse>('/api/clock');
+}
+
+/**
+ * POST /api/ops/clock/advance — step the simulation clock FORWARD by the given
+ * days/hours/minutes, firing every schedule that becomes due. Returns the new
+ * clock plus a per-schedule summary of what fired. Throws {@link ApiError} on a
+ * non-forward / out-of-range advance (validate with `validateAdvance` first).
+ */
+export function advanceClock(body: AdvanceClockRequest): Promise<AdvanceClockResponse> {
+  return apiRequest<AdvanceClockResponse>('/api/ops/clock/advance', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/** GET /api/ops/schedules — every customer's scheduled / recurring payments. */
+export function fetchSchedules(): Promise<{ schedules: ScheduleDTO[] }> {
+  return apiRequest<{ schedules: ScheduleDTO[] }>('/api/ops/schedules');
 }

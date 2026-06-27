@@ -1,6 +1,6 @@
 {
   "name": "@simbank/shared",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "description": "Shared TypeScript types, constants, branding tokens, and pure simulation logic (money + ledger math) used by the backend and both frontend apps.",

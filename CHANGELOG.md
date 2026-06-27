@@ -8,9 +8,68 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v0.9.0** — carries **recurring/scheduled payments** (deferred
-  from v0.7.0; needs the simulation clock / scheduled-event processing roadmapped
-  there) alongside the planned v0.9.0 scope.
+- Next milestone: **v1.0.0** — polish, hardening, security pass (incl. the tracked
+  SEC-1 CSRF item + the dev-tooling audit advisories), test expansion, and the final
+  experiment retrospective. The rest of the v0.9.0 theme — **loans / CDs / interest
+  accrual** — remains roadmapped beyond this clock-and-scheduler slice.
+
+## [0.9.0] — 2026-06-27 — Simulation clock & scheduled payments
+
+A controllable **simulation clock** and a **clock-driven scheduler** for
+**recurring / scheduled payments** (the item deferred from v0.7.0 *because* it
+needs the clock), plus **statement cycles** derived from the clock. Still a local
+**SIMULATION**: no real money, billers, payment networks, or wall-clock timer. The
+**only** schema change is an **additive** migration adding `PaymentSchedule` (no
+existing table altered). Every scheduled fire moves money **only** via ledger
+entries; the clock is **forward-only** and **audited**.
+
+### Added
+
+- **Simulation clock.** A controllable, operator-driven "now" for the simulation.
+  `GET /api/clock` (any signed-in user — display) and `POST /api/ops/clock/advance`
+  (`ops_agent`/`admin`) which advances the clock **forward only** (audited) and then
+  **fires** every now-due schedule. The `sim:heartbeat` socket event now also carries
+  `simulationTime` (backward-compatible) so a console shows the live simulated date.
+- **Recurring / scheduled payments.** A customer schedules a one-off-future or
+  recurring (`once`/`weekly`/`monthly`) **internal transfer** or **bill pay**:
+  `POST /api/schedules`, `GET /api/schedules`, `POST /api/schedules/:id/cancel`
+  (all `requireAuth`, access-scoped). When the clock passes a schedule's due date the
+  scheduler FIRES it through the **v0.7.0 money service** — an internal transfer posts
+  **both** `transfer` legs at the due date (nets to zero); a bill pay writes a
+  **pending** `payment` debit + a linked ops review item an operator approves. Catch-up
+  is bounded; insufficient funds → the occurrence is **skipped** (no entry) + audited.
+- **Statement cycles.** `GET /api/accounts/:id/statements` (access-scoped) derives
+  monthly **statement periods** ending at the simulated date — opening/closing balance,
+  period credits/debits, settled-entry count — read-only from the posted ledger (no
+  stored statement, no real PDF).
+- **Customer UI.** A new **`/scheduled-payments`** page (create / list / cancel +
+  the current simulated date) and a Dashboard quick link; the **`/statements`** page is
+  upgraded from a placeholder to a real per-account monthly statement view.
+- **Operations UI.** A new **Simulation clock** console page (`/clock`, promoted from
+  the "coming soon" nav): the live simulated date, a **fast-forward** control showing
+  what fired, and a table of every customer schedule.
+- **Shared contracts.** `@simbank/shared/clock` (advance bounds + `validateAdvance` +
+  `SimHeartbeatPayload`), `@simbank/shared/schedules` (kinds/frequencies/statuses, DTOs,
+  `validateCreateSchedule`, the calendar-safe `addInterval`), and
+  `@simbank/shared/statements` (`buildStatementPeriods` + `summarizeStatementPeriod`).
+- **Seed.** Two demo schedules for Avery (a monthly checking→savings transfer; a
+  monthly bill pay) due a few days out, plus `assertSeedScheduleIntegrity`; the
+  simulation clock is reset to seed time on every seed.
+
+### Changed
+
+- The **scheduler** dates each fired ledger entry at its simulated **due date**, and
+  schedule due-dates + the statements window read the simulation clock; immediate
+  transfers/movements and ops actions keep wall-clock timestamps so same-session
+  entries stay monotonically ordered (see `docs/process/decisions/ADR-0002`).
+- The `sim:heartbeat` payload gained an optional `simulationTime` field.
+
+### Notes
+
+- One **additive** Prisma migration `scheduled_payments` (`PaymentSchedule` only).
+- Money discipline unchanged and tested: every fire is a `LedgerEntry`; no balance is
+  stored/edited; transfers net to zero; reversals/admin adjustments keep a reason +
+  audit; balances stay DERIVED.
 
 ## [0.8.0] — 2026-06-27 — Cards, fraud, disputes
 

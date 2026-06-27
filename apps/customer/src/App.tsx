@@ -15,6 +15,7 @@ import { Dashboard } from './pages/Dashboard';
 import { AccountDetail } from './pages/AccountDetail';
 import { MoveMoney } from './pages/MoveMoney';
 import { Wallet } from './pages/Wallet';
+import { ScheduledPayments } from './pages/ScheduledPayments';
 import { Statements } from './pages/Statements';
 import { NotFound } from './pages/NotFound';
 
@@ -32,7 +33,8 @@ import { NotFound } from './pages/NotFound';
  *  - "/accounts/:id" authenticated account detail + transactions (protected)
  *  - "/move-money"   authenticated money movement — transfer/deposit/send/bill (protected)
  *  - "/wallet"       authenticated cards manager — freeze/replace/travel notices (protected)
- *  - "/statements"   authenticated statements/documents placeholder (protected)
+ *  - "/scheduled-payments" authenticated recurring/scheduled payments (protected)
+ *  - "/statements"   authenticated per-account simulated statements (protected)
  *  - "*"             not found
  *
  * The whole tree is wrapped in <AuthProvider> so the nav and protected routes
@@ -82,6 +84,14 @@ export function App() {
               element={
                 <RequireAuth>
                   <Wallet />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/scheduled-payments"
+              element={
+                <RequireAuth>
+                  <ScheduledPayments />
                 </RequireAuth>
               }
             />
