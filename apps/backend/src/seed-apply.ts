@@ -9,6 +9,7 @@ import {
   assertSeedMovementIntegrity,
   assertSeedOnboardingIntegrity,
   assertSeedOpsIntegrity,
+  assertSeedScheduleIntegrity,
   type SeedPlan,
 } from './seed-plan';
 
@@ -30,6 +31,7 @@ export interface SeedResult {
   onboardingApplications: number;
   invitations: number;
   cards: number;
+  schedules: number;
 }
 
 export async function applySeedPlan(
@@ -43,9 +45,11 @@ export async function applySeedPlan(
   assertSeedOnboardingIntegrity(plan);
   assertSeedMovementIntegrity(plan);
   assertSeedCardIntegrity(plan);
+  assertSeedScheduleIntegrity(plan);
 
   await prisma.loginEvent.deleteMany();
   await prisma.session.deleteMany();
+  await prisma.paymentSchedule.deleteMany();
   await prisma.accountInvitation.deleteMany();
   await prisma.cardTravelNotice.deleteMany();
   await prisma.card.deleteMany();
@@ -272,10 +276,42 @@ export async function applySeedPlan(
     });
   }
 
+  // Scheduled / recurring payments (v0.9.0). Due `firstRunInDays` after seed time
+  // so a small clock advance FIRES them through the money service. No money moves
+  // at seed — only the instruction is written.
+  for (const s of plan.schedules) {
+    const userId = userIdByEmail.get(s.ownerEmail.toLowerCase());
+    const fromAccountId = accountIdByKey.get(s.fromAccountKey);
+    const toAccountId = s.toAccountKey ? accountIdByKey.get(s.toAccountKey) : null;
+    if (!userId) throw new Error(`Seed references an unknown schedule owner: ${s.ownerEmail}`);
+    if (!fromAccountId) throw new Error(`Seed references an unknown schedule account key: ${s.fromAccountKey}`);
+    if (s.toAccountKey && !toAccountId) {
+      throw new Error(`Seed references an unknown schedule destination key: ${s.toAccountKey}`);
+    }
+    await prisma.paymentSchedule.create({
+      data: {
+        userId,
+        kind: s.kind,
+        fromAccountId,
+        toAccountId: s.kind === 'internal_transfer' ? toAccountId : null,
+        counterparty: s.kind === 'bill_pay' ? (s.counterparty ?? null) : null,
+        memo: s.memo ?? null,
+        amountMinor: s.amountMinor,
+        frequency: s.frequency,
+        nextRunAt: new Date(now.getTime() + s.firstRunInDays * DAY_MS),
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
+  // The simulation clock starts at seed time. Reset it on every seed so the demo
+  // (and tests) get a deterministic "now" aligned with the seeded history.
   await prisma.simulationClock.upsert({
     where: { id: 'singleton' },
-    update: {},
-    create: { id: 'singleton' },
+    update: { currentTime: now, speed: 1 },
+    create: { id: 'singleton', currentTime: now, speed: 1 },
   });
 
   await prisma.auditLog.create({
@@ -284,21 +320,43 @@ export async function applySeedPlan(
       action: 'seed_database',
       entity: 'system',
       reason:
-        'Demo seed (v0.8.0: demo users + access grants + dated transaction history + operations queue + simulated events + an approvable onboarding application + a pending joint invitation + reviewable money movements each linked to its pending ledger entry + simulated cards + a fraud alert linked to a card/charge and an open dispute on a disputed charge)',
+        'Demo seed (v0.9.0: demo users + access grants + dated transaction history + operations queue + simulated events + an approvable onboarding application + a pending joint invitation + reviewable money movements each linked to its pending ledger entry + simulated cards + a fraud alert linked to a card/charge + an open dispute on a disputed charge + recurring scheduled payments, with the simulation clock reset to seed time)',
     },
   });
 
-  const [users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations, cards] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.account.count(),
-      prisma.ledgerEntry.count(),
-      prisma.accountAccess.count(),
-      prisma.operationsRequest.count(),
-      prisma.simulatedEvent.count(),
-      prisma.onboardingApplication.count(),
-      prisma.accountInvitation.count(),
-      prisma.card.count(),
-    ]);
-  return { users, accounts, entries, grants, opsRequests, simulatedEvents, onboardingApplications, invitations, cards };
+  const [
+    users,
+    accounts,
+    entries,
+    grants,
+    opsRequests,
+    simulatedEvents,
+    onboardingApplications,
+    invitations,
+    cards,
+    schedules,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.account.count(),
+    prisma.ledgerEntry.count(),
+    prisma.accountAccess.count(),
+    prisma.operationsRequest.count(),
+    prisma.simulatedEvent.count(),
+    prisma.onboardingApplication.count(),
+    prisma.accountInvitation.count(),
+    prisma.card.count(),
+    prisma.paymentSchedule.count(),
+  ]);
+  return {
+    users,
+    accounts,
+    entries,
+    grants,
+    opsRequests,
+    simulatedEvents,
+    onboardingApplications,
+    invitations,
+    cards,
+    schedules,
+  };
 }

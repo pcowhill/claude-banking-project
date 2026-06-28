@@ -1,7 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
 import {
+  buildStatementPeriods,
   deriveBalances,
   filterTransactions,
+  summarizeStatementPeriod,
   toTransactionDTOs,
   type AccountRelationship,
   type AccountStatus,
@@ -11,6 +13,8 @@ import {
   type LedgerOrigin,
   type LedgerStatus,
   type RawLedgerRow,
+  type StatementEntryLike,
+  type StatementPeriodDTO,
   type TransactionDTO,
   type TransactionQuery,
 } from '@simbank/shared';
@@ -192,4 +196,41 @@ export async function listAccountTransactions(
   const all = toTransactionDTOs(account.ledgerEntries.map(toRawLedgerRow));
   const transactions = filterTransactions(all, query);
   return { exists: true, summary, transactions };
+}
+
+/**
+ * Monthly STATEMENT PERIODS for one account, ending with the month that contains
+ * `now` (simulation time), scoped by the SAME access rules as a single-account
+ * read (404 / 403 / ok). Each period's opening/closing/credits/debits are DERIVED
+ * read-only from the account's settled (posted/disputed) ledger via the shared
+ * pure helpers — nothing is stored and there is no real PDF (v0.9.0).
+ */
+export async function getAccountStatements(
+  prisma: PrismaClient,
+  userId: string,
+  accountId: string,
+  now: Date,
+  monthsBack = 6,
+): Promise<{ exists: boolean; summary: AccountSummary | null; periods: StatementPeriodDTO[] }> {
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    include: { ledgerEntries: true },
+  });
+  if (!account) return { exists: false, summary: null, periods: [] };
+
+  const relationship = await getAccountRelationship(prisma, userId, accountId);
+  if (!relationship) return { exists: true, summary: null, periods: [] };
+
+  const summary = toSummary(account, relationship);
+  const entries: StatementEntryLike[] = account.ledgerEntries.map((e) => ({
+    amountMinor: e.amountMinor,
+    direction: e.direction as LedgerDirection,
+    status: e.status as LedgerStatus,
+    at: (e.postedAt ?? e.createdAt).getTime(),
+  }));
+  const periods = buildStatementPeriods(now, monthsBack).map((bounds) => ({
+    ...bounds,
+    ...summarizeStatementPeriod(entries, bounds),
+  }));
+  return { exists: true, summary, periods };
 }

@@ -43,6 +43,7 @@ model User {
   loginEvents     LoginEvent[]
   sentInvitations AccountInvitation[] @relation("InvitedBy")
   cards           Card[]              @relation("CardHolder")
+  paymentSchedules PaymentSchedule[]  @relation("ScheduleOwner")
 }
 
 /// A server-side session. The opaque token lives ONLY in the user's httpOnly
@@ -115,6 +116,8 @@ model Account {
   access        AccountAccess[]
   invitations   AccountInvitation[]
   cards         Card[]
+  schedulesFrom PaymentSchedule[]   @relation("ScheduleFrom")
+  schedulesTo   PaymentSchedule[]   @relation("ScheduleTo")
 
   @@index([userId])
 }
@@ -318,4 +321,43 @@ model CardTravelNotice {
   createdAt   DateTime @default(now())
 
   @@index([cardId])
+}
+
+/// A SIMULATED recurring / scheduled payment (v0.9.0). The customer schedules a
+/// future-dated or recurring `internal_transfer` (between their own accounts) or
+/// `bill_pay` (to a biller). When the SIMULATION CLOCK passes `nextRunAt`, the
+/// scheduler FIRES it by appending real LedgerEntry rows via the v0.7.0 money
+/// service — an internal transfer posts BOTH `transfer` legs (nets to zero), a
+/// bill pay writes a PENDING `payment` debit + a linked OperationsRequest an
+/// operator approves. MONEY DISCIPLINE: this row holds only the INSTRUCTIONS; it
+/// never stores or edits a balance, and firing is the only thing that moves money.
+model PaymentSchedule {
+  id     String @id @default(cuid())
+  // The owner who created the schedule; the firing actor, so access can never
+  // exceed what this user already holds on the accounts involved.
+  userId String
+  user   User   @relation("ScheduleOwner", fields: [userId], references: [id], onDelete: Cascade)
+  kind   String // internal_transfer | bill_pay (see ScheduleKind in @simbank/shared)
+  // Source account (debited). For internal_transfer, `toAccountId` is the destination.
+  fromAccountId String
+  fromAccount   Account @relation("ScheduleFrom", fields: [fromAccountId], references: [id], onDelete: Cascade)
+  toAccountId   String?
+  toAccount     Account? @relation("ScheduleTo", fields: [toAccountId], references: [id], onDelete: SetNull)
+  // Biller / payee label for a bill pay (display only; SIMULATION).
+  counterparty String?
+  memo         String?
+  amountMinor  Int // positive integer minor units
+  frequency    String // once | weekly | monthly (see ScheduleFrequency)
+  // Next due date, read against the SIMULATION clock. Null once terminal.
+  nextRunAt DateTime?
+  status    String    @default("active") // active | completed | cancelled (ScheduleStatus)
+  // Firing bookkeeping (the actual money lives in the ledger, not here).
+  lastRunAt DateTime?
+  runCount  Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([nextRunAt])
 }

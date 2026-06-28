@@ -19,3 +19,6 @@ export * from './onboarding';
 export * from './money-movement';
 export * from './cards';
 export * from './risk';
+export * from './clock';
+export * from './schedules';
+export * from './statements';

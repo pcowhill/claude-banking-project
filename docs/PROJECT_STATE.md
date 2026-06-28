@@ -6,23 +6,28 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.8.0` — Cards, fraud, disputes (a **feature**
-  milestone). An annotated tag `v0.8.0` is created locally on the milestone commit;
-  **pushing tags is blocked by this environment's git policy (HTTP 403)**, so the
-  human (re)creates/pushes the tag on merge to `main` — see
-  `docs/process/MILESTONE_REPORT_v0.8.0.md` for the exact command. (Builds on v0.7.0
-  money movement.)
-- **What v0.8.0 added:** **Cards** (a new `Card` lifecycle — issue a simulated
-  debit/credit card, freeze/unfreeze, report lost/stolen → a **replacement** card,
-  travel notices; customer UI at **/wallet**; writes **no ledger**). **Fraud**
-  (`fraud_alert` ops items the customer confirms/denies and an operator resolves —
-  approve = confirm fraud → reverse the charge + freeze the card; reject = dismiss).
-  **Disputes** (a customer disputes a posted txn → `posted`→`disputed`; operator
-  approve = uphold → `disputed`→`reversed` refund; reject = deny → back to `posted`).
-  **R-03** — a reversed movement / upheld dispute / confirmed fraud now shows a
-  **"Reversed"** tag beside **Approved** on the ops queue, dashboard, and detail.
-  **One additive Prisma migration** (`Card` + `CardTravelNotice`). A customer **cannot
-  dispute an internal transfer leg** (it must net to zero).
+- **Current version / tag:** `v0.9.0` — Simulation clock & scheduled payments (a
+  **feature** milestone). An annotated tag `v0.9.0` is created locally on the milestone
+  commit; **pushing tags is blocked by this environment's git policy (HTTP 403)**, so
+  the human (re)creates/pushes the tag on merge to `main` — see
+  `docs/process/MILESTONE_REPORT_v0.9.0.md` for the exact command. (Builds on v0.7.0
+  money movement + v0.5.0 ops queue.)
+- **What v0.9.0 added:** a controllable **simulation clock** (`GET /api/clock`;
+  ops/admin `POST /api/ops/clock/advance` — **forward-only**, audited — which then
+  **fires** due schedules; `GET /api/ops/schedules`). **Recurring/scheduled payments**
+  (the `M-09` item carried from v0.7.0): a customer schedules a one-off-future or
+  recurring (`once`/`weekly`/`monthly`) **internal transfer** or **bill pay**
+  (`POST/GET /api/schedules`, `POST /api/schedules/:id/cancel`); when the clock passes
+  the due date a **scheduler** fires it through the v0.7.0 money service (transfer posts
+  both legs → nets to zero; bill pay → a pending entry + a reviewable ops item).
+  **Statement cycles** (`GET /api/accounts/:id/statements`) derive monthly periods from
+  the simulated date. Customer UI at **/scheduled-payments** + an upgraded **/statements**;
+  operations **Simulation clock** page at **/clock**. **One additive Prisma migration**
+  (`PaymentSchedule`). The `sim:heartbeat` event now also carries `simulationTime`
+  (backward-compatible; no new socket event). Design: `docs/process/decisions/ADR-0002`.
+- **Earlier feature milestone:** `v0.8.0` — Cards, fraud, disputes (card lifecycle at
+  **/wallet**; `fraud_alert` confirm/deny + operator confirm→reverse+freeze; disputes
+  uphold→reverse / deny→posted; the R-03 **"Reversed"** tag). Still fully in place.
 - **Earlier feature milestone:** `v0.7.0` — Money movement (the first where an
   operator approval MOVES money; internal transfers, reviewable external movements,
   approve→post / reject→fail / reverse). Still fully in place.
@@ -46,25 +51,28 @@
 - **What v0.6.x fixed (still in place):** **B-03** narrow-width ☰ nav; **B-04**
   expired-session recovery; **B-06** the surface-header session resolution (operator
   sign-in). All green.
-- **Next milestone:** `v0.9.0` — simulation clock + **recurring/scheduled payments**
-  (carried from v0.7.0; they need the clock) + statement cycles (see ROADMAP).
-- **Working branch (this session):** `claude/keen-einstein-rxfkq0` (the Claude Code
-  Cloud session branch; intended milestone name `milestone/v0.8.0-cards-fraud-disputes`).
-- **Gate status:** `npm run verify` ✅ passes. **282** unit/integration tests (was
-  240; **+42**: 12 shared cards, 8 shared risk, 5 seed-plan card, 17 backend
-  cards/fraud/dispute integration) + **41** Playwright e2e green (was 37; **+4**
-  cards/fraud/dispute journeys). **0 lint warnings.** One **additive** migration
-  (`cards`); **runtime `npm audit` = 0**. Security review **PASS-with-findings** (all
-  Low/tracked; one acted on — internal transfer legs are not disputable; SEC-1 CSRF
-  still Lax+CORS-mitigated → v1.0.0; the TOCTOU note now also covers a cosmetic
-  fraud-response write).
+- **Next milestone:** `v1.0.0` — polish, hardening, security pass (incl. the tracked
+  SEC-1 CSRF item + the dev-tooling audit advisories), test expansion, final
+  retrospective. The rest of the v0.9.0 theme — **loans / CDs / interest accrual** —
+  remains roadmapped beyond this clock-and-scheduler slice (see `ROADMAP_HISTORY.md`).
+- **Working branch (this session):** `claude/happy-franklin-q41de0` (the Claude Code
+  Cloud session branch; intended milestone name `milestone/v0.9.0-simulation-clock`).
+- **Gate status:** `npm run verify` ✅ passes. **332** unit/integration tests (was 282):
+  new shared clock/schedules/statements contract tests, **16** clock+scheduler+statements
+  backend integration tests, and seed-plan schedule tests + **44** Playwright e2e green
+  (was 41; **+3** scheduled-payments journeys). **0 lint warnings.** One **additive**
+  migration (`scheduled_payments`); **runtime `npm audit` = 0**. Security review
+  **PASS-with-findings** (no Critical/High/Medium; one Low acted on — the scheduler now
+  records a fire failure as a skip instead of rethrowing after claim, with the
+  per-schedule loop guarded; L-2/L-3 bookkeeping/TOCTOU tracked; SEC-1 CSRF still
+  Lax+CORS-mitigated → v1.0.0).
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
-  `npm run dev`. v0.8.0 headline flow: as **Avery** at `:5173/wallet` manage a **card**
-  (freeze / report→replace / travel notice), **dispute** a posted transaction from an
-  account, and confirm/deny the **fraud alert** on the dashboard; then as **Sam**
-  (`:5174` → Request queues) **approve** the dispute (uphold → reversed) or the fraud
-  alert (confirm → reversed + card frozen) and see the new **"Reversed"** tag. (v0.7.0
-  money movement at `/move-money` still works the same way.)
+  `npm run dev`. v0.9.0 headline flow: as **Avery** at `:5173/scheduled-payments` create
+  a **schedule** (transfer or bill pay) and see the current simulated date; then as
+  **Sam** at `:5174` open **Simulation clock**, **fast-forward** (e.g. +1 week) and watch
+  due schedules **fire** (transfers post; bill pays queue a review in Request queues to
+  approve); back as Avery the dashboard balances + **/statements** reflect it. (v0.8.0
+  cards/fraud/disputes and v0.7.0 money movement still work the same way.)
 - **Money discipline — now exercised on real movement.** Money moves ONLY via explicit
   `LedgerEntry` rows; **no balance is ever stored or edited.** Transfers post both legs
   and net to zero; external value enters only via a bank-originated posted `deposit`
@@ -82,7 +90,7 @@
 - CI: `.github/workflows/ci.yml` (verify job + Playwright job).
 
 ### packages/shared (`@simbank/shared`)
-- `version.ts` (APP_VERSION 0.7.0, milestone meta, `IS_SIMULATION`), `brand.ts`
+- `version.ts` (APP_VERSION 0.9.0, milestone meta, `IS_SIMULATION`), `brand.ts`
   (Meridian tokens), `constants.ts` (ports, socket events — now incl. the ops
   events + `OPS_REALTIME_ROOM`), `types.ts` (roles, account/ops enums-as-unions,
   API DTOs), `money.ts`, `ledger.ts`,
@@ -98,9 +106,16 @@
   `countRequestsByStatus` helpers; v0.7.0 adds the `bill_pay` type), and
   **`money-movement.ts`** (v0.7.0: movement kinds, direction/origin mapping, bounds,
   the `MovementPayload` + `asMovementPayload`, and the pure `validateTransfer` /
-  `validateExternalMovement` validators + `movementOpsType`).
+  `validateExternalMovement` validators + `movementOpsType`),
+  **`cards.ts`** + **`risk.ts`** (v0.8.0: card + fraud/dispute enums, DTOs, validators,
+  masking; `isRequestReversed`), and
+  **`clock.ts`** / **`schedules.ts`** / **`statements.ts`** (v0.9.0: the simulation-clock
+  advance bounds + `validateAdvance` + `SimHeartbeatPayload`; schedule kinds/frequencies/
+  statuses, DTOs, `validateCreateSchedule`, the calendar-safe `addInterval`,
+  `ScheduleFireSummary`; and the pure `buildStatementPeriods` / `summarizeStatementPeriod`).
 - **Money/ledger + transaction-derivation logic is the tested core** (see
-  TEST_STRATEGY); the ops contract is likewise pure + unit-tested.
+  TEST_STRATEGY); the ops + money-movement + clock/schedule/statement contracts are
+  likewise pure + unit-tested.
 
 ### apps/backend (Fastify 5 + Socket.IO + Prisma/SQLite)
 - `buildServer({ opsRealtime? })` (testable; registers `@fastify/cookie`; decorates
@@ -275,6 +290,37 @@
   existing table altered. Shared `@simbank/shared/risk` holds the fraud/dispute payloads
   + validators.
 
+### Simulation clock, scheduled payments & statements (v0.9.0)
+- **Simulation clock:** a controllable, operator-driven "now". `src/clock/clock.ts`
+  exposes `simulationNow` + a **forward-only**, audited `advanceClock`. `GET /api/clock`
+  (any signed-in user — display) and `POST /api/ops/clock/advance` (ops/admin) which
+  advances the clock and then **fires** due schedules; `GET /api/ops/schedules` lists all.
+  The clock is **reset to seed time** on every seed (deterministic demo/tests).
+- **Scheduler:** `src/scheduler/scheduler.ts` `runDueSchedules(upTo)` fires every active
+  schedule whose `nextRunAt` has been passed, REUSING the v0.7.0 money service — an
+  **internal transfer** posts both `transfer` legs at the due date (nets to zero); a
+  **bill pay** writes a **pending** `payment` debit + a linked reviewable ops item. It
+  **claims** each occurrence (advances `nextRunAt`) before the money moves so an
+  interruption can't double-fire; **catch-up** is bounded per advance; a fire that fails
+  its funds/access check is **skipped** (no entry) + audited (never silently dropped, and
+  never rethrown after claim — the per-schedule loop is guarded).
+- **Schedules:** `src/scheduler/schedules.ts` — `createSchedule` (access-checked) /
+  `listSchedulesForUser` / `listAllSchedules` / `cancelSchedule` (owner-only). Customer
+  routes `POST/GET /api/schedules`, `POST /api/schedules/:id/cancel` (`routes/schedules.ts`).
+- **Statement cycles:** `GET /api/accounts/:id/statements` (access-scoped, in
+  `routes/accounts.ts` via `auth/access.ts` `getAccountStatements`) derives monthly
+  periods from the simulated date read-only over the posted ledger (opening/closing +
+  credits/debits + count). No stored statement, no real PDF.
+- **Real-time:** the `sim:heartbeat` event now also carries `simulationTime` (best-effort
+  clock read; **backward-compatible — no new socket event**); fired bill-pay reviews reuse
+  the existing `ops:request_changed` channel.
+- **Customer UI:** `/scheduled-payments` (create/list/cancel + the simulated date) +
+  an upgraded `/statements`. **Operations UI:** a **Simulation clock** page at `/clock`
+  (live date, fast-forward + fired summary, all-schedules table).
+- **Schema:** one **additive** migration `scheduled_payments` (`PaymentSchedule` only);
+  no existing table altered. The time model + decisions are recorded in
+  **`docs/process/decisions/ADR-0002-simulation-clock-and-scheduler.md`**.
+
 ### Branding & assets
 - `assets/brand/` logo SVGs (horizontal/mark/mono-light) + README.
 - `assets/prompts/IMAGE_GENERATION_PROMPTS.md` (5 marketing prompts).
@@ -287,11 +333,13 @@
 - `.claude/agents/` role definitions for the controlled multi-agent workflow.
 
 ## NOT built yet (by design — future milestones)
-- **Recurring / scheduled payments + the simulation clock** — deferred from v0.7.0 to
-  **v0.9.0** because they require the **simulation clock + scheduled-event processing**
-  roadmapped there (a scheduler with nothing to fire it would be a non-functional stub).
-  One-off money movement is **done in v0.7.0**; **cards / fraud / disputes** are **done
-  in v0.8.0**.
+- **Recurring / scheduled payments + the simulation clock + statement cycles are DONE in
+  v0.9.0.** One-off money movement is done in v0.7.0; cards / fraud / disputes in v0.8.0.
+- **Loans / CDs / interest accrual** — the rest of the broader v0.9.0 "simulated time"
+  roadmap theme. **Not** in the v0.9.0 clock-and-scheduler slice; carried forward
+  (see `ROADMAP_HISTORY.md`). A future milestone (v0.9.x or part of v1.0.0 scoping).
+- **Auto-advance of the clock by a "speed" multiplier** — out of scope for v0.9.0 (the
+  clock moves only on an explicit operator advance; the `speed` column is informational).
 - **A dedicated `credit_card` account product** — v0.8.0 cards attach to existing
   checking/savings accounts (the `Card.cardType` distinguishes debit/credit); a real
   credit-account product (with a credit line) is a possible later milestone.
@@ -299,7 +347,6 @@
   (deferred within the auth theme). v0.6.0 uses the simulated-messaging seam for
   **onboarding** identity/MFA (the review's **Q-02**); customer-facing login-time
   2FA — which will create a `SimulatedEvent` OTP per the same seam — lands later.
-- Cards, fraud, loans, CDs, simulated time + real statement cycles (v0.8.0–v0.9.0).
 - Frontend component unit tests (still deferred; auth + dashboard + ops console UIs
   are covered by build + Playwright journeys + backend/contract tests for now — see
   QUALITY_REPORT).

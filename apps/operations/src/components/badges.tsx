@@ -1,9 +1,11 @@
 import {
   channelLabel,
   opsStatusLabel,
+  scheduleStatusLabel,
   OPS_PRIORITY_LABELS,
   type OpsRequestPriority,
   type OpsRequestStatus,
+  type ScheduleStatus,
   type SimEventChannel,
   type SimEventStatus,
 } from '@simbank/shared';
@@ -54,6 +56,17 @@ const PRIORITY_CLASSES: Record<OpsRequestPriority, string> = {
 export function PriorityBadge({ priority }: { priority: OpsRequestPriority }) {
   if (priority === 'normal') return null; // de-emphasize the common case
   return <Pill className={PRIORITY_CLASSES[priority]}>{OPS_PRIORITY_LABELS[priority]} priority</Pill>;
+}
+
+const SCHEDULE_STATUS_CLASSES: Record<ScheduleStatus, string> = {
+  active: 'bg-emerald-400/15 text-emerald-200',
+  completed: 'bg-sky-400/15 text-sky-200',
+  cancelled: 'bg-white/10 text-slate-400',
+};
+
+/** Status pill for a customer's scheduled / recurring payment (v0.9.0). */
+export function ScheduleStatusBadge({ status }: { status: ScheduleStatus }) {
+  return <Pill className={SCHEDULE_STATUS_CLASSES[status]}>{scheduleStatusLabel(status)}</Pill>;
 }
 
 const CHANNEL_CLASSES: Record<SimEventChannel, string> = {

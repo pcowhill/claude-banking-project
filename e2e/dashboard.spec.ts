@@ -64,13 +64,16 @@ test.describe('customer banking dashboard', () => {
     await expect(page.getByText(/payroll/i)).toHaveCount(0);
   });
 
-  test('the statements placeholder is reachable and clearly not-yet-available', async ({ page }) => {
+  test('the statements page is reachable and shows simulated monthly statements (v0.9.0)', async ({ page }) => {
     await customerLogin(page, DEMO.customer.email, DEMO.customer.password);
     await page.getByRole('link', { name: /statements & documents/i }).first().click();
     await expect(page).toHaveURL(/\/statements$/);
     await expect(page.getByRole('heading', { name: /statements & documents/i })).toBeVisible();
-    await expect(page.getByText(/coming soon/i)).toBeVisible();
-    await expect(page.getByText(/not available yet/i).first()).toBeVisible();
+    // The v0.9.0 statements page derives monthly periods from the simulation clock
+    // (no more "coming soon" placeholder) and stays clearly simulated.
+    await expect(page.getByText(/monthly statements/i).first()).toBeVisible();
+    await expect(page.getByText(/not real financial documents/i)).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^closing$/i })).toBeVisible();
   });
 });
 

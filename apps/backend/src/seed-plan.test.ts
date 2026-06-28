@@ -14,6 +14,7 @@ import {
   assertSeedMovementIntegrity,
   assertSeedOnboardingIntegrity,
   assertSeedOpsIntegrity,
+  assertSeedScheduleIntegrity,
   buildSeedPlan,
 } from './seed-plan';
 
@@ -322,5 +323,52 @@ describe('seed plan cards, fraud & disputes (v0.8.0)', () => {
     const fraud = tampered.operationsRequests.find((r) => r.key === 'fraud-card');
     fraud!.linkCardKey = 'no-such-card';
     expect(() => assertSeedCardIntegrity(tampered)).toThrow(/unknown card key/i);
+  });
+});
+
+describe('seed plan scheduled payments (v0.9.0)', () => {
+  const plan = buildSeedPlan();
+
+  it('seeds at least one internal-transfer and one bill-pay schedule on declared accounts', () => {
+    expect(plan.schedules.length).toBeGreaterThanOrEqual(2);
+    const accountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+    const emails = new Set(plan.users.map((u) => u.email.toLowerCase()));
+    for (const s of plan.schedules) {
+      expect(emails.has(s.ownerEmail.toLowerCase())).toBe(true);
+      expect(accountKeys.has(s.fromAccountKey)).toBe(true);
+    }
+    expect(plan.schedules.some((s) => s.kind === 'internal_transfer' && s.toAccountKey)).toBe(true);
+    expect(plan.schedules.some((s) => s.kind === 'bill_pay' && s.counterparty)).toBe(true);
+  });
+
+  it('dates each first run a few days out (so a small clock advance fires it)', () => {
+    for (const s of plan.schedules) {
+      expect(s.firstRunInDays).toBeGreaterThanOrEqual(0);
+      expect(s.firstRunInDays).toBeLessThanOrEqual(30);
+    }
+  });
+
+  it('passes the schedule-integrity invariants', () => {
+    expect(() => assertSeedScheduleIntegrity(plan)).not.toThrow();
+  });
+
+  it('rejects a schedule on an unknown account', () => {
+    const tampered = buildSeedPlan();
+    tampered.schedules[0].fromAccountKey = 'no-such-account';
+    expect(() => assertSeedScheduleIntegrity(tampered)).toThrow(/unknown account/i);
+  });
+
+  it('rejects an internal-transfer schedule without a distinct destination', () => {
+    const tampered = buildSeedPlan();
+    const transfer = tampered.schedules.find((s) => s.kind === 'internal_transfer');
+    transfer!.toAccountKey = transfer!.fromAccountKey;
+    expect(() => assertSeedScheduleIntegrity(tampered)).toThrow(/must differ/i);
+  });
+
+  it('rejects a bill-pay schedule without a biller', () => {
+    const tampered = buildSeedPlan();
+    const bill = tampered.schedules.find((s) => s.kind === 'bill_pay');
+    bill!.counterparty = undefined;
+    expect(() => assertSeedScheduleIntegrity(tampered)).toThrow(/biller/i);
   });
 });

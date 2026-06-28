@@ -21,14 +21,13 @@ const navLinks: NavItem[] = [
   { label: 'Dashboard', to: '/', end: true },
   { label: 'Request queues', to: '/queues', end: false },
   { label: 'Simulated messaging', to: '/messaging', end: false },
+  // Both ops_agent and admin may drive the simulation clock (NOT adminOnly).
+  { label: 'Simulation clock', to: '/clock', end: false },
   { label: 'Create demo user', to: '/admin', end: false, adminOnly: true },
 ];
 
 /** Sections that arrive in later milestones (shown dimmed). */
-const futureNav = [
-  { label: 'Audit log', milestone: 'v0.6.0' },
-  { label: 'Simulation clock', milestone: 'v0.9.0' },
-];
+const futureNav = [{ label: 'Audit log', milestone: 'v0.6.0' }];
 
 /**
  * The console navigation links. Shared by the desktop sidebar and the mobile

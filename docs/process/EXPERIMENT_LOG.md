@@ -6,6 +6,92 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 11 — v0.9.0 Simulation clock & scheduled payments — 2026-06-27
+
+**Goal:** the human approved v0.8.0 and the recurring/scheduled-payments item carried
+from v0.7.0 (deferred specifically because it needs a clock) was the next thing due. So:
+build **v0.9.0 — Simulation clock & scheduled payments** — the **clock + scheduler +
+statement-cycles** slice of the broader "v0.9.0 — Loans, CDs, simulated time" roadmap
+theme — and close the carried `M-09`. Loans / CDs / interest accrual are explicitly
+**carried forward** (roadmapped beyond this slice).
+
+**Branch:** `claude/happy-franklin-q41de0`.
+
+**Key design decision — date fired entries at their simulated due date, but keep
+wall-clock for immediate actions (ADR-0002).** A static sim clock that stamped every
+`createdAt` would collapse all same-session entries onto one instant and scramble ledger
+ordering. So the scheduler dates a fired entry at its **simulated due date**, while
+immediate transfers/movements and ops actions keep wall-clock `new Date()`. The clock is
+**forward-only** and seeded to the seed instant; the scheduler fires **on clock advance**
+(no wall-clock background timer); catch-up across a multi-period jump is **bounded**; and
+an occurrence that can't fund itself is **skipped + audited** rather than failed. Captured
+in `docs/process/decisions/ADR-0002-simulation-clock-and-scheduler.md`.
+
+**Key design decision — one additive migration; statements derive, don't store.** Only
+the scheduler needed persistence, so the sole schema change is the **additive**
+`scheduled_payments` migration (`PaymentSchedule` only — no existing table touched).
+**Statement cycles needed no migration** — `GET /api/accounts/:id/statements` derives
+monthly periods from the simulated date, read-only over the posted ledger (closing the
+v0.4.0 statements placeholder). The clock's state lives in the existing
+`SimulationClock` singleton row. The heartbeat `sim:heartbeat` was extended to carry
+`simulationTime` (backward-compatible — **no new socket event**).
+
+**Architecture — fire through the v0.7.0 money service; reuse the ops queue.** A
+scheduled **internal transfer** posts **both legs** through the same v0.7.0 movement path
+(nets to zero); a scheduled **bill pay** writes a **pending** entry **+ a reviewable ops
+item** — the same `OperationsRequest` + `applyOperatorAction` + `ops:request_changed`
+channel everything since v0.5.0 has used (no new ops endpoint, no new socket event for
+resolution). New shared modules `clock.ts`, `schedules.ts`, `statements.ts` hold the pure
+contract/derivation. New endpoints: customer `POST /api/schedules`, `GET /api/schedules`,
+`POST /api/schedules/:id/cancel`; `GET /api/clock`; ops/admin
+`POST /api/ops/clock/advance` (forward-only, audited, **fires due schedules**) and
+`GET /api/ops/schedules`.
+
+**Process — serialize the risky core, then parallelize the frontends.** The clock +
+scheduler are a risky shared area (they drive the ledger and real-time), so I built the
+shared contracts (`clock.ts`, `schedules.ts`, `statements.ts`) + the additive migration +
+the backend clock/scheduler/statements services and routes **myself, serially**, with the
+API/payload/heartbeat contract locked and the fire-on-advance behavior integration-tested
+first; then ran the two frontends **in parallel** (customer `/scheduled-payments` +
+upgraded `/statements`; operations new `/clock` page promoted from the "coming soon" nav)
+as separate agents against the locked contract; then integrated, ran the full gate + e2e,
+and a read-only security review.
+
+**Money discipline.** Every scheduled fire is an explicit **ledger** entry posted through
+the v0.7.0 money service — a transfer's two legs (asserted to net to zero) or a
+bank-reviewed bill-pay pending entry — never a stored/edited balance; balances stay
+derived. Insufficient-funds occurrences are **skipped + audited**, not posted as a bad
+balance. The clock can only move **forward** and every advance is audited. A test asserts
+the system-wide settled total is unchanged by transfer fires and moves only by explicit
+posted entries otherwise.
+
+**Security review — PASS-with-findings (no Critical/High/Medium).** One **Low acted on
+(L-1):** the scheduler previously rethrew an unexpected error **after** an occurrence was
+claimed — now any fire failure is recorded as a **skip** and the per-schedule loop is
+**guarded** so the rest of the advance still processes (one bad schedule can't abort the
+batch). Two **Low tracked** to the later ledger-hardening pass: **L-2** (run-count /
+last-run bookkeeping is a separate write after the money posts — cosmetic drift on a crash
+between the two writes, never a balance error) and **L-3** (the accepted v0.7.0 funds-check
+TOCTOU is now also reachable from the scheduler — bounded, auditable, never a lost/created
+dollar). **SEC-1 (CSRF)** stays accepted (SameSite=Lax + CORS) and is re-targeted to
+**v1.0.0**.
+
+**Outcome.** `npm run verify` green — **332** unit/integration (was 282; +50) + **44**
+Playwright e2e in real Chromium (was 41; +3 scheduled-payments journeys); 0 lint warnings;
+runtime `npm audit` = 0. One additive migration (`scheduled_payments`). Version bumped to
+0.9.0 across all workspaces + `packages/shared/src/version.ts` (MILESTONE 'v0.9.0',
+MILESTONE_NAME 'Simulation clock & scheduled payments'); annotated `v0.9.0` tag created
+locally (push blocked by env policy — HTTP 403 — so the human pushes it on merge; no PR
+opened). Stopped at the gate; did **not** start v1.0.0.
+
+**Surprises / environment friction (sandbox only):** same Prisma engine-download block as
+Sessions 1–10; resolved the documented way (`npm install --ignore-scripts` + curl-mirror
+the query-engine library + schema-engine for `debian-openssl-3.0.x` + `PRISMA_*` env vars;
+engine `605197351a3c8bdd595af2d2a9bc3025bca48ea2`). Created the real `scheduled_payments`
+migration through the mirrored schema engine. Playwright used the pre-installed Chromium
+via `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium`. **None of this affects normal
+machines or CI.**
+
 ## Session 10 — v0.8.0 Cards, fraud, disputes — 2026-06-27
 
 **Goal:** the human approved v0.7.0 ("Everything looks great") and made one optional

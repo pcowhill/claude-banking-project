@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   LEDGER_ORIGINS,
+  type AccountStatementsResponse,
   type AccountTransactionsResponse,
   type ApiErrorResponse,
   type LedgerOrigin,
@@ -8,8 +9,14 @@ import {
   type TransactionQuery,
 } from '@simbank/shared';
 import { prisma } from '../db';
-import { getAccessibleAccount, listAccessibleAccounts, listAccountTransactions } from '../auth/access';
+import {
+  getAccessibleAccount,
+  getAccountStatements,
+  listAccessibleAccounts,
+  listAccountTransactions,
+} from '../auth/access';
 import { requireAuth } from '../auth/guards';
+import { simulationNow } from '../clock/clock';
 
 const TRANSACTION_GROUPS: readonly TransactionGroup[] = ['pending', 'posted', 'other'];
 
@@ -78,5 +85,26 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: 'You do not have access to this account.', code: 'forbidden' } satisfies ApiErrorResponse);
     }
     return reply.send({ account: summary, transactions } satisfies AccountTransactionsResponse);
+  });
+
+  // Monthly statement periods for one account, ending at the current SIMULATION
+  // date. Same access rules (404 / 403). Each period's figures are DERIVED
+  // read-only from the posted ledger — no stored statement, no real PDF.
+  app.get('/api/accounts/:id/statements', { preHandler: requireAuth }, async (req, reply) => {
+    const user = req.user;
+    if (!user) return reply.code(401).send({ error: 'Not authenticated.', code: 'unauthenticated' });
+    const { id } = req.params as { id: string };
+
+    const now = await simulationNow(prisma);
+    const { exists, summary, periods } = await getAccountStatements(prisma, user.id, id, now);
+    if (!exists) {
+      return reply.code(404).send({ error: 'Account not found.', code: 'not_found' } satisfies ApiErrorResponse);
+    }
+    if (!summary) {
+      return reply
+        .code(403)
+        .send({ error: 'You do not have access to this account.', code: 'forbidden' } satisfies ApiErrorResponse);
+    }
+    return reply.send({ accountId: id, asOf: now.toISOString(), periods } satisfies AccountStatementsResponse);
   });
 }

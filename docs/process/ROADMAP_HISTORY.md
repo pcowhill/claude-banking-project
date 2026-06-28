@@ -45,6 +45,32 @@ notes:
   time is the enabling piece). Loans/CDs may share v0.9.0 or move later depending on the
   human's priorities at the v0.8.0 review.
 
+## 2026-06-27 — v0.9.0 delivered as the clock + scheduler + statements slice; loans/CDs/interest carried forward
+
+**What shipped:** **v0.9.0 — Simulation clock & scheduled payments** delivered the
+**simulation-time-enabling slice** of the broader "v0.9.0 — Loans, CDs, simulated time"
+roadmap theme: a controllable **forward-only simulation clock** (advance fires due
+schedules), **recurring/scheduled payments** (internal transfer / bill pay; once / weekly
+/ monthly, firing through the v0.7.0 money service), and real **statement cycles** (monthly
+periods derived from the simulated date, read-only over the posted ledger). One additive
+`scheduled_payments` migration; new ADR
+`docs/process/decisions/ADR-0002-simulation-clock-and-scheduler.md`.
+
+**`M-09` (recurring/scheduled payments) — now DONE.** The recurring/scheduled-payments item
+carried from v0.7.0 (deferred there because it needs a clock; tracked as `M-09` on the task
+board) is **delivered in v0.9.0**. The "needs the clock" dependency is satisfied: schedules
+fire on clock advance.
+
+**Carried forward (roadmapped beyond this slice): loans, CDs, and interest accrual.** The
+rest of the original v0.9.0 theme — **loans, CDs, and interest accrual** — was **explicitly
+not** built in this slice and is **carried forward** on the roadmap. The simulation clock
+delivered here is the enabling primitive for time-based accrual when those features land.
+The **milestone structure and order are otherwise unchanged**: the next (and final)
+milestone remains **v1.0.0 — Polish, hardening, and final retrospective**, which now also
+carries the accepted **SEC-1 (CSRF)** item and the dev-tooling audit advisories. Whether
+loans/CDs/interest are pulled into v1.0.0 or scheduled as additional work is the human's
+call at the v0.9.0 review.
+
 ## 2026-06-25 — v0.3.0 absorbed a bug fix (no scope change)
 
 No change to the milestone **structure or order**. Noted for the record: the

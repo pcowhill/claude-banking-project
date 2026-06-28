@@ -9,6 +9,7 @@ import {
 import { ApiError } from './api';
 import {
   applyOpsAction,
+  fetchClock,
   fetchOpsEvents,
   fetchOpsRequests,
   reverseMovement,
@@ -31,6 +32,9 @@ export function OpsDataProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<SimulatedEventDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The live simulation-clock time (ISO). Driven by the socket heartbeat, with a
+  // one-shot GET /api/clock on mount so the date shows before the first beat. (v0.9.0)
+  const [simulationTime, setSimulationTime] = useState<string | null>(null);
 
   const counts = useMemo(() => countRequestsByStatus(requests), [requests]);
 
@@ -72,9 +76,29 @@ export function OpsDataProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
+  // Fallback seed for the simulation clock: fetch it once on mount so the date is
+  // available immediately, then let the heartbeat keep it live. Best-effort — the
+  // queue stays usable even if the clock endpoint is briefly unavailable.
+  useEffect(() => {
+    let cancelled = false;
+    fetchClock()
+      .then(({ clock }) => {
+        if (!cancelled) setSimulationTime(clock.currentTime);
+      })
+      .catch(() => {
+        /* heartbeat will fill it in; nothing to surface here */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const { connected } = useOpsSocket({
     onRequestChanged: ({ request }) => upsertRequest(request),
     onExternalEvent: ({ event }) => prependEvent(event),
+    onHeartbeat: ({ simulationTime: t }) => {
+      if (t) setSimulationTime(t);
+    },
   });
 
   const act = useCallback(
@@ -105,8 +129,20 @@ export function OpsDataProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<OpsDataValue>(
-    () => ({ requests, counts, events, loading, error, connected, refresh, act, reverse, simulate }),
-    [requests, counts, events, loading, error, connected, refresh, act, reverse, simulate],
+    () => ({
+      requests,
+      counts,
+      events,
+      loading,
+      error,
+      connected,
+      simulationTime,
+      refresh,
+      act,
+      reverse,
+      simulate,
+    }),
+    [requests, counts, events, loading, error, connected, simulationTime, refresh, act, reverse, simulate],
   );
 
   return <OpsDataContext.Provider value={value}>{children}</OpsDataContext.Provider>;

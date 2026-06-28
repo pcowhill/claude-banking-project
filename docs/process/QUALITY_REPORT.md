@@ -5,6 +5,77 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v0.9.0 — Simulation clock & scheduled payments — 2026-06-27
+
+A controllable **simulation clock** + a **clock-driven scheduler** for recurring/
+scheduled payments + **statement cycles** derived from the clock. One **additive**
+Prisma migration (`PaymentSchedule`). Firing reuses the v0.7.0 money service; the clock
+is forward-only + audited. Design recorded in `decisions/ADR-0002`.
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass.
+- **Unit/integration tests** (Vitest) — **332 passed / 332** (282 + new):
+  - `@simbank/shared` `clock.test.ts` / `schedules.test.ts` / `statements.test.ts`
+    (advance bounds + `validateAdvance`; schedule validators + the calendar-safe
+    `addInterval` incl. month-end clamp + leap year; statement period bounds +
+    `summarizeStatementPeriod` opening/closing/credits/debits).
+  - `@simbank/backend` `routes/clock-schedules.test.ts` (**16** — clock read + RBAC
+    (customer can't advance/list-all → 403); forward-only advance rejected; schedule
+    CRUD + access (can't schedule on an unowned account; cross-user cancel → 403);
+    **firing**: a due internal transfer posts both legs & **settled total unchanged**
+    (nets to zero) + moves derived balances; a due bill pay queues a **pending** review
+    an operator then posts; **catch-up** fires multiple missed periods; **insufficient
+    funds skips** (no entry) + audit; a **cancelled** schedule never fires; statements
+    derivation + access (403/404)).
+  - `seed-plan.test.ts` (**+5** — seeded schedules on declared accounts, distinct
+    transfer destination / bill-pay biller, `assertSeedScheduleIntegrity`).
+- **e2e** (Playwright) — **44 passed / 44** (41 + **3 new**: a customer schedules a bill
+  payment → sees it listed → cancels it; the dashboard quick link → `/scheduled-payments`;
+  an operator advances the clock and watches a due schedule fire — "Posted $200.00"). One
+  pre-existing dashboard assertion updated from the old statements placeholder to the new
+  derived statements view.
+- **Build** (tsup + vite × 2) — pass.
+- **Runtime smoke** (live backend, not just `app.inject`): advancing the clock fired the
+  seeded schedules as real ledger entries; the clock-reading heartbeat booted cleanly.
+
+### Dependency audit
+- **Runtime**: `npm audit --omit=dev` = **0** vulnerabilities. Dev-tooling advisories
+  (vite/vitest/esbuild) remain, tracked for the v1.0.0 hardening pass.
+
+### Security review — PASS-with-findings (no Critical/High/Medium)
+RBAC/IDOR on every new route, the owner-scoped firing privilege boundary (a fire can
+only reach accounts the owner already holds), payload-trust (no client-injected ledger
+ids), money discipline (ledger-only, net-zero transfers, reviewable bill pays, audited
+skips), the forward-only audited clock, the bounded catch-up loop, the additive-only
+migration, data exposure, and simulation safety all verified + test-backed. Findings
+(all Low/info):
+- **Acted on (this milestone) — L-1:** the scheduler no longer **rethrows** an
+  unexpected error after an occurrence is *claimed* (which would silently drop the
+  occurrence and abort the rest of the advance). Any fire failure is now recorded as a
+  skip (`schedule_skipped` for funds/access; `schedule_fire_errored` otherwise) and the
+  per-schedule loop in `runDueSchedules` is guarded, so one schedule can't strand the
+  rest of the advance. (`scheduler/scheduler.ts`.)
+- **Low / tracked (fold into the later ledger-hardening pass):**
+  - **L-2** — the `runCount`/`lastRunAt` bookkeeping is a separate write after the money
+    posts; a crash there is a cosmetic count drift, never a balance error (balances are
+    derived; `nextRunAt` was already advanced at claim time so it won't re-fire).
+  - **L-3** — the accepted v0.7.0 funds-check TOCTOU (F-2) is now also reachable from the
+    scheduler (a single advance can fire several outbound occurrences back-to-back);
+    still bounded by `maxCatchUpRuns` + SQLite write serialization; worst case a
+    transient auditable negative-available, never a lost/created dollar.
+
+### Known issues / watch items (carried)
+- **L-2 / L-3** (above) + the v0.7.0 **F-2** funds-check TOCTOU — one tracked
+  ledger/scheduler hardening pass (v1.0.0+).
+- **SEC-1** (CSRF token / SameSite=Strict) — accepted for the local sim (Lax + CORS
+  mitigate); v1.0.0 hardening.
+- Dev-tooling npm-audit advisories (vite/vitest/esbuild) — v1.0.0 hardening.
+- Frontend component unit tests still deferred (covered by build + Playwright +
+  backend/contract tests).
+
+---
+
 ## v0.8.0 — Cards, fraud, disputes — 2026-06-27
 
 Cards, fraud alerts, and transaction disputes, built on the v0.5.0 ops queue and the

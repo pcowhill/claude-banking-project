@@ -27,6 +27,13 @@ export interface OpsDataValue {
   error: string | null;
   /** Live Socket.IO connection state, for the "Live / Reconnecting" indicator. */
   connected: boolean;
+  /**
+   * The current SIMULATION-clock time (ISO), or null before the first reading.
+   * Updated live by the socket heartbeat (~every 10s) with a one-shot fetch on
+   * mount as a fallback. This is the fake operator-controlled "now", NOT the
+   * wall clock. (v0.9.0)
+   */
+  simulationTime: string | null;
   /** Re-fetch the queue + event feed from the backend. */
   refresh: () => Promise<void>;
   /** Apply an operator action; resolves with the updated request. Throws ApiError. */
