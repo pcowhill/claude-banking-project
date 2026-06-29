@@ -3,13 +3,13 @@
  * Surfaced by the backend `/status` endpoint and the dev banners/footers in
  * both frontend apps so a reviewer can always see what they are running.
  */
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '1.0.0';
 
 /** Current milestone tag, per ROADMAP.md. */
-export const MILESTONE = 'v0.9.0';
+export const MILESTONE = 'v1.0.0';
 
 /** Short human label for the milestone. */
-export const MILESTONE_NAME = 'Simulation clock & scheduled payments';
+export const MILESTONE_NAME = 'Polish, hardening, loans/CDs & interest';
 
 /**
  * Hard-coded simulation flag. This platform is ALWAYS a local simulation.

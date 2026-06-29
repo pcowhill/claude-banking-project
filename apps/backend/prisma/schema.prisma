@@ -109,15 +109,21 @@ model Account {
   currency  String   @default("USD")
   status    String   @default("active") // see AccountStatus in @simbank/shared
   openedAt  DateTime @default(now())
+  // v1.0.0: the simulated instant interest has been accrued THROUGH for an
+  // interest-bearing account (savings). Null until the first accrual; the accrual
+  // driver advances it as the simulation clock passes monthly anniversaries. CDs
+  // and loans track accrual on their LendingProduct.lastAccruedAt instead.
+  interestAccruedThrough DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  ledgerEntries LedgerEntry[]
-  access        AccountAccess[]
-  invitations   AccountInvitation[]
-  cards         Card[]
-  schedulesFrom PaymentSchedule[]   @relation("ScheduleFrom")
-  schedulesTo   PaymentSchedule[]   @relation("ScheduleTo")
+  ledgerEntries  LedgerEntry[]
+  access         AccountAccess[]
+  invitations    AccountInvitation[]
+  cards          Card[]
+  schedulesFrom  PaymentSchedule[]   @relation("ScheduleFrom")
+  schedulesTo    PaymentSchedule[]   @relation("ScheduleTo")
+  lendingProduct LendingProduct?
 
   @@index([userId])
 }
@@ -360,4 +366,40 @@ model PaymentSchedule {
   @@index([userId])
   @@index([status])
   @@index([nextRunAt])
+}
+
+/// A SIMULATED lending/deposit product (v1.0.0): a Certificate of Deposit (CD) or
+/// a loan, layered 1:1 onto a dedicated `cd`/`loan` Account. This row holds only
+/// the TERMS (rate, term, principal, maturity, the loan's level payment) and the
+/// accrual bookmark; the MONEY lives in the account's append-only ledger:
+///  - a CD account carries a POSITIVE balance (deposit + earned `interest` credits);
+///  - a loan account carries a NEGATIVE balance (amount owed) that interest `debit`s
+///    grow and `transfer` payments shrink toward zero.
+/// Opening, paying, and withdrawing move money as net-zero `transfer` leg pairs;
+/// interest accrual posts bank-originated `interest` entries dated at the SIMULATED
+/// accrual date. MONEY DISCIPLINE: this row never stores or edits a balance, and
+/// balances stay DERIVED from the ledger. SIMULATION: no real lender/depositor.
+model LendingProduct {
+  id        String  @id @default(cuid())
+  // The product's own account (a `cd` or `loan` Account); 1:1.
+  accountId String  @unique
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  kind      String // cd | loan (see LendingKind in @simbank/shared)
+  status    String  @default("active") // active | matured | paid_off | closed (LendingStatus)
+  // Opening principal in minor units (the CD deposit / the loan amount).
+  principalMinor Int
+  // Annual rate in basis points (e.g. 450 = 4.50%).
+  apyBps         Int
+  termMonths     Int
+  // Level monthly payment for a loan; null for a CD.
+  paymentMinor   Int?
+  // Simulated instants: when the product opened / matures / was last accrued through.
+  openedAt      DateTime
+  maturesAt     DateTime
+  lastAccruedAt DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([kind])
 }

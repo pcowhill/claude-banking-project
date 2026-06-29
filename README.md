@@ -13,9 +13,9 @@ Meridian is a TypeScript monorepo with three runnable pieces:
 | **Operations simulator** | Internal console that *simulates* external banks & bank-employee actions | http://localhost:5174 |
 | **Backend API** | Fastify + Socket.IO + Prisma/SQLite | http://localhost:3000 |
 
-**Current milestone:** `v0.9.0 — Simulation clock & scheduled payments` (builds on
-`v0.8.0 — Cards, fraud, disputes`; see `ROADMAP.md` and
-`docs/process/MILESTONE_REPORT_v0.9.0.md`).
+**Current milestone:** `v1.0.0 — Polish, hardening, loans/CDs/interest, final
+retrospective` (the **final** milestone; builds on `v0.9.0 — Simulation clock &
+scheduled payments`; see `ROADMAP.md` and `docs/process/MILESTONE_REPORT_v1.0.0.md`).
 
 ## Tech stack
 
@@ -77,6 +77,51 @@ Run `npm run db:reset` first to seed these users.
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
 recorded; the customer dashboard shows recent sign-in activity.
+
+### New in v1.0.0 (loans, CDs, interest accrual, CSRF, simulated-date fix, corrected marketing)
+
+> The **final** milestone — a combined feature + hardening + polish capstone. Still a
+> local **SIMULATION**: no real money, lenders, billers, payment networks, or wall-clock
+> timer.
+
+- **Loans & CDs (customer).** Sign in as **Avery** and open **Loans & CDs** (`/loans`,
+  also from the dashboard quick links). You'll see a seeded **simulated** 6-month **CD**
+  ($2,000) and a **Personal loan** ($6,000 owed). Open a new **CD** (pick a term — the
+  APY comes from the rate table) or a **loan** (the cash is disbursed to your checking and
+  the loan account carries what you **owe** as a negative balance), **make a loan
+  payment**, and — once the clock is advanced past a CD's maturity — **withdraw** the
+  matured CD. Opening / paying / withdrawing all move money as **net-zero** ledger entry
+  pairs (no money is created).
+- **Interest accrues on clock advance.** Sign in to the operations console (`:5174`) as
+  **Sam**, open **Simulation clock**, and **fast-forward** (e.g. +1 month, or +300 days to
+  mature the 6-month CD). For each elapsed **simulated** month, interest posts as
+  bank-originated `interest` ledger entries — a **credit** to savings and CDs (you earn),
+  a **debit** to loans (you owe more) — dated at the simulated accrual date. The clock
+  page now shows an **interest-accrual summary** alongside fired schedules, and there's a
+  read-only **Lending** view (`/lending`). Savings now earns **1.50% APY (simulated)**.
+  There is no background timer; accrual happens **on advance**, like the scheduler.
+- **CSRF protection (SEC-1).** State-changing requests are now protected by a
+  double-submit token: the backend sets a non-httpOnly `mer_csrf` cookie and requires a
+  matching `x-meridian-csrf` header on authenticated mutating requests (login / logout /
+  public onboarding are exempt). Both apps echo the token automatically — you won't notice
+  it in normal use.
+- **Simulated-date fix.** Every money/business event now dates at the **simulated** clock,
+  including an **operator approval** of a clock-fired bill pay (previously it posted on the
+  real wall-clock date — the bug reported at the v0.9.0 review). Authentication and
+  operational timestamps (session expiry, lockout, sign-in history, the server heartbeat)
+  stay on the real clock by design. See
+  `docs/process/decisions/ADR-0003-lending-and-simulated-date-everywhere.md`.
+- **Corrected marketing.** The homepage tiles, `/cards`, and `/borrow` now present
+  **Cards** and **Loans & CDs** as **live** (clearly-simulated) features — the stale
+  "coming in a future version" placeholders are gone.
+- **First frontend unit tests.** The customer app joined the Vitest workspace (pure
+  helpers + a `TransactionList` component test under jsdom) — a starter set on top of the
+  existing build + Playwright + backend/contract coverage.
+- **Money discipline (unchanged):** money still moves only via explicit **ledger** entries;
+  nothing edits a balance; balances stay derived. CD/loan opens, payments, and withdrawals
+  net to zero; the only new money is **bank-originated `interest`**; a loan is simply a
+  negative derived balance. The only schema change is the additive **`lending`** migration
+  (`LendingProduct` + a nullable `Account.interestAccruedThrough`).
 
 ### New in v0.9.0 (simulation clock, scheduled payments, statements)
 

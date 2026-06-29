@@ -3,7 +3,7 @@ import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildServer } from '../server';
 import { prisma } from '../db';
 import { RecordingOpsRealtime } from '../ops/realtime';
-import { DEMO, loginAs, seedDemo } from '../test/fixtures';
+import { DEMO, loginAs, mutatingHeaders, seedDemo } from '../test/fixtures';
 
 /**
  * Integration tests for v0.8.0 — cards, fraud, disputes.
@@ -44,10 +44,10 @@ describe('cards, fraud & disputes (v0.8.0)', () => {
   });
 
   function get(url: string, cookie?: string) {
-    return app.inject({ method: 'GET', url, headers: cookie ? { cookie } : {} });
+    return app.inject({ method: 'GET', url, headers: mutatingHeaders(cookie) });
   }
   function post(url: string, cookie?: string, payload?: InjectOptions['payload']) {
-    return app.inject({ method: 'POST', url, headers: cookie ? { cookie } : {}, payload });
+    return app.inject({ method: 'POST', url, headers: mutatingHeaders(cookie), payload });
   }
 
   async function ledgerCount(): Promise<number> {

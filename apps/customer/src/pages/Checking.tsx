@@ -34,14 +34,12 @@ const features: Feature[] = [
   {
     icon: 'phone',
     title: 'Card controls',
-    description: 'Freeze, unfreeze, and travel notices arrive with the cards milestone.',
-    milestone: 'v0.8.0',
+    description: 'Issue a card, then freeze, unfreeze, and add travel notices from your wallet.',
   },
   {
     icon: 'bolt',
     title: 'Instant internal transfers',
-    description: 'Move money between your Meridian accounts the moment money movement lands.',
-    milestone: 'v0.7.0',
+    description: 'Move money between your Meridian accounts instantly from Move money.',
   },
 ];
 
@@ -94,7 +92,7 @@ export function Checking() {
         <SectionHeading
           eyebrow="Features"
           title="Designed for everyday spending"
-          subtitle="The essentials today, with richer money movement and card controls arriving on the roadmap."
+          subtitle="Everyday checking with instant transfers, bill pay, and card controls — all live and clearly simulated."
         />
         <FeatureGrid features={features} />
       </Section>

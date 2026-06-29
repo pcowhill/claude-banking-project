@@ -7,7 +7,6 @@ import {
   CTASection,
   FeatureGrid,
   Icon,
-  MilestoneTag,
   PageHero,
   Section,
   SectionHeading,
@@ -63,16 +62,16 @@ const productHighlights: ProductHighlight[] = [
   {
     to: '/cards',
     title: 'Cards',
-    description: 'Debit and credit cards with freeze, travel notices, and disputes.',
+    description: 'Issue simulated debit and credit cards with freeze, travel notices, and disputes.',
     icon: 'lock',
-    tag: 'Arrives v0.8.0',
+    tag: 'Explore now',
   },
   {
     to: '/borrow',
     title: 'Loans & CDs',
-    description: 'Personal, auto, and mortgage-style loans plus certificates of deposit.',
+    description: 'Open a simulated loan or certificate of deposit and watch interest accrue.',
     icon: 'chart',
-    tag: 'Arrives v0.9.0',
+    tag: 'Explore now',
   },
 ];
 
@@ -129,7 +128,7 @@ export function MarketingHome() {
         <SectionHeading
           eyebrow="Products"
           title="Everything you expect from a bank"
-          subtitle="The full product set arrives across milestones. Checking and savings are ready to explore today."
+          subtitle="Checking, savings, cards, and loans & CDs are all live to explore today — every one a clearly-labelled simulation."
         />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {productHighlights.map((product) => (
@@ -146,13 +145,7 @@ export function MarketingHome() {
               </div>
               <p className="mt-1.5 flex-1 text-sm text-slate-600">{product.description}</p>
               <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-teal-dark group-hover:gap-2">
-                {product.tag.startsWith('Arrives') ? (
-                  <MilestoneTag>{product.tag}</MilestoneTag>
-                ) : (
-                  <>
-                    {product.tag} <span aria-hidden="true">→</span>
-                  </>
-                )}
+                {product.tag} <span aria-hidden="true">→</span>
               </span>
             </Link>
           ))}

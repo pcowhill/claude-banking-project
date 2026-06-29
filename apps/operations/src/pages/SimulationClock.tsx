@@ -5,6 +5,7 @@ import {
   scheduleKindLabel,
   validateAdvance,
   type AdvanceClockRequest,
+  type InterestAccrualSummary,
   type ScheduleDTO,
   type ScheduleFireSummary,
 } from '@simbank/shared';
@@ -44,6 +45,57 @@ function formatRunDate(iso: string | null): string {
   if (Number.isNaN(ms)) return '—';
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(
     new Date(ms),
+  );
+}
+
+/** Pluralize a count with its noun, e.g. (2, 'CD') → "2 CDs". */
+function countLabel(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * What interest accrual produced on the most recent advance (v1.0.0). Sits below
+ * the fired-schedules list inside the "Last advance" panel so the operator sees
+ * what a fast-forward credited (savings + CDs) and charged (loans), and how many
+ * CDs reached maturity. SIMULATION: every accrual is a real simulated ledger
+ * entry dated at the simulated accrual date — no real interest is ever paid.
+ */
+function AccrualSummaryRow({ accrued }: { accrued: InterestAccrualSummary }) {
+  const nothingAccrued =
+    accrued.savingsAccountsAccrued === 0 &&
+    accrued.cdsAccrued === 0 &&
+    accrued.loansAccrued === 0 &&
+    accrued.cdsMatured === 0;
+
+  return (
+    <div className="mt-3 border-t border-white/10 pt-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        Interest accrued
+      </div>
+      {nothingAccrued ? (
+        <p className="mt-1 text-sm text-slate-400">
+          No interest accrued&nbsp;&mdash; no month elapsed for any product.
+        </p>
+      ) : (
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="text-slate-200">
+            {countLabel(accrued.savingsAccountsAccrued, 'savings account')},{' '}
+            {countLabel(accrued.cdsAccrued, 'CD')}, {countLabel(accrued.loansAccrued, 'loan')}
+          </span>
+          <span className="flex flex-wrap items-center gap-3 text-xs tabular-nums text-slate-400">
+            <span className="text-emerald-200">
+              Credited {formatMinor(accrued.totalInterestCreditedMinor)}
+            </span>
+            <span className="text-rose-200">
+              Charged {formatMinor(accrued.totalInterestChargedMinor)}
+            </span>
+            {accrued.cdsMatured > 0 && (
+              <span className="text-sky-200">{countLabel(accrued.cdsMatured, 'CD')} matured</span>
+            )}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -88,6 +140,9 @@ export function SimulationClock() {
   const [advancing, setAdvancing] = useState(false);
   const [advanceError, setAdvanceError] = useState<string | null>(null);
   const [lastFired, setLastFired] = useState<ScheduleFireSummary[] | null>(null);
+  // Interest accrued on the most recent advance (v1.0.0). `undefined` until the
+  // first advance AND when the server omits it (older v0.9.0 response).
+  const [lastAccrued, setLastAccrued] = useState<InterestAccrualSummary | undefined>(undefined);
   // Custom advance form (days + hours).
   const [days, setDays] = useState('');
   const [hours, setHours] = useState('');
@@ -131,9 +186,10 @@ export function SimulationClock() {
       setAdvancing(true);
       setAdvanceError(null);
       try {
-        const { clock, fired } = await advanceClock(body);
+        const { clock, fired, accrued } = await advanceClock(body);
         setDisplayTime(clock.currentTime);
         setLastFired(fired);
+        setLastAccrued(accrued);
         // Pull the queue + schedules forward so the fired reviews / run counts show.
         await Promise.all([refresh(), loadSchedules()]);
       } catch (err) {
@@ -320,6 +376,10 @@ export function SimulationClock() {
                   ))}
                 </ul>
               )}
+
+              {/* Interest accrued this advance (v1.0.0). Rendered only when the
+                  server reports it — omitted by an older v0.9.0 response. */}
+              {lastAccrued && <AccrualSummaryRow accrued={lastAccrued} />}
             </div>
           )}
         </Card>

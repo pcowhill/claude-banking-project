@@ -1,8 +1,10 @@
 import {
   channelLabel,
+  lendingStatusLabel,
   opsStatusLabel,
   scheduleStatusLabel,
   OPS_PRIORITY_LABELS,
+  type LendingStatus,
   type OpsRequestPriority,
   type OpsRequestStatus,
   type ScheduleStatus,
@@ -67,6 +69,18 @@ const SCHEDULE_STATUS_CLASSES: Record<ScheduleStatus, string> = {
 /** Status pill for a customer's scheduled / recurring payment (v0.9.0). */
 export function ScheduleStatusBadge({ status }: { status: ScheduleStatus }) {
   return <Pill className={SCHEDULE_STATUS_CLASSES[status]}>{scheduleStatusLabel(status)}</Pill>;
+}
+
+const LENDING_STATUS_CLASSES: Record<LendingStatus, string> = {
+  active: 'bg-emerald-400/15 text-emerald-200',
+  matured: 'bg-sky-400/15 text-sky-200',
+  paid_off: 'bg-teal-400/15 text-teal-200',
+  closed: 'bg-white/10 text-slate-400',
+};
+
+/** Status pill for a customer's lending product — CD or loan (v1.0.0). */
+export function LendingStatusBadge({ status }: { status: LendingStatus }) {
+  return <Pill className={LENDING_STATUS_CLASSES[status]}>{lendingStatusLabel(status)}</Pill>;
 }
 
 const CHANNEL_CLASSES: Record<SimEventChannel, string> = {

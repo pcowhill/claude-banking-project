@@ -23,6 +23,8 @@ const navLinks: NavItem[] = [
   { label: 'Simulated messaging', to: '/messaging', end: false },
   // Both ops_agent and admin may drive the simulation clock (NOT adminOnly).
   { label: 'Simulation clock', to: '/clock', end: false },
+  // Read-only lending visibility — open to ops_agent and admin (NOT adminOnly).
+  { label: 'Lending', to: '/lending', end: false },
   { label: 'Create demo user', to: '/admin', end: false, adminOnly: true },
 ];
 

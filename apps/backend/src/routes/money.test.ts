@@ -3,7 +3,7 @@ import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildServer } from '../server';
 import { prisma } from '../db';
 import { RecordingOpsRealtime } from '../ops/realtime';
-import { DEMO, loginAs, seedDemo } from '../test/fixtures';
+import { DEMO, loginAs, mutatingHeaders, seedDemo } from '../test/fixtures';
 
 /**
  * Integration tests for v0.7.0 money movement: the customer endpoints (immediate
@@ -40,10 +40,10 @@ describe('money movement (v0.7.0)', () => {
   });
 
   function get(url: string, cookie?: string) {
-    return app.inject({ method: 'GET', url, headers: cookie ? { cookie } : {} });
+    return app.inject({ method: 'GET', url, headers: mutatingHeaders(cookie) });
   }
   function post(url: string, cookie?: string, payload?: InjectOptions['payload']) {
-    return app.inject({ method: 'POST', url, headers: cookie ? { cookie } : {}, payload });
+    return app.inject({ method: 'POST', url, headers: mutatingHeaders(cookie), payload });
   }
 
   /** Net signed total of settled (posted/disputed) ledger entries across the system. */
@@ -161,7 +161,10 @@ describe('money movement (v0.7.0)', () => {
       // A pending CREDIT entry was written; the settled total did NOT move yet.
       const pending = await prisma.ledgerEntry.findFirst({
         where: { accountId: checking.id, status: 'pending', direction: 'credit', origin: 'deposit', amountMinor: 250_00 },
-        orderBy: { createdAt: 'desc' },
+        // Sim-clock dating (v1.0.0/ADR-0003) can give same-session entries an
+      // identical createdAt, so break ties by id (cuid is timestamp-prefixed →
+      // newest last/largest) to deterministically pick the just-created request.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       expect(pending).not.toBeNull();
       expect(await settledTotal()).toBe(totalBefore);
@@ -169,7 +172,10 @@ describe('money movement (v0.7.0)', () => {
       // A linked ops request carries the movement payload + the soft link.
       const request = await prisma.operationsRequest.findFirst({
         where: { type: 'deposit', subjectEmail: DEMO.customer.email },
-        orderBy: { createdAt: 'desc' },
+        // Sim-clock dating (v1.0.0/ADR-0003) can give same-session entries an
+      // identical createdAt, so break ties by id (cuid is timestamp-prefixed →
+      // newest last/largest) to deterministically pick the just-created request.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       expect(request).not.toBeNull();
       const payload = JSON.parse(request!.payload!) as { ledgerEntryIds: string[]; kind: string };
@@ -255,7 +261,10 @@ describe('money movement (v0.7.0)', () => {
       await post('/api/movements', customer.cookie, { accountId: checking.id, kind: 'wire', amountMinor: 60_00, counterparty: 'Acme LLC' });
       const request = await prisma.operationsRequest.findFirstOrThrow({
         where: { type: 'wire', subjectEmail: DEMO.customer.email, status: 'pending' },
-        orderBy: { createdAt: 'desc' },
+        // Sim-clock dating (v1.0.0/ADR-0003) can give same-session entries an
+      // identical createdAt, so break ties by id (cuid is timestamp-prefixed →
+      // newest last/largest) to deterministically pick the just-created request.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       const totalBefore = await settledTotal();
       await post(`/api/ops/requests/${request.id}/action`, ops.cookie, { action: 'approve' });
@@ -273,7 +282,10 @@ describe('money movement (v0.7.0)', () => {
       await post('/api/movements', customer.cookie, { accountId: checking.id, kind: 'bill_pay', amountMinor: 30_00, counterparty: 'Metro Water' });
       const request = await prisma.operationsRequest.findFirstOrThrow({
         where: { type: 'bill_pay', subjectEmail: DEMO.customer.email, status: 'pending' },
-        orderBy: { createdAt: 'desc' },
+        // Sim-clock dating (v1.0.0/ADR-0003) can give same-session entries an
+      // identical createdAt, so break ties by id (cuid is timestamp-prefixed →
+      // newest last/largest) to deterministically pick the just-created request.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       // Reserved while pending.
       expect(await availableViaApi(checking.id)).toBe(availStart - 30_00);
@@ -292,7 +304,10 @@ describe('money movement (v0.7.0)', () => {
       await post('/api/movements', customer.cookie, { accountId: checking.id, kind: 'mobile_check_deposit', amountMinor: 15_00 });
       const request = await prisma.operationsRequest.findFirstOrThrow({
         where: { type: 'deposit', subjectEmail: DEMO.customer.email, status: 'pending' },
-        orderBy: { createdAt: 'desc' },
+        // Sim-clock dating (v1.0.0/ADR-0003) can give same-session entries an
+      // identical createdAt, so break ties by id (cuid is timestamp-prefixed →
+      // newest last/largest) to deterministically pick the just-created request.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       await post(`/api/ops/requests/${request.id}/action`, ops.cookie, { action: 'hold' });
       const payload = JSON.parse((await prisma.operationsRequest.findUniqueOrThrow({ where: { id: request.id } })).payload!) as { ledgerEntryIds: string[] };
@@ -318,7 +333,10 @@ describe('money movement (v0.7.0)', () => {
       await post('/api/movements', customer.cookie, { accountId: checking.id, kind: 'mobile_check_deposit', amountMinor });
       const request = await prisma.operationsRequest.findFirstOrThrow({
         where: { type: 'deposit', subjectEmail: DEMO.customer.email, status: 'pending' },
-        orderBy: { createdAt: 'desc' },
+        // Sim-clock dating (v1.0.0/ADR-0003) can give same-session entries an
+      // identical createdAt, so break ties by id (cuid is timestamp-prefixed →
+      // newest last/largest) to deterministically pick the just-created request.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       await post(`/api/ops/requests/${request.id}/action`, ops.cookie, { action: 'approve' });
       return request;
@@ -352,7 +370,10 @@ describe('money movement (v0.7.0)', () => {
       await post('/api/movements', customer.cookie, { accountId: checking.id, kind: 'mobile_check_deposit', amountMinor: 12_00 });
       const request = await prisma.operationsRequest.findFirstOrThrow({
         where: { type: 'deposit', subjectEmail: DEMO.customer.email, status: 'pending' },
-        orderBy: { createdAt: 'desc' },
+        // Sim-clock dating (v1.0.0/ADR-0003) can give same-session entries an
+      // identical createdAt, so break ties by id (cuid is timestamp-prefixed →
+      // newest last/largest) to deterministically pick the just-created request.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       const res = await post(`/api/ops/movements/${request.id}/reverse`, ops.cookie, { reason: 'too soon' });
       expect(res.statusCode).toBe(409);

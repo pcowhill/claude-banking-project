@@ -17,8 +17,14 @@ import {
   CARD_NETWORKS,
   CARD_STATUSES,
   CARD_TYPES,
+  amortizedPaymentMinor,
+  cdApyForTerm,
+  loanApyForTerm,
+  LENDING_KINDS,
+  LENDING_LIMITS,
   type AccountRelationship,
   type AccountType,
+  type LendingKind,
   type CardNetwork,
   type CardStatus,
   type CardType,
@@ -212,6 +218,30 @@ export interface SeedSchedule {
   firstRunInDays: number;
 }
 
+/**
+ * A SIMULATED lending/deposit product (v1.0.0): a CD or a loan layered onto a new
+ * `cd`/`loan` account. At seed time the principal moves as a NET-ZERO `transfer`
+ * pair (the same discipline the live service uses) — for a CD the funding account
+ * is debited and the CD account credited; for a loan the loan account is debited
+ * (it carries the negative owed balance) and the disbursement account credited.
+ * Interest accrues later via the clock-driven accrual driver. No money is minted.
+ */
+export interface SeedLending {
+  key: string;
+  /** The new `cd`/`loan` account's key (addressable for assertions). */
+  accountKey: string;
+  kind: LendingKind;
+  ownerEmail: string;
+  name: string;
+  /** CD: the funding account (debited). Loan: the disbursement account (credited). */
+  counterpartyAccountKey: string;
+  principalMinor: number;
+  apyBps: number;
+  termMonths: number;
+  /** Loan: the level monthly payment. CD: null. */
+  paymentMinor: number | null;
+}
+
 export interface SeedPlan {
   users: SeedUser[];
   entries: SeedLedgerEntry[];
@@ -222,6 +252,7 @@ export interface SeedPlan {
   onboardingApplications: SeedOnboardingApplication[];
   invitations: SeedInvitation[];
   schedules: SeedSchedule[];
+  lending: SeedLending[];
 }
 
 export function buildSeedPlan(): SeedPlan {
@@ -688,6 +719,38 @@ export function buildSeedPlan(): SeedPlan {
     },
   ];
 
+  // --- Lending & deposit products (v1.0.0) -----------------------------------
+  // A SIMULATED CD and a SIMULATED loan for Avery so loans/CDs/interest are
+  // visible immediately. The CD is funded from checking (matures after a ~6-month
+  // advance); the loan is disbursed to checking (carrying its negative owed
+  // balance). Savings accrues interest at the default APY on every clock advance.
+  const lending: SeedLending[] = [
+    {
+      key: 'avery-cd',
+      accountKey: 'avery-cd',
+      kind: 'cd',
+      ownerEmail: AVERY_EMAIL,
+      name: '6-month CD',
+      counterpartyAccountKey: CHECKING,
+      principalMinor: toMinor(2000),
+      termMonths: 6,
+      apyBps: cdApyForTerm(6) ?? 350,
+      paymentMinor: null,
+    },
+    {
+      key: 'avery-loan',
+      accountKey: 'avery-loan',
+      kind: 'loan',
+      ownerEmail: AVERY_EMAIL,
+      name: 'Personal loan',
+      counterpartyAccountKey: CHECKING,
+      principalMinor: toMinor(6000),
+      termMonths: 24,
+      apyBps: loanApyForTerm(24) ?? 1050,
+      paymentMinor: amortizedPaymentMinor(toMinor(6000), loanApyForTerm(24) ?? 1050, 24),
+    },
+  ];
+
   return {
     users,
     entries,
@@ -698,6 +761,7 @@ export function buildSeedPlan(): SeedPlan {
     onboardingApplications,
     invitations,
     schedules,
+    lending,
   };
 }
 
@@ -1018,6 +1082,61 @@ export function assertSeedScheduleIntegrity(plan: SeedPlan): void {
     }
     if (s.firstRunInDays < 0 || s.firstRunInDays > SCHEDULE_LIMITS.maxFirstRunInDays) {
       throw new Error(`Seed invariant violated: schedule firstRunInDays ${s.firstRunInDays} is out of range.`);
+    }
+  }
+}
+
+/**
+ * Lending integrity invariants the seed must satisfy (v1.0.0). Throws on
+ * violation. Keeps seeded CDs/loans internally consistent so applying them as
+ * net-zero `transfer` pairs can never be malformed:
+ *
+ *  1. Each product has a unique key + a unique new account key (not colliding with
+ *     an existing account), a declared owner, and a declared counterparty account.
+ *  2. Kind is known; the principal/APY/term are within the shared bounds.
+ *  3. A loan carries a positive monthly payment; a CD carries none.
+ */
+export function assertSeedLendingIntegrity(plan: SeedPlan): void {
+  const emails = new Set(plan.users.map((u) => u.email.toLowerCase()));
+  const existingAccountKeys = new Set(plan.users.flatMap((u) => u.accounts.map((a) => a.key)));
+  const productKeys = new Set<string>();
+  const productAccountKeys = new Set<string>();
+
+  for (const l of plan.lending) {
+    if (productKeys.has(l.key)) {
+      throw new Error(`Seed invariant violated: duplicate lending key '${l.key}'.`);
+    }
+    productKeys.add(l.key);
+    if (existingAccountKeys.has(l.accountKey) || productAccountKeys.has(l.accountKey)) {
+      throw new Error(`Seed invariant violated: lending account key '${l.accountKey}' collides with another account.`);
+    }
+    productAccountKeys.add(l.accountKey);
+    if (!emails.has(l.ownerEmail.toLowerCase())) {
+      throw new Error(`Seed invariant violated: lending '${l.key}' references unknown owner '${l.ownerEmail}'.`);
+    }
+    if (!existingAccountKeys.has(l.counterpartyAccountKey)) {
+      throw new Error(`Seed invariant violated: lending '${l.key}' references unknown counterparty account '${l.counterpartyAccountKey}'.`);
+    }
+    if (!LENDING_KINDS.includes(l.kind)) {
+      throw new Error(`Seed invariant violated: lending '${l.key}' has unknown kind '${l.kind}'.`);
+    }
+    if (
+      l.principalMinor < LENDING_LIMITS.minPrincipalMinor ||
+      l.principalMinor > LENDING_LIMITS.maxPrincipalMinor
+    ) {
+      throw new Error(`Seed invariant violated: lending '${l.key}' principal ${l.principalMinor} is out of bounds.`);
+    }
+    if (l.apyBps < LENDING_LIMITS.minApyBps || l.apyBps > LENDING_LIMITS.maxApyBps) {
+      throw new Error(`Seed invariant violated: lending '${l.key}' apyBps ${l.apyBps} is out of bounds.`);
+    }
+    if (l.termMonths < LENDING_LIMITS.minTermMonths || l.termMonths > LENDING_LIMITS.maxTermMonths) {
+      throw new Error(`Seed invariant violated: lending '${l.key}' termMonths ${l.termMonths} is out of bounds.`);
+    }
+    if (l.kind === 'loan' && (!l.paymentMinor || l.paymentMinor <= 0)) {
+      throw new Error(`Seed invariant violated: loan '${l.key}' needs a positive monthly payment.`);
+    }
+    if (l.kind === 'cd' && l.paymentMinor !== null) {
+      throw new Error(`Seed invariant violated: CD '${l.key}' must not carry a monthly payment.`);
     }
   }
 }

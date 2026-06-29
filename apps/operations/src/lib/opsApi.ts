@@ -2,6 +2,7 @@ import type {
   AdvanceClockRequest,
   AdvanceClockResponse,
   ClockResponse,
+  LendingListResponse,
   OperationsQueueResponse,
   OperationsRequestDetailDTO,
   OperationsRequestDetailResponse,
@@ -122,4 +123,15 @@ export function advanceClock(body: AdvanceClockRequest): Promise<AdvanceClockRes
 /** GET /api/ops/schedules — every customer's scheduled / recurring payments. */
 export function fetchSchedules(): Promise<{ schedules: ScheduleDTO[] }> {
   return apiRequest<{ schedules: ScheduleDTO[] }>('/api/ops/schedules');
+}
+
+// ---- Lending visibility (v1.0.0) --------------------------------------------
+//
+// Read-only operator window onto every customer's lending products (CDs +
+// loans). ops_agent/admin only (RBAC enforced server-side). Operators do NOT
+// open or modify customer lending here — balances stay derived from the ledger.
+
+/** GET /api/ops/lending — every customer's lending products (read-only). */
+export function fetchLending(): Promise<LendingListResponse> {
+  return apiRequest<LendingListResponse>('/api/ops/lending');
 }

@@ -16,6 +16,7 @@
 import type { ValidationResult } from './onboarding';
 import { MOVEMENT_LIMITS, MOVEMENT_TEXT } from './money-movement';
 import type { SimulationClockDTO } from './clock';
+import type { InterestAccrualSummary } from './lending';
 
 // ---- Kinds, frequencies & statuses -----------------------------------------
 
@@ -305,4 +306,9 @@ export interface ScheduleFireSummary {
 export interface AdvanceClockResponse {
   clock: SimulationClockDTO;
   fired: ScheduleFireSummary[];
+  /**
+   * Interest accrued during this advance (v1.0.0). Optional for backward
+   * compatibility with the v0.9.0 contract (a server that does not accrue omits it).
+   */
+  accrued?: InterestAccrualSummary;
 }

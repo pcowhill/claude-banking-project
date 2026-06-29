@@ -29,21 +29,38 @@ test.describe('public marketing site', () => {
 
     await nav.getByRole('link', { name: /^cards$/i }).click();
     await expect(page).toHaveURL(/\/cards$/);
-    await expect(page.getByText(/not built yet/i)).toBeVisible();
+    // v1.0.0: cards shipped (v0.8.0) — the page presents them as a live, clearly
+    // simulated feature, no longer "coming soon".
+    await expect(page.getByRole('heading', { name: /cards, with controls/i })).toBeVisible();
 
     await nav.getByRole('link', { name: /loans & cds/i }).click();
     await expect(page).toHaveURL(/\/borrow$/);
-    await expect(page.getByText(/not built yet/i)).toBeVisible();
+    // v1.0.0: lending shipped — the page is live, not "coming soon".
+    await expect(page.getByRole('heading', { name: /borrow and save over simulated time/i })).toBeVisible();
 
     await nav.getByRole('link', { name: /^about$/i }).click();
     await expect(page).toHaveURL(/\/about$/);
     await expect(page.getByRole('heading', { name: /a bank you can read like a book/i })).toBeVisible();
   });
 
-  test('coming-soon pages are clearly fictional and tagged with a milestone', async ({ page }) => {
+  test('the cards & lending pages present shipped features and stay clearly simulated (v1.0.0)', async ({
+    page,
+  }) => {
+    // Cards shipped in v0.8.0: the page is live (managed in the portal wallet),
+    // explicitly simulated, with no "coming soon" / milestone-tag framing.
     await page.goto(CUSTOMER + '/cards');
     await expect(page.getByRole('heading', { name: /cards, with controls/i })).toBeVisible();
-    await expect(page.getByText(/v0\.8\.0/).first()).toBeVisible();
+    await expect(page.getByText(/live in the portal today/i)).toBeVisible();
+    await expect(page.getByText(/simulated cards/i).first()).toBeVisible();
+    await expect(page.getByText(/not built yet/i)).toHaveCount(0);
+
+    // Lending shipped in v1.0.0: the page is live and shows the real simulated
+    // rate tables the portal actually offers.
+    await page.goto(CUSTOMER + '/borrow');
+    await expect(page.getByRole('heading', { name: /borrow and save over simulated time/i })).toBeVisible();
+    await expect(page.getByText(/clearly simulated/i).first()).toBeVisible();
+    await expect(page.getByText(/certificate of deposit rates/i)).toBeVisible();
+    await expect(page.getByText(/not built yet/i)).toHaveCount(0);
   });
 
   test('the open-account page is a real, clearly-simulated application that links to login', async ({

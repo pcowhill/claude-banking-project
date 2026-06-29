@@ -115,6 +115,23 @@ function effectiveTime(row: RawLedgerRow): number {
 }
 
 /**
+ * Stable, deterministic ordering with a secondary `id` tiebreak. The simulation
+ * clock (v1.0.0 / ADR-0003) sits still between operator advances, so several
+ * entries created in one session can share the SAME effective timestamp; without
+ * a tiebreak their relative order would depend on database row order. The `id` is
+ * a cuid (timestamp-prefixed, so lexically ~chronological), giving a stable order
+ * that also reads newest-first within a shared instant. `dir = -1` sorts
+ * newest-first (display), `dir = 1` oldest-first (running-balance accumulation);
+ * the two are exact reverses so the running balance stays consistent with display.
+ */
+function compareEntries(a: RawLedgerRow, b: RawLedgerRow, dir: 1 | -1): number {
+  const byTime = (effectiveTime(a) - effectiveTime(b)) * dir;
+  if (byTime !== 0) return byTime;
+  if (a.id === b.id) return 0;
+  return (a.id < b.id ? -1 : 1) * dir;
+}
+
+/**
  * Turn raw ledger rows into display-ready transactions: newest-first, each with
  * a signed amount and (for settled entries) the running settled balance after
  * it. The running balance is accumulated over settled entries in CHRONOLOGICAL
@@ -126,7 +143,7 @@ export function toTransactionDTOs(rows: readonly RawLedgerRow[]): TransactionDTO
   const settledChrono = rows
     .filter((r) => r.status === 'posted' || r.status === 'disputed')
     .slice()
-    .sort((a, b) => effectiveTime(a) - effectiveTime(b));
+    .sort((a, b) => compareEntries(a, b, 1));
 
   const runningById = new Map<string, number>();
   let running = 0;
@@ -137,7 +154,7 @@ export function toTransactionDTOs(rows: readonly RawLedgerRow[]): TransactionDTO
 
   return rows
     .slice()
-    .sort((a, b) => effectiveTime(b) - effectiveTime(a))
+    .sort((a, b) => compareEntries(a, b, -1))
     .map((row) => ({
       id: row.id,
       accountId: row.accountId,

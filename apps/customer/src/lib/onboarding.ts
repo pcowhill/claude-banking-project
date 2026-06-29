@@ -1,5 +1,6 @@
 import type { OpenAccountRequest, OpenAccountResponse } from '@simbank/shared';
 import { API_URL } from './api';
+import { csrfHeaders } from './csrf';
 
 /**
  * Onboarding API client for the customer app (v0.6.0, task N-09).
@@ -45,6 +46,10 @@ async function readJson<T>(res: Response): Promise<T | null> {
  * normalized client-side via `validateOpenAccount`, but the server validates
  * again and may return a 400 with `fields` (e.g. a duplicate email) the client
  * couldn't know about. Network failures surface as a generic offline message.
+ *
+ * This endpoint is PUBLIC and CSRF-exempt (a logged-out visitor is applying, so
+ * there is no session cookie to protect). We still spread `csrfHeaders()` for
+ * uniformity with the authenticated clients — it is simply empty here.
  */
 export async function submitApplication(
   input: OpenAccountRequest,
@@ -52,7 +57,7 @@ export async function submitApplication(
   try {
     const res = await fetch(`${API_URL}/api/onboarding/applications`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...csrfHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     });
 

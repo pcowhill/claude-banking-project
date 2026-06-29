@@ -7,6 +7,8 @@ import {
   type FraudAlertListResponse,
 } from '@simbank/shared';
 import { requireAuth } from '../auth/guards';
+import { prisma } from '../db';
+import { simulationNow } from '../clock/clock';
 import { createDispute, DisputeError, type DisputeErrorCode } from '../risk/disputes';
 import { FraudError, listFraudAlertsForUser, respondToFraudAlert, type FraudErrorCode } from '../risk/fraud';
 
@@ -46,7 +48,7 @@ export async function riskRoutes(app: FastifyInstance): Promise<void> {
       } as ApiErrorResponse & { fields?: Record<string, string> });
     }
     try {
-      const created = await createDispute(req.user!, check.value, new Date());
+      const created = await createDispute(req.user!, check.value, await simulationNow(prisma));
       app.opsRealtime.requestChanged('created', created.request);
       for (const event of created.events) app.opsRealtime.externalEvent(event);
       return reply.code(201).send({
@@ -77,7 +79,7 @@ export async function riskRoutes(app: FastifyInstance): Promise<void> {
       return handle(reply, 400, 'A valid response (confirm_legit | report_fraud) is required.', 'bad_request');
     }
     try {
-      const result = await respondToFraudAlert(req.user!, id, body.response, new Date());
+      const result = await respondToFraudAlert(req.user!, id, body.response, await simulationNow(prisma));
       app.opsRealtime.requestChanged('updated', result.request);
       for (const event of result.events) app.opsRealtime.externalEvent(event);
       return reply.send({ request: result.request });

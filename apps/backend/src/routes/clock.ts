@@ -11,6 +11,7 @@ import { requireAuth, requireRole } from '../auth/guards';
 import { advanceClock, ClockError, getClockState } from '../clock/clock';
 import { runDueSchedules } from '../scheduler/scheduler';
 import { listAllSchedules } from '../scheduler/schedules';
+import { runInterestAccrual } from '../lending/accrual';
 
 /**
  * Simulation-clock endpoints (v0.9.0).
@@ -48,11 +49,15 @@ export async function clockRoutes(app: FastifyInstance): Promise<void> {
     }
     try {
       const advanced = await advanceClock(prisma, check.value.minutes, req.user!);
-      // Fire everything that became due, then push the results to operators.
+      // Fire everything that became due, then accrue interest, then push results.
       const scheduler = await runDueSchedules(advanced.to);
+      // v1.0.0: clock-driven interest accrual (savings + CD credits, loan debits).
+      // Runs AFTER the scheduler so a payment that fired this advance is reflected
+      // before interest is computed. Every accrual is a bank-originated ledger entry.
+      const accrued = await runInterestAccrual(advanced.to);
       for (const request of scheduler.requests) app.opsRealtime.requestChanged('created', request);
       for (const event of scheduler.events) app.opsRealtime.externalEvent(event);
-      const response: AdvanceClockResponse = { clock: advanced.clock, fired: scheduler.fired };
+      const response: AdvanceClockResponse = { clock: advanced.clock, fired: scheduler.fired, accrued };
       return reply.send(response);
     } catch (err) {
       if (err instanceof ClockError) {

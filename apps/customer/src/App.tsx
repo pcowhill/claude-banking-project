@@ -15,6 +15,7 @@ import { Dashboard } from './pages/Dashboard';
 import { AccountDetail } from './pages/AccountDetail';
 import { MoveMoney } from './pages/MoveMoney';
 import { Wallet } from './pages/Wallet';
+import { Lending } from './pages/Lending';
 import { ScheduledPayments } from './pages/ScheduledPayments';
 import { Statements } from './pages/Statements';
 import { NotFound } from './pages/NotFound';
@@ -24,8 +25,8 @@ import { NotFound } from './pages/NotFound';
  *  - "/"             public marketing home
  *  - "/checking"     checking product page
  *  - "/savings"      savings product page
- *  - "/cards"        cards overview (coming soon)
- *  - "/borrow"       loans & CDs overview (coming soon)
+ *  - "/cards"        cards marketing overview (shipped feature; portal at /wallet)
+ *  - "/borrow"       loans & CDs marketing overview (shipped feature; portal at /loans)
  *  - "/about"        about / trust / security / roadmap
  *  - "/open-account" open-account entry point (onboarding placeholder until v0.6.0)
  *  - "/login"        simulated sign-in (v0.2.0); "already signed in" when authed
@@ -33,6 +34,7 @@ import { NotFound } from './pages/NotFound';
  *  - "/accounts/:id" authenticated account detail + transactions (protected)
  *  - "/move-money"   authenticated money movement — transfer/deposit/send/bill (protected)
  *  - "/wallet"       authenticated cards manager — freeze/replace/travel notices (protected)
+ *  - "/loans"        authenticated loans & CDs portal — open/pay/withdraw (protected)
  *  - "/scheduled-payments" authenticated recurring/scheduled payments (protected)
  *  - "/statements"   authenticated per-account simulated statements (protected)
  *  - "*"             not found
@@ -84,6 +86,14 @@ export function App() {
               element={
                 <RequireAuth>
                   <Wallet />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/loans"
+              element={
+                <RequireAuth>
+                  <Lending />
                 </RequireAuth>
               }
             />

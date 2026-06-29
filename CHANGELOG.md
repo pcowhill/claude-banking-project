@@ -8,10 +8,67 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
-- Next milestone: **v1.0.0** — polish, hardening, security pass (incl. the tracked
-  SEC-1 CSRF item + the dev-tooling audit advisories), test expansion, and the final
-  experiment retrospective. The rest of the v0.9.0 theme — **loans / CDs / interest
-  accrual** — remains roadmapped beyond this clock-and-scheduler slice.
+- **v1.0.0 is the final planned milestone.** Future work would be the explicitly
+  deferred items, at the human's direction: wall-clock auto-advance by a speed
+  multiplier, a dedicated credit-card account product, customer-facing login 2FA, and
+  the Vite/Vitest major upgrade that clears the dev-tooling audit advisories.
+
+## [1.0.0] — 2026-06-29 — Polish, hardening, loans/CDs/interest, final retrospective
+
+The **final** milestone — re-scoped by the human at the v0.9.0 review into a combined
+feature + hardening + polish capstone. Still a local **SIMULATION**: no real money,
+lenders, billers, or payment networks. The **only** schema change is an **additive**
+migration adding `LendingProduct` (+ a nullable `Account.interestAccruedThrough`); no
+existing table altered. Money moves only via ledger entries; balances stay DERIVED.
+Decisions in `docs/process/decisions/ADR-0003-...md`.
+
+### Added
+
+- **Loans, CDs & interest accrual.** Customers open a **Certificate of Deposit**
+  (`POST /api/lending/cds`) or a **loan** (`POST /api/lending/loans`), make loan payments
+  (`/pay`), and withdraw a matured CD (`/withdraw`); `GET /api/lending` lists them
+  (`GET /api/ops/lending` for operators). Opening/paying/withdrawing post **net-zero**
+  `transfer` leg pairs (a loan account carries the negative owed balance). **Interest
+  accrues on clock advance** as bank-originated `interest` entries (a credit on
+  savings/CDs, a debit on loans), monthly, bounded, idempotent, dated at the simulated
+  accrual date. Customer **`/loans`** portal + an operations read-only **`/lending`** view
+  and an interest-accrual summary on the clock page. Seed: a demo CD + loan + 1.50%
+  savings APY.
+- **CSRF protection (SEC-1).** A global double-submit token: a non-httpOnly `mer_csrf`
+  cookie (set on safe GETs + login) must be echoed in the `x-meridian-csrf` header on
+  authenticated state-changing requests, else 403 (constant-time compare); login/logout/
+  public-onboarding exempt; unauthenticated requests still 401. Both apps echo the token.
+- **First frontend unit tests.** The customer app joined the Vitest workspace (pure
+  helpers + a `TransactionList` component test under jsdom).
+
+### Changed
+
+- **The simulation clock is the single authoritative "now" for all money/business
+  dating** (transfers, movements, operator approvals/reversals, disputes/fraud, cards,
+  onboarding/admin funding, scheduled fires, interest accrual). Auth/operational
+  timestamps (session expiry, lockout, login history, heartbeat/status `serverTime`) stay
+  wall-clock by design. Same-instant entries order deterministically by `id`. **Supersedes
+  ADR-0002 #2.**
+- **Marketing copy now reflects shipped reality** — the homepage tiles + `/cards` +
+  `/borrow` present Cards and Loans & CDs as live (clearly-simulated) features; stale
+  "coming in vX.Y" copy removed.
+- **Customer dashboard** groups accounts into cash (checking/savings, the headline total)
+  vs. Loans & CDs (a loan shown as an amount owed), with a savings-APY note.
+
+### Fixed
+
+- **Time-travel date bug:** a scheduled bill pay fired by a clock advance, when approved
+  by an operator, was posted on the **wall-clock** date instead of the simulated date —
+  now fixed (regression test included).
+
+### Security / quality
+
+- Security review **PASS-with-findings** (no Critical/High/Medium); the CSRF
+  session-presence gate + the lending owner-scoped boundary confirmed sound; Low/Info
+  findings acted on (constant-time compare, accrual guard + logging) or accepted.
+- Runtime `npm audit --omit=dev` = **0**. Dev-tooling advisories (vite/vitest/esbuild)
+  accepted with a documented upgrade path. Ledger/scheduler TOCTOU accepted as benign
+  residual risk for a single-user local simulation.
 
 ## [0.9.0] — 2026-06-27 — Simulation clock & scheduled payments
 

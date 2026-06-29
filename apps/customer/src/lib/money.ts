@@ -5,6 +5,7 @@ import type {
   TransferResponse,
 } from '@simbank/shared';
 import { API_URL } from './api';
+import { csrfHeaders } from './csrf';
 
 /**
  * Money-movement API client for the customer app (v0.7.0, task M-05).
@@ -30,9 +31,17 @@ import { API_URL } from './api';
  * only QUEUED — an operator must approve it before it posts.
  */
 
-/** Attach the session cookie; declare JSON only when there is a body. */
+/**
+ * Attach the session cookie + the CSRF double-submit header (SEC-1); declare JSON
+ * only when there is a body. `csrfHeaders()` is empty when there is no token, and
+ * is ignored by the server on safe GETs, so spreading it here covers every
+ * mutating call without missing one.
+ */
 const jsonInit = (init: RequestInit = {}): RequestInit => {
-  const headers: Record<string, string> = { ...((init.headers as Record<string, string>) ?? {}) };
+  const headers: Record<string, string> = {
+    ...csrfHeaders(),
+    ...((init.headers as Record<string, string>) ?? {}),
+  };
   if (init.body != null) headers['Content-Type'] = 'application/json';
   return { credentials: 'include', ...init, headers };
 };

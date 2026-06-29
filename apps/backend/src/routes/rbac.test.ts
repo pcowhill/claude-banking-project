@@ -32,12 +32,18 @@ describe('role-based access control', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('returns the owner BOTH of their accounts with derived balances', async () => {
+    it('returns ALL of the owner’s accounts (incl. the seeded CD + loan) with derived balances', async () => {
       const { cookie } = await loginAs(app, DEMO.customer.email, DEMO.customer.password);
       const res = await get('/api/accounts', cookie);
       expect(res.statusCode).toBe(200);
       const accounts = res.json().accounts as Array<{ name: string; relationship: string; balances: unknown }>;
-      expect(accounts.map((a) => a.name).sort()).toEqual(['Everyday Checking', 'Goal Savings']);
+      // v1.0.0: Avery also owns the seeded 6-month CD + Personal loan accounts.
+      expect(accounts.map((a) => a.name).sort()).toEqual([
+        '6-month CD',
+        'Everyday Checking',
+        'Goal Savings',
+        'Personal loan',
+      ]);
       expect(accounts.every((a) => a.relationship === 'owner')).toBe(true);
       expect(accounts[0].balances).toBeDefined();
     });

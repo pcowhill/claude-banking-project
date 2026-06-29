@@ -3,7 +3,7 @@ import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildServer } from '../server';
 import { prisma } from '../db';
 import { RecordingOpsRealtime } from '../ops/realtime';
-import { DEMO, loginAs, seedDemo } from '../test/fixtures';
+import { DEMO, loginAs, mutatingHeaders, seedDemo } from '../test/fixtures';
 
 /**
  * Integration tests for v0.9.0 — the simulation clock + the clock-driven
@@ -38,10 +38,10 @@ describe('simulation clock + scheduler (v0.9.0)', () => {
   });
 
   function get(url: string, cookie?: string) {
-    return app.inject({ method: 'GET', url, headers: cookie ? { cookie } : {} });
+    return app.inject({ method: 'GET', url, headers: mutatingHeaders(cookie) });
   }
   function post(url: string, cookie?: string, payload?: InjectOptions['payload']) {
-    return app.inject({ method: 'POST', url, headers: cookie ? { cookie } : {}, payload });
+    return app.inject({ method: 'POST', url, headers: mutatingHeaders(cookie), payload });
   }
 
   async function settledTotal(): Promise<number> {
@@ -264,6 +264,58 @@ describe('simulation clock + scheduler (v0.9.0)', () => {
       const posted = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: payload.ledgerEntryIds[0] } });
       expect(posted.status).toBe('posted');
       expect(await settledTotal()).toBe(totalBefore - 33_00);
+    });
+
+    // Regression for the v0.9.0-review bug (V-01 / ADR-0003): a clock-fired bill
+    // pay ("City Power and Light") that an operator then approves must POST on the
+    // SIMULATED date, never the real wall-clock date.
+    it('approving a clock-fired bill pay posts it on the SIMULATED date, not the wall clock', async () => {
+      await cleanSlate();
+      const { checking } = await averyAccounts();
+      const biller = 'City Power and Light';
+      const created = (
+        await createSchedule({
+          kind: 'bill_pay',
+          fromAccountId: checking.id,
+          counterparty: biller,
+          amountMinor: 1_00, // tiny, so it can't be skipped for insufficient funds
+          frequency: 'once',
+          firstRunInDays: 1,
+        })
+      ).json().schedule;
+
+      const DAYS_MS = 24 * 60 * 60 * 1000;
+      const simBefore = Date.parse((await get('/api/clock', customer.cookie)).json().clock.currentTime);
+
+      // Fast-forward the simulated clock 300 days (within the per-advance bound).
+      const fired = (await advance({ days: 300 })).json().fired.find(
+        (f: { scheduleId: string }) => f.scheduleId === created.id,
+      );
+      expect(fired).toMatchObject({ runs: 1, queuedMinor: 1_00, skipped: 0 });
+      const simAfterIso = (await get('/api/clock', customer.cookie)).json().clock.currentTime as string;
+      // The clock genuinely moved 300 simulated days forward in this single step…
+      expect(Date.parse(simAfterIso) - simBefore).toBe(300 * DAYS_MS);
+
+      const request = await prisma.operationsRequest.findFirstOrThrow({
+        where: { type: 'bill_pay', status: 'pending', summary: { contains: biller } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      const payload = JSON.parse(request.payload!) as { ledgerEntryIds: string[] };
+
+      // The pending entry was dated at the simulated DUE date (≤ sim now).
+      const pendingEntry = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: payload.ledgerEntryIds[0] } });
+      expect(pendingEntry.createdAt.getTime()).toBeLessThanOrEqual(Date.parse(simAfterIso));
+
+      // Approve → the posted date is EXACTLY the simulated clock, never the wall clock.
+      await post(`/api/ops/requests/${request.id}/action`, ops.cookie, { action: 'approve' });
+      const posted = await prisma.ledgerEntry.findUniqueOrThrow({ where: { id: payload.ledgerEntryIds[0] } });
+      expect(posted.status).toBe('posted');
+      expect(posted.postedAt).not.toBeNull();
+      // The settled date is the simulated clock instant itself…
+      expect(posted.postedAt!.toISOString()).toBe(simAfterIso);
+      // …i.e. 300 simulated days past where the clock began this test, which a
+      // wall-clock value (the test runs in milliseconds) could never be.
+      expect(posted.postedAt!.getTime() - simBefore).toBe(300 * DAYS_MS);
     });
 
     it('catches up multiple missed occurrences when the clock jumps several periods', async () => {

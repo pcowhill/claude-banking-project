@@ -22,3 +22,4 @@ export * from './risk';
 export * from './clock';
 export * from './schedules';
 export * from './statements';
+export * from './lending';

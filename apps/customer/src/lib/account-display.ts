@@ -1,6 +1,9 @@
 import {
+  formatApy,
   formatMinor,
+  DEFAULT_SAVINGS_APY_BPS,
   type AccountRelationship,
+  type AccountSummary,
   type AccountType,
   type LedgerStatus,
 } from '@simbank/shared';
@@ -55,4 +58,50 @@ export function formatTxnDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// ---- Account grouping (cash vs. loans & CDs) --------------------------------
+
+/**
+ * Account types that count toward spendable "cash" (the headline total). Loans
+ * and CDs are excluded so a loan's NEGATIVE balance can't silently distort it.
+ */
+const CASH_ACCOUNT_TYPES: ReadonlySet<AccountType> = new Set<AccountType>([
+  'checking',
+  'savings',
+]);
+
+/** True for an everyday cash account (checking/savings). */
+export function isCashAccount(account: AccountSummary): boolean {
+  return CASH_ACCOUNT_TYPES.has(account.type);
+}
+
+/** True for a lending/deposit product account (a CD or a loan). */
+export function isLendingAccount(account: AccountSummary): boolean {
+  return account.type === 'cd' || account.type === 'loan';
+}
+
+/**
+ * Split the accounts a customer can see into "cash" (checking/savings — summed in
+ * the headline total) and "lending" (cd/loan — shown separately so a loan's
+ * negative balance never distorts the cash total). Order within each group is
+ * preserved. v1.0.0, since seeded CD + loan accounts now appear in /api/accounts.
+ */
+export function groupAccounts(accounts: AccountSummary[]): {
+  cash: AccountSummary[];
+  lending: AccountSummary[];
+} {
+  const cash: AccountSummary[] = [];
+  const lending: AccountSummary[] = [];
+  for (const account of accounts) {
+    if (isLendingAccount(account)) lending.push(account);
+    else cash.push(account);
+  }
+  return { cash, lending };
+}
+
+/** A small "earns X% APY (simulated)" note for a savings account, else null. */
+export function savingsApyNote(type: AccountType): string | null {
+  if (type !== 'savings') return null;
+  return `Earns ${formatApy(DEFAULT_SAVINGS_APY_BPS)} APY (simulated)`;
 }

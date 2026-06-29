@@ -4,6 +4,7 @@ import cookie from '@fastify/cookie';
 import { config } from './config';
 import { registerRoutes } from './routes/index';
 import { noopOpsRealtime, type OpsRealtime } from './ops/realtime';
+import { csrfHook } from './auth/csrf';
 
 // Make the ops real-time publisher available to route handlers in a typed way.
 declare module 'fastify' {
@@ -45,6 +46,12 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // and with `decorateRequest` so `req.cookies` / `req.user` exist everywhere.
   await app.register(cookie);
   app.decorateRequest('user', null);
+
+  // CSRF (v1.0.0 / SEC-1): a global double-submit check. Registered AFTER the
+  // cookie plugin so `req.cookies` is populated. Issues a token cookie on safe
+  // requests; rejects a mutating request whose `x-meridian-csrf` header does not
+  // match the `mer_csrf` cookie (login/logout/public-onboarding are exempt).
+  app.addHook('onRequest', csrfHook);
 
   // Ops real-time publisher (no-op unless the runtime binds a Socket.IO server).
   app.decorate('opsRealtime', options.opsRealtime ?? noopOpsRealtime);

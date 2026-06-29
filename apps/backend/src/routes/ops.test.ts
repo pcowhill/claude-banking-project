@@ -4,7 +4,7 @@ import type { InjectOptions } from 'fastify';
 import { buildServer } from '../server';
 import { prisma } from '../db';
 import { RecordingOpsRealtime } from '../ops/realtime';
-import { DEMO, loginAs, seedDemo } from '../test/fixtures';
+import { DEMO, loginAs, mutatingHeaders, seedDemo } from '../test/fixtures';
 
 /**
  * Integration tests for the v0.5.0 operations endpoints: RBAC (only ops_agent /
@@ -41,10 +41,10 @@ describe('operations endpoints (v0.5.0)', () => {
   });
 
   function get(url: string, cookie?: string) {
-    return app.inject({ method: 'GET', url, headers: cookie ? { cookie } : {} });
+    return app.inject({ method: 'GET', url, headers: mutatingHeaders(cookie) });
   }
   function post(url: string, cookie?: string, payload?: InjectOptions['payload']) {
-    return app.inject({ method: 'POST', url, headers: cookie ? { cookie } : {}, payload });
+    return app.inject({ method: 'POST', url, headers: mutatingHeaders(cookie), payload });
   }
 
   async function createPendingRequest(overrides: Record<string, unknown> = {}) {

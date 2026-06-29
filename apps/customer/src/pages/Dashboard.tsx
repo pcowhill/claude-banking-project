@@ -13,7 +13,12 @@ import { Card, CardDescription, CardTitle } from '../components/ui/Card';
 import { BackendStatusPill } from '../components/BackendStatusPill';
 import { Button } from '../components/ui/Button';
 import { cn } from '../lib/cn';
-import { accountTypeLabel, RELATIONSHIP_META } from '../lib/account-display';
+import {
+  accountTypeLabel,
+  groupAccounts,
+  savingsApyNote,
+  RELATIONSHIP_META,
+} from '../lib/account-display';
 import { useAuth } from '../lib/auth-context';
 import { fetchAccounts, fetchLoginHistory } from '../lib/auth';
 import { acceptInvitation, declineInvitation, fetchInvitations } from '../lib/invitations';
@@ -59,6 +64,12 @@ function formatTimestamp(iso: string): string {
 function AccountOverviewCard({ account }: { account: AccountSummary }) {
   const meta = RELATIONSHIP_META[account.relationship];
   const { balances } = account;
+  // A loan account carries a NEGATIVE balance (the amount owed). Present it as a
+  // positive "Owed" figure so the card reads sensibly rather than as a confusing
+  // negative "available". A CD shows its single (positive) value.
+  const isLoan = account.type === 'loan';
+  const isCd = account.type === 'cd';
+  const apyNote = savingsApyNote(account.type);
   return (
     <Link
       to={`/accounts/${account.id}`}
@@ -80,26 +91,43 @@ function AccountOverviewCard({ account }: { account: AccountSummary }) {
           {meta.label}
         </span>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-slate-500">Available</div>
-          <div className="text-2xl font-bold text-brand-navy tabular-nums">
-            {formatMinor(balances.availableMinor, account.currency)}
+      {isLoan ? (
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Balance owed</div>
+          <div className="text-2xl font-bold text-rose-700 tabular-nums">
+            {formatMinor(Math.abs(balances.currentMinor), account.currency)}
           </div>
         </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide text-slate-500">Current</div>
-          <div className="text-2xl font-semibold text-slate-700 tabular-nums">
+      ) : isCd ? (
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Value</div>
+          <div className="text-2xl font-bold text-brand-navy tabular-nums">
             {formatMinor(balances.currentMinor, account.currency)}
           </div>
         </div>
-      </div>
-      {balances.pendingDebitMinor + balances.heldMinor > 0 && (
+      ) : (
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">Available</div>
+            <div className="text-2xl font-bold text-brand-navy tabular-nums">
+              {formatMinor(balances.availableMinor, account.currency)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">Current</div>
+            <div className="text-2xl font-semibold text-slate-700 tabular-nums">
+              {formatMinor(balances.currentMinor, account.currency)}
+            </div>
+          </div>
+        </div>
+      )}
+      {!isLoan && !isCd && balances.pendingDebitMinor + balances.heldMinor > 0 && (
         <CardDescription>
           Includes {formatMinor(balances.pendingDebitMinor + balances.heldMinor, account.currency)}{' '}
           pending/held.
         </CardDescription>
       )}
+      {apyNote && <CardDescription>{apyNote}</CardDescription>}
       <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-teal-dark group-hover:gap-2">
         View transactions <span aria-hidden="true">→</span>
       </span>
@@ -145,31 +173,63 @@ function AccountsOverview({ state }: { state: AsyncData<AccountSummary[]> }) {
     );
   }
 
-  // Combined available across every account the user can see (single currency in
-  // the simulation today, so a plain sum is correct).
-  const currency = state.data[0]?.currency ?? 'USD';
-  const totalAvailable = state.data.reduce((sum, a) => sum + a.balances.availableMinor, 0);
+  // Loans/CDs are real accounts now (v1.0.0), so split them out: the headline
+  // total sums spendable CASH (checking/savings) only — a loan's NEGATIVE balance
+  // must never silently distort it — and CDs/loans appear in their own section.
+  const { cash, lending } = groupAccounts(state.data);
+  const currency = cash[0]?.currency ?? state.data[0]?.currency ?? 'USD';
+  const totalAvailable = cash.reduce((sum, a) => sum + a.balances.availableMinor, 0);
 
   return (
     <section className="mt-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-500">
-            Total available across your accounts
+            Total available cash
           </div>
           <div className="text-3xl font-bold text-brand-navy tabular-nums">
             {formatMinor(totalAvailable, currency)}
+          </div>
+          <div className="mt-0.5 text-xs text-slate-400">
+            {lending.length > 0
+              ? 'Across your checking & savings. Loans & CDs are shown separately below.'
+              : 'Across your checking & savings accounts.'}
           </div>
         </div>
         <span className="text-xs text-slate-400">
           {state.data.length} {state.data.length === 1 ? 'account' : 'accounts'}
         </span>
       </div>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {state.data.map((account) => (
-          <AccountOverviewCard key={account.id} account={account} />
-        ))}
-      </div>
+
+      {cash.length > 0 && (
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {cash.map((account) => (
+            <AccountOverviewCard key={account.id} account={account} />
+          ))}
+        </div>
+      )}
+
+      {lending.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-brand-navy">Loans &amp; CDs</h2>
+            <Link
+              to="/loans"
+              className="text-sm font-medium text-brand-teal-dark hover:underline"
+            >
+              Manage
+            </Link>
+          </div>
+          <p className="text-sm text-slate-600">
+            A loan is shown as the amount you owe; a CD shows its current value (simulated).
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {lending.map((account) => (
+              <AccountOverviewCard key={account.id} account={account} />
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -550,6 +610,13 @@ export function Dashboard() {
           >
             <div className="font-medium text-brand-navy">Cards</div>
             <div className="mt-0.5 text-xs text-slate-500">Freeze, replace, and travel notices</div>
+          </Link>
+          <Link
+            to="/loans"
+            className="rounded-lg border border-slate-200 bg-white p-4 text-sm shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal"
+          >
+            <div className="font-medium text-brand-navy">Loans &amp; CDs</div>
+            <div className="mt-0.5 text-xs text-slate-500">Open a CD or loan, pay, withdraw</div>
           </Link>
         </div>
       </section>

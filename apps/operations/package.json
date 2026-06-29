@@ -1,6 +1,6 @@
 {
   "name": "@simbank/operations",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Bank Operations Simulator console for the Meridian banking simulation. Simulates external banking systems and bank-employee actions. Local simulation only.",

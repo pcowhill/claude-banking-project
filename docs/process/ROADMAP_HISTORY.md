@@ -71,6 +71,38 @@ carries the accepted **SEC-1 (CSRF)** item and the dev-tooling audit advisories.
 loans/CDs/interest are pulled into v1.0.0 or scheduled as additional work is the human's
 call at the v0.9.0 review.
 
+## 2026-06-29 — v1.0.0 re-scoped by the human: loans/CDs/interest pulled in (+ date fix + placeholder cleanup)
+
+**What changed:** at the **v0.9.0 review** the human **pulled loans / CDs / interest
+accrual into v1.0.0** ("Now that the clock is in place, can these be pursued within the
+v1.0.0 as well? If so, do them.") and reported two polish/correctness items. So the
+**final** milestone **v1.0.0** grows from a pure hardening-and-finish pass into a combined
+**feature + hardening + polish** capstone:
+
+- **Loans / CDs / interest accrual** — the carried-forward remainder of the original
+  "v0.9.0 — Loans, CDs, simulated time" theme — are **built in v1.0.0**, on the
+  v0.9.0 clock + the disciplined ledger (interest = bank-originated `interest` ledger
+  entries dated at the simulated accrual date; CD/loan principal moves as net-zero
+  `transfer` legs; balances stay derived).
+- **Simulated-date correctness** — a reported time-travel bug (a clock-fired bill pay
+  posted/approved on the **wall-clock** date) is fixed by making the **simulation clock
+  the single authoritative "now"** for every money/business timestamp, **superseding
+  ADR-0002 decision #2** (which had kept immediate actions on wall-clock to avoid
+  collapsing same-session entries — resolved instead with a deterministic ordering
+  tiebreaker). Auth/session/operational timestamps stay wall-clock by design.
+- **Marketing placeholder cleanup** — stale "coming in vX.Y" copy on the homepage tiles
+  and the `/cards` + `/borrow` pages is corrected to reflect shipped reality (cards from
+  v0.8.0; loans/CDs once built this milestone).
+- **Carried hardening** (already planned for v1.0.0) stays: **SEC-1 (CSRF)**, the
+  dev-tooling npm-audit advisories, and the ledger/scheduler TOCTOU + bookkeeping
+  disposition.
+
+The **milestone count/order is unchanged** — v1.0.0 remains the final milestone; it now
+simply absorbs the carried-forward loans/CDs/interest theme rather than leaving it for a
+hypothetical post-1.0 milestone. Recorded in `feedback/FEEDBACK_v0.9.0_2026-06-29_0105.md`
+and decomposed into `V-/L-/H-/Q-/R-` tasks on the board; the lending + date decisions are
+recorded in **ADR-0003**.
+
 ## 2026-06-25 — v0.3.0 absorbed a bug fix (no scope change)
 
 No change to the milestone **structure or order**. Noted for the record: the
