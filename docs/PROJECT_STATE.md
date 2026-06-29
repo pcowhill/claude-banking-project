@@ -6,12 +6,26 @@
 
 ## At a glance
 
-- **Current version / tag:** `v0.9.0` — Simulation clock & scheduled payments (a
-  **feature** milestone). An annotated tag `v0.9.0` is created locally on the milestone
-  commit; **pushing tags is blocked by this environment's git policy (HTTP 403)**, so
-  the human (re)creates/pushes the tag on merge to `main` — see
-  `docs/process/MILESTONE_REPORT_v0.9.0.md` for the exact command. (Builds on v0.7.0
-  money movement + v0.5.0 ops queue.)
+- **Current version / tag:** `v1.0.0` — Polish, hardening, loans/CDs/interest, final
+  retrospective (the **final** milestone; re-scoped by the human at the v0.9.0 review
+  into a combined feature + hardening + polish capstone). An annotated tag `v1.0.0` is
+  created locally on the milestone commit; **pushing tags is blocked by this
+  environment's git policy (HTTP 403)**, so the human (re)creates/pushes the tag on merge
+  to `main` — see `docs/process/MILESTONE_REPORT_v1.0.0.md` for the exact command.
+- **What v1.0.0 added:** **loans / CDs / interest accrual** (pulled in by the human now
+  that the clock exists) — a `cd`/`loan` Account + 1:1 `LendingProduct` (terms only); open
+  CD / open loan / pay loan / withdraw matured CD post **net-zero** `transfer` pairs (a
+  loan is a NEGATIVE owed balance); **interest accrues on clock advance** as
+  bank-originated `interest` entries (savings + CD credits, loan debits), monthly +
+  bounded + idempotent; customer **`/loans`** portal + operations **`/lending`** view.
+  **Simulated-date correctness:** every money/business timestamp now reads the simulation
+  clock (fixing the clock-fired bill-pay approve-date bug); auth/operational stay
+  wall-clock (ADR-0003, supersedes ADR-0002 #2). **CSRF (SEC-1)** enforced (double-submit
+  token). **Marketing placeholders** corrected (Cards + Loans & CDs are live). **First
+  frontend unit tests** added. One **additive** migration (`lending`).
+- **Earlier feature milestone:** `v0.9.0` — Simulation clock & scheduled payments
+  (controllable forward-only clock + clock-driven scheduler + statement cycles). Still
+  fully in place.
 - **What v0.9.0 added:** a controllable **simulation clock** (`GET /api/clock`;
   ops/admin `POST /api/ops/clock/advance` — **forward-only**, audited — which then
   **fires** due schedules; `GET /api/ops/schedules`). **Recurring/scheduled payments**
@@ -51,28 +65,28 @@
 - **What v0.6.x fixed (still in place):** **B-03** narrow-width ☰ nav; **B-04**
   expired-session recovery; **B-06** the surface-header session resolution (operator
   sign-in). All green.
-- **Next milestone:** `v1.0.0` — polish, hardening, security pass (incl. the tracked
-  SEC-1 CSRF item + the dev-tooling audit advisories), test expansion, final
-  retrospective. The rest of the v0.9.0 theme — **loans / CDs / interest accrual** —
-  remains roadmapped beyond this clock-and-scheduler slice (see `ROADMAP_HISTORY.md`).
-- **Working branch (this session):** `claude/happy-franklin-q41de0` (the Claude Code
-  Cloud session branch; intended milestone name `milestone/v0.9.0-simulation-clock`).
-- **Gate status:** `npm run verify` ✅ passes. **332** unit/integration tests (was 282):
-  new shared clock/schedules/statements contract tests, **16** clock+scheduler+statements
-  backend integration tests, and seed-plan schedule tests + **44** Playwright e2e green
-  (was 41; **+3** scheduled-payments journeys). **0 lint warnings.** One **additive**
-  migration (`scheduled_payments`); **runtime `npm audit` = 0**. Security review
-  **PASS-with-findings** (no Critical/High/Medium; one Low acted on — the scheduler now
-  records a fire failure as a skip instead of rethrowing after claim, with the
-  per-schedule loop guarded; L-2/L-3 bookkeeping/TOCTOU tracked; SEC-1 CSRF still
-  Lax+CORS-mitigated → v1.0.0).
+- **Next milestone:** none planned — **v1.0.0 is the final milestone.** Future work is
+  the explicitly deferred set (clock auto-advance by a speed multiplier; a dedicated
+  credit-card account product; customer-facing login 2FA; the Vite/Vitest major upgrade
+  clearing the dev-tooling audit advisories), at the human's direction.
+- **Working branch (this session):** `claude/elegant-pascal-lg8lcr` (the Claude Code
+  Cloud session branch; intended milestone name `milestone/v1.0.0-polish-hardening-lending`).
+- **Gate status:** `npm run verify` ✅ passes (lint 0 warnings, typecheck ×4,
+  unit/integration, build ×4) + Playwright e2e green. <!-- GATE_TBD: exact counts
+  finalized at tag (332 → +shared lending + backend lending/accrual + CSRF + date
+  regression + first frontend component tests; e2e 44 → +lending, dashboard/marketing
+  updated). See QUALITY_REPORT.md / MILESTONE_REPORT_v1.0.0.md. --> One **additive**
+  migration (`lending`); **runtime `npm audit` = 0** (dev-tooling advisories accepted with
+  an upgrade path). Security review **PASS-with-findings** (no Critical/High/Medium; the
+  CSRF session-presence gate + the lending owner-scoped boundary confirmed sound; Low/Info
+  acted on or accepted). SEC-1 CSRF is now **enforced** (double-submit token).
 - **Runnable:** backend `:3000`, customer `:5173`, operations `:5174` via
-  `npm run dev`. v0.9.0 headline flow: as **Avery** at `:5173/scheduled-payments` create
-  a **schedule** (transfer or bill pay) and see the current simulated date; then as
-  **Sam** at `:5174` open **Simulation clock**, **fast-forward** (e.g. +1 week) and watch
-  due schedules **fire** (transfers post; bill pays queue a review in Request queues to
-  approve); back as Avery the dashboard balances + **/statements** reflect it. (v0.8.0
-  cards/fraud/disputes and v0.7.0 money movement still work the same way.)
+  `npm run dev`. v1.0.0 headline flow: as **Avery** at `:5173/loans` open a **CD** or a
+  **loan** (and see the seeded CD + loan); then as **Sam** at `:5174` open **Simulation
+  clock** and **fast-forward** — due schedules fire AND **interest accrues** (savings/CD
+  credits, loan debits), shown in the accrual summary; approve the fired **City Power and
+  Light** bill pay and it posts on the **simulated** date (the v0.9.0-review fix). Back as
+  Avery, balances reflect interest + payments. (All of v0.7.0–v0.9.0 still works the same.)
 - **Money discipline — now exercised on real movement.** Money moves ONLY via explicit
   `LedgerEntry` rows; **no balance is ever stored or edited.** Transfers post both legs
   and net to zero; external value enters only via a bank-originated posted `deposit`
@@ -126,7 +140,13 @@
   (crypto token + SHA-256), `lockout.ts` (pure), `sessions.ts`, `access.ts`
   (RBAC; v0.4.0 adds `listAccountTransactions`), `guards.ts`
   (`requireAuth`/`requireRole`), `cookies.ts` (now exports `sessionAudienceForOrigin`),
-  `audit.ts`.
+  `audit.ts`, and **`csrf.ts` (v1.0.0 — SEC-1 enforced)**: a global double-submit hook —
+  a non-httpOnly `mer_csrf` cookie is set on safe GETs + login, and any mutating request
+  **that carries a session cookie** must echo a matching `x-meridian-csrf` header
+  (constant-time compare) or it is rejected 403; login/logout/public-onboarding are
+  exempt, and unauthenticated mutating requests fall through to the honest 401.
+  `SameSite=Lax` + the CORS allowlist remain as defense in depth. Both apps' `lib/api.ts`
+  clients read the cookie and send the header.
 - **Operations (v0.5.0)** under `src/ops/`: `requests.ts` (service — list/detail/
   `applyOperatorAction` state machine/`createSimulatedEvent`, mappers, typed
   `OpsActionError`, reuses `AuditLog`; **writes no ledger**) and `realtime.ts`
@@ -321,6 +341,61 @@
   no existing table altered. The time model + decisions are recorded in
   **`docs/process/decisions/ADR-0002-simulation-clock-and-scheduler.md`**.
 
+### Loans, CDs & interest accrual (v1.0.0)
+- **Model:** a CD or a loan is a dedicated `cd`/`loan` **`Account`** (both already in
+  `ACCOUNT_TYPES`) paired 1:1 with a **`LendingProduct`** row that holds only the **terms**
+  (`kind`, `status`, `principalMinor`, `apyBps`, `termMonths`, `openedAt`, `maturesAt`,
+  `lastAccruedAt`, nullable `paymentMinor` for loans). A **loan carries a NEGATIVE (owed)
+  balance**; balances stay DERIVED from the ledger as always.
+- **Movements (all net-zero):** `apps/backend/src/lending/lending.ts` — `openCd` (funding
+  account → CD), `openLoan` (loan account −principal + checking +principal, with an
+  amortized `paymentMinor`), `makeLoanPayment` (checking → loan; insufficient → typed
+  error), `withdrawMaturedCd` (CD → checking at/after maturity). Each posts paired
+  `transfer` legs that **net to zero** (no money created); the only new money is interest.
+- **Interest accrual on clock advance:** `apps/backend/src/lending/accrual.ts`
+  `runInterestAccrual(upTo)` posts a **bank-originated `interest`** credit for each active
+  savings (default APY) + CD (product APY) and an `interest` debit on each active loan's
+  outstanding balance — **monthly cadence, bounded catch-up, idempotent** via a per-target
+  bookmark (`lastAccruedAt` / `Account.interestAccruedThrough`), each entry **dated at the
+  simulated period end**. It is **wired into `POST /api/ops/clock/advance` right after
+  `runDueSchedules`** (no background timer — accrual happens on advance, like the
+  scheduler). Ledger-only; audited.
+- **Shared** `@simbank/shared/lending`: `LENDING_KINDS` (`cd`/`loan`), `LENDING_STATUSES`
+  (`active`/`matured`/`paid_off`/`closed`), the default savings APY + bounds, the lending
+  DTOs, and the PURE math (`monthlyAccrualMinor`, `amortizedPaymentMinor`,
+  `projectCdMaturityMinor`, calendar-safe period iteration) + validators
+  (`validateOpenCd` / `validateOpenLoan` / `validateLoanPayment`) — reused client + server,
+  unit-tested.
+- **Routes** `apps/backend/src/routes/lending.ts` (customer, `requireAuth`, access-scoped):
+  `POST /api/lending/cds`, `POST /api/lending/loans`, `GET /api/lending` (the user's
+  lending products with derived balances + product terms),
+  `POST /api/lending/loans/:id/pay`, `POST /api/lending/cds/:id/withdraw`; ops read-only
+  `GET /api/ops/lending`.
+- **Customer UI:** a `/loans` portal (open/list/pay/withdraw, simulated-date aware); the
+  dashboard now **groups** accounts into cash (checking/savings — the headline total) vs.
+  Loans & CDs (a loan shown as an amount owed) so a loan's negative balance can't distort
+  the headline total, plus a savings-APY note. **Operations UI:** a read-only `/lending`
+  view + an interest-accrual summary on the Simulation clock page alongside fired schedules.
+- **Schema:** one **additive** migration `lending` (`LendingProduct` + the nullable
+  `Account.interestAccruedThrough` column); no existing table altered. **Seed:** Avery has
+  a 6-month CD ($2,000) + a Personal loan ($6,000 owed); savings accrues at 1.50% APY
+  (`assertSeedLendingIntegrity`). Design recorded in
+  **`docs/process/decisions/ADR-0003-lending-and-simulated-date-everywhere.md`**.
+
+### Simulated-date correctness (v1.0.0)
+- **The simulation clock is now the single authoritative "now" for every money/business
+  timestamp.** Every money/ops/business route threads `simulationNow(prisma)` — transfers,
+  external movements, **operator approvals & reversals** (the reported clock-fired bill-pay
+  approve-date bug), simulate-event, admin funding, onboarding submit/invite/accept/decline,
+  disputes + fraud responses, and card lifecycle — and scheduled fires + interest accrual
+  already date at the simulated time. **Auth/operational timestamps stay wall-clock by
+  design** (session expiry, lockout, login history, the heartbeat/status `serverTime`) —
+  they track real elapsed time. `toTransactionDTOs` gained a deterministic **`id`
+  tiebreak** so same-simulated-instant entries order stably (cuid is timestamp-prefixed →
+  newest-first within a shared instant). This **supersedes ADR-0002 decision #2** and is
+  recorded in **ADR-0003**; a regression test reproduces the "City Power and Light approved
+  on the simulated date, not the wall clock" scenario across a ~300-day advance.
+
 ### Branding & assets
 - `assets/brand/` logo SVGs (horizontal/mark/mono-light) + README.
 - `assets/prompts/IMAGE_GENERATION_PROMPTS.md` (5 marketing prompts).
@@ -332,28 +407,46 @@
   human review, next-session prompt, ADR-0001, feedback/ + blockers/ folders).
 - `.claude/agents/` role definitions for the controlled multi-agent workflow.
 
-## NOT built yet (by design — future milestones)
+## NOT built yet (by design — the deferred set; v1.0.0 is the final planned milestone)
 - **Recurring / scheduled payments + the simulation clock + statement cycles are DONE in
-  v0.9.0.** One-off money movement is done in v0.7.0; cards / fraud / disputes in v0.8.0.
-- **Loans / CDs / interest accrual** — the rest of the broader v0.9.0 "simulated time"
-  roadmap theme. **Not** in the v0.9.0 clock-and-scheduler slice; carried forward
-  (see `ROADMAP_HISTORY.md`). A future milestone (v0.9.x or part of v1.0.0 scoping).
-- **Auto-advance of the clock by a "speed" multiplier** — out of scope for v0.9.0 (the
-  clock moves only on an explicit operator advance; the `speed` column is informational).
+  v0.9.0.** One-off money movement is done in v0.7.0; cards / fraud / disputes in v0.8.0;
+  **loans / CDs / interest accrual are DONE in v1.0.0** (the rest of the broader "simulated
+  time" theme — see the subsection above and `ROADMAP_HISTORY.md`).
+- **Auto-advance of the clock by a "speed" multiplier** — still out of scope (the clock
+  moves only on an explicit operator advance; the `speed` column is informational). A
+  deferred future item, at the human's direction.
 - **A dedicated `credit_card` account product** — v0.8.0 cards attach to existing
-  checking/savings accounts (the `Card.cardType` distinguishes debit/credit); a real
-  credit-account product (with a credit line) is a possible later milestone.
+  checking/savings accounts (the `Card.cardType` distinguishes debit/credit) and v1.0.0's
+  lending adds `cd`/`loan` accounts, but a real **credit-card account product** (with a
+  revolving credit line) is still a deferred future item.
 - **MFA / 2FA at login, password reset, remember-device, new-device alerts**
   (deferred within the auth theme). v0.6.0 uses the simulated-messaging seam for
   **onboarding** identity/MFA (the review's **Q-02**); customer-facing login-time
-  2FA — which will create a `SimulatedEvent` OTP per the same seam — lands later.
-- Frontend component unit tests (still deferred; auth + dashboard + ops console UIs
-  are covered by build + Playwright journeys + backend/contract tests for now — see
+  2FA — which will create a `SimulatedEvent` OTP per the same seam — remains deferred.
+- **The Vite/Vitest major upgrade** that would clear the remaining **dev-tooling** npm-audit
+  advisories — deferred past the 1.0 tag rather than forcing a destabilizing bump (runtime
+  audit is already 0; see "Known issues / watch items").
+- **Frontend component unit tests now EXIST as a first/starter set** (v1.0.0 — the customer
+  app joined the Vitest workspace: pure customer helpers + a `TransactionList` component
+  test under jsdom + Testing Library). Coverage is intentionally a **starter**; broader
+  component coverage (operations console, more customer screens) is still future work — the
+  apps otherwise stay covered by build + Playwright journeys + backend/contract tests (see
   QUALITY_REPORT).
 
 ## Known issues / watch items
-- **Dev-tooling npm audit advisories** (vite, vitest, esbuild) remain; runtime
-  is clean. Tracked in `docs/process/QUALITY_REPORT.md` for a hardening pass.
+- **SEC-1 CSRF is now ENFORCED (v1.0.0)** — no longer the "SameSite=Lax + CORS-mitigated"
+  accepted item it was across v0.2.0–v0.9.0. A global double-submit token (`mer_csrf`
+  cookie + `x-meridian-csrf` header, session-presence gated, constant-time compare,
+  login/logout/public-onboarding exempt) now backs every authenticated state-changing
+  request; `SameSite=Lax` + CORS remain as defense in depth. See `auth/csrf.ts` + ADR-0003.
+- **Dev-tooling npm audit advisories** (vite, vitest, esbuild) remain **dev-only**; runtime
+  `npm audit --omit=dev` = **0**. **Accepted disposition with a documented upgrade path**
+  (no non-breaking fix; the Vite/Vitest major upgrade is deferred past the 1.0 tag rather
+  than forcing a destabilizing bump). Tracked in `docs/process/QUALITY_REPORT.md`.
+- **Ledger/scheduler TOCTOU + bookkeeping (v0.7.0 F-2, v0.9.0 L-2/L-3)** — **accepted as
+  benign residual risk** for a single-user local simulation: balances are DERIVED, SQLite
+  serializes writers, and the worst case is a transient, auditable negative-available —
+  **never a lost or created dollar**. Dispositioned in `QUALITY_REPORT.md` + ADR-0003.
 - **Sandbox-only friction:** in the Claude Code Cloud sandbox, Prisma engine
   downloads required a local mirror + `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING`,
   and Playwright used the pre-installed Chromium via `PLAYWRIGHT_CHROMIUM_PATH`.
