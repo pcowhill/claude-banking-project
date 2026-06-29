@@ -16,9 +16,8 @@ Status legend: ✅ complete · ▶️ in progress · ⏳ planned
 | **v0.6.0** | Onboarding and account opening | ✅ complete |
 | **v0.7.0** | Money movement | ✅ complete |
 | **v0.8.0** | Cards, fraud, disputes | ✅ complete |
-| v0.9.0 | Simulation clock + recurring/scheduled payments + statement cycles | ▶️ in progress |
-| _v0.9.0+_ | _Loans, CDs, interest accrual (rest of the simulated-time theme)_ | ⏳ planned |
-| v1.0.0 | Polish, hardening, final retrospective | ⏳ planned |
+| **v0.9.0** | Simulation clock + recurring/scheduled payments + statement cycles | ✅ complete |
+| **v1.0.0** | Polish, hardening, **loans/CDs/interest accrual** (human pulled in), simulated-date fix, final retrospective | ▶️ in progress |
 
 ---
 
@@ -74,10 +73,13 @@ statement cycles · fast-forward simulation clock · scheduled event processing 
 **recurring/scheduled payments** (carried from v0.7.0 — they ride on the
 simulation clock + scheduled-event processing introduced here).
 
-### v1.0.0 — Polish, hardening, and final retrospective
-UX cleanup · test expansion · bug fixing · performance pass · security review
-(including the dev-tooling audit advisories) · final process retrospective ·
-final experiment report.
+### v1.0.0 — Polish, hardening, loans/CDs/interest, and final retrospective
+UX cleanup · test expansion · bug fixing · security review (CSRF/SEC-1 +
+dev-tooling audit advisories + ledger TOCTOU disposition) · **loans / CDs /
+interest accrual** (pulled into v1.0.0 by the human at the v0.9.0 review, now
+that the simulation clock exists) · **simulated-date correctness** (every
+money/business timestamp reads the simulation clock) · **marketing placeholder
+cleanup** · final process retrospective · final experiment report.
 
 ---
 

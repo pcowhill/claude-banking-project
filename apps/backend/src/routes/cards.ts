@@ -9,6 +9,8 @@ import {
   type ReplaceCardResponse,
 } from '@simbank/shared';
 import { requireAuth } from '../auth/guards';
+import { prisma } from '../db';
+import { simulationNow } from '../clock/clock';
 import {
   addTravelNotice,
   cancelTravelNotice,
@@ -84,7 +86,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please correct the highlighted fields.', check.errors as Record<string, string>);
     }
     try {
-      const card = await issueCard(req.user!, id, check.value, new Date());
+      const card = await issueCard(req.user!, id, check.value, await simulationNow(prisma));
       return reply.code(201).send({ card } satisfies CardResponse);
     } catch (err) {
       return handleCardError(reply, err);
@@ -95,7 +97,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/cards/:id/freeze', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
-      const card = await freezeCard(req.user!, id, new Date());
+      const card = await freezeCard(req.user!, id, await simulationNow(prisma));
       return reply.send({ card } satisfies CardResponse);
     } catch (err) {
       return handleCardError(reply, err);
@@ -105,7 +107,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/cards/:id/unfreeze', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
-      const card = await unfreezeCard(req.user!, id, new Date());
+      const card = await unfreezeCard(req.user!, id, await simulationNow(prisma));
       return reply.send({ card } satisfies CardResponse);
     } catch (err) {
       return handleCardError(reply, err);
@@ -121,7 +123,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please correct the highlighted fields.', check.errors as Record<string, string>);
     }
     try {
-      const result = await reportCard(req.user!, id, check.value.reason, new Date());
+      const result = await reportCard(req.user!, id, check.value.reason, await simulationNow(prisma));
       return reply.code(201).send({ card: result.card, replaced: result.replaced } satisfies ReplaceCardResponse);
     } catch (err) {
       return handleCardError(reply, err);
@@ -142,7 +144,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please correct the highlighted fields.', check.errors as Record<string, string>);
     }
     try {
-      const card = await addTravelNotice(req.user!, id, check.value, new Date());
+      const card = await addTravelNotice(req.user!, id, check.value, await simulationNow(prisma));
       return reply.code(201).send({ card } satisfies CardResponse);
     } catch (err) {
       return handleCardError(reply, err);

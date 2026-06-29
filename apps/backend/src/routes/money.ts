@@ -8,6 +8,8 @@ import {
 } from '@simbank/shared';
 import { requireAuth } from '../auth/guards';
 import { createExternalMovement, createTransfer, MovementError, type MovementErrorCode } from '../money/movements';
+import { prisma } from '../db';
+import { simulationNow } from '../clock/clock';
 
 /**
  * Customer money-movement endpoints (v0.7.0). Both are authenticated and scoped
@@ -68,7 +70,7 @@ export async function moneyRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please correct the highlighted fields.', check.errors as Record<string, string>);
     }
     try {
-      const result = await createTransfer(req.user!, check.value, new Date());
+      const result = await createTransfer(req.user!, check.value, await simulationNow(prisma));
       const response: TransferResponse = {
         ok: true,
         message: 'Transfer posted (simulated). Both accounts have been updated.',
@@ -96,7 +98,7 @@ export async function moneyRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please correct the highlighted fields.', check.errors as Record<string, string>);
     }
     try {
-      const created = await createExternalMovement(req.user!, check.value, new Date());
+      const created = await createExternalMovement(req.user!, check.value, await simulationNow(prisma));
       // Feed the live operations queue + simulated-event feed (operators room only).
       app.opsRealtime.requestChanged('created', created.request);
       for (const event of created.events) app.opsRealtime.externalEvent(event);

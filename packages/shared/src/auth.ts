@@ -68,6 +68,17 @@ export const AUTH = {
    * lower-case because Node lower-cases incoming header names.
    */
   surfaceHeader: 'x-meridian-surface',
+  /**
+   * CSRF (v1.0.0 / SEC-1): a double-submit token. The backend sets a NON-httpOnly
+   * cookie ({@link AUTH.csrfCookieName}) that page JS can read and echo back in a
+   * request header ({@link AUTH.csrfHeader}) on every state-changing request; the
+   * backend rejects a mutating request whose header does not match the cookie. A
+   * cross-site attacker can neither read our cookie nor set this custom header (it
+   * triggers a CORS preflight the allowlist blocks), so this closes the CSRF gap
+   * that `SameSite=Lax` + the CORS allowlist only mitigated through v0.9.0.
+   */
+  csrfCookieName: 'mer_csrf',
+  csrfHeader: 'x-meridian-csrf',
   /** bcrypt cost factor used by the password hasher. */
   bcryptCostFactor: 10,
   /** Failed logins (in a row) before an account is temporarily locked. */

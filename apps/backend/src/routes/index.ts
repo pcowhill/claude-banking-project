@@ -11,6 +11,7 @@ import { cardRoutes } from './cards';
 import { riskRoutes } from './risk';
 import { scheduleRoutes } from './schedules';
 import { clockRoutes } from './clock';
+import { lendingRoutes } from './lending';
 
 /** Register all HTTP routes. New feature route groups are added here. */
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
@@ -26,4 +27,5 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(riskRoutes);
   await app.register(scheduleRoutes);
   await app.register(clockRoutes);
+  await app.register(lendingRoutes);
 }

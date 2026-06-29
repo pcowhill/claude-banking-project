@@ -1,6 +1,15 @@
 import { AUTH, type AuthResponse, type SessionUser, type StatusResponse } from '@simbank/shared';
+import { csrfHeaders } from './csrf';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+
+/** HTTP methods that mutate state and therefore require the CSRF header (SEC-1). */
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/** True when a request method requires the CSRF double-submit header. */
+function isMutating(method: string | undefined): boolean {
+  return MUTATING_METHODS.has((method ?? 'GET').toUpperCase());
+}
 
 /**
  * Header that tells the backend this is the OPERATIONS console, so it reads the
@@ -104,6 +113,11 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     ...init,
     headers: {
       ...SURFACE_HEADERS,
+      // Echo the CSRF cookie back as a header on state-changing requests (SEC-1);
+      // safe GETs neither need nor send it. Covers every call routed through here
+      // (ops actions, simulate-event, clock advance, movement reverse, admin
+      // create-user). Without it the backend rejects the mutation with 403.
+      ...(isMutating(init.method) ? csrfHeaders() : {}),
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init.headers ?? {}),
     },
@@ -124,7 +138,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 export async function login(email: string, password: string): Promise<SessionUser> {
   const res = await fetch(`${API_URL}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...SURFACE_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...SURFACE_HEADERS, ...csrfHeaders() },
     credentials: 'include',
     body: JSON.stringify({ email, password }),
   });
@@ -138,7 +152,7 @@ export async function logout(): Promise<void> {
   await fetch(`${API_URL}/api/auth/logout`, {
     method: 'POST',
     credentials: 'include',
-    headers: { ...SURFACE_HEADERS },
+    headers: { ...SURFACE_HEADERS, ...csrfHeaders() },
   });
 }
 

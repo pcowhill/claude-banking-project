@@ -28,6 +28,7 @@ import {
 } from '../ops/requests';
 import { adminCreateUser, AdminUserError } from '../ops/admin-users';
 import { reverseMovement, MovementError } from '../money/movements';
+import { simulationNow } from '../clock/clock';
 import { MOVEMENT_TEXT } from '@simbank/shared';
 
 /**
@@ -57,6 +58,10 @@ function badRequest(reply: FastifyReply, error: string): void {
 
 export async function opsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/ops/summary', opsOnly, async (_req, reply) => {
+    // Wall-clock by design: account lockout (`lockedUntil`) is a real-time
+    // security window set by the auth lockout, not a simulated-world event, so it
+    // is compared against the real clock (see ADR-0003 — money/business dating
+    // uses the simulation clock; auth/security/operational timestamps do not).
     const now = new Date();
     const [users, accounts, requests, lockedAccounts] = await Promise.all([
       prisma.user.count(),
@@ -128,7 +133,10 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
       const { request, event, events } = await applyOperatorAction(
         prisma,
         { id, action: body.action, note, actor: req.user! },
-        new Date(),
+        // Simulated "now": approving a money movement (e.g. a clock-fired bill
+        // pay) posts the ledger entry dated at the SIMULATION date, not the wall
+        // clock (the v0.9.0-review bug). See ADR-0003.
+        await simulationNow(prisma),
       );
       // Push the queue change (and any auto-generated simulated events) to operators.
       app.opsRealtime.requestChanged('updated', request);
@@ -166,7 +174,7 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
       direction: body.direction as SimEventDirection | undefined,
       summary: typeof body.summary === 'string' ? body.summary.slice(0, MAX_NOTE_LENGTH) : undefined,
     };
-    const event = await createSimulatedEvent(prisma, input, req.user!, new Date());
+    const event = await createSimulatedEvent(prisma, input, req.user!, await simulationNow(prisma));
     app.opsRealtime.externalEvent(event);
     return reply.send({ event });
   });
@@ -192,7 +200,12 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
       return badRequest(reply, 'A reason is required to reverse a movement.');
     }
     try {
-      const { request, events } = await reverseMovement(requestId, req.user!, reason, new Date());
+      const { request, events } = await reverseMovement(
+        requestId,
+        req.user!,
+        reason,
+        await simulationNow(prisma),
+      );
       app.opsRealtime.requestChanged('updated', request);
       for (const event of events) app.opsRealtime.externalEvent(event);
       return reply.send({ request });
@@ -257,7 +270,7 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
       } as ApiErrorResponse & { fields?: Record<string, string> });
     }
     try {
-      const result = await adminCreateUser(check.value, req.user!, new Date());
+      const result = await adminCreateUser(check.value, req.user!, await simulationNow(prisma));
       return reply.code(201).send(result);
     } catch (err) {
       if (err instanceof AdminUserError) {

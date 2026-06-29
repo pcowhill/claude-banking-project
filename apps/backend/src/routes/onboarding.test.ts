@@ -3,7 +3,7 @@ import type { FastifyInstance, InjectOptions } from 'fastify';
 import { buildServer } from '../server';
 import { prisma } from '../db';
 import { RecordingOpsRealtime } from '../ops/realtime';
-import { DEMO, loginAs, seedDemo } from '../test/fixtures';
+import { DEMO, loginAs, mutatingHeaders, seedDemo } from '../test/fixtures';
 
 /**
  * Integration tests for onboarding & account opening (v0.6.0): the PUBLIC
@@ -43,10 +43,10 @@ describe('onboarding & account opening (v0.6.0)', () => {
   });
 
   function get(url: string, cookie?: string) {
-    return app.inject({ method: 'GET', url, headers: cookie ? { cookie } : {} });
+    return app.inject({ method: 'GET', url, headers: mutatingHeaders(cookie) });
   }
   function post(url: string, cookie?: string, payload?: InjectOptions['payload']) {
-    return app.inject({ method: 'POST', url, headers: cookie ? { cookie } : {}, payload });
+    return app.inject({ method: 'POST', url, headers: mutatingHeaders(cookie), payload });
   }
 
   /** Net signed total of settled (posted/disputed) ledger entries across the system. */

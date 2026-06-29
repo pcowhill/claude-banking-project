@@ -8,6 +8,7 @@ import type {
   TransactionQuery,
 } from '@simbank/shared';
 import { API_URL } from './api';
+import { csrfHeaders } from './csrf';
 
 /**
  * Auth + account API client for the customer app (v0.2.0, task A-07).
@@ -22,14 +23,20 @@ import { API_URL } from './api';
  */
 
 /**
- * Always attach the session cookie. Declare a JSON content-type ONLY when we
- * actually send a JSON body: a bodyless POST (e.g. logout) that claims
- * `application/json` makes the backend reject the empty body with 400 — which
- * would silently skip the server-side logout (revoke + clear cookie). Bodyless
- * GETs likewise don't need it (and avoid an unnecessary CORS preflight).
+ * Always attach the session cookie + the CSRF double-submit header (SEC-1).
+ * Declare a JSON content-type ONLY when we actually send a JSON body: a bodyless
+ * POST (e.g. logout) that claims `application/json` makes the backend reject the
+ * empty body with 400 — which would silently skip the server-side logout (revoke
+ * + clear cookie). Bodyless GETs likewise don't need it. `csrfHeaders()` is empty
+ * when there is no token (e.g. the very first GET /api/auth/me that ISSUES the
+ * cookie) and is ignored by the server on safe GETs, so it covers every mutating
+ * call — logout included — without missing one.
  */
 const jsonInit = (init: RequestInit = {}): RequestInit => {
-  const headers: Record<string, string> = { ...((init.headers as Record<string, string>) ?? {}) };
+  const headers: Record<string, string> = {
+    ...csrfHeaders(),
+    ...((init.headers as Record<string, string>) ?? {}),
+  };
   if (init.body != null) headers['Content-Type'] = 'application/json';
   return { credentials: 'include', ...init, headers };
 };

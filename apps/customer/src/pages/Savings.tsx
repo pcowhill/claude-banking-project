@@ -25,7 +25,7 @@ const features: Feature[] = [
     icon: 'sparkles',
     title: 'Automatic round-ups',
     description: 'Round up simulated purchases and sweep the difference into savings.',
-    milestone: 'v0.7.0',
+    milestone: 'Planned',
   },
   {
     icon: 'receipt',
@@ -40,8 +40,7 @@ const features: Feature[] = [
   {
     icon: 'clock',
     title: 'Certificates of Deposit',
-    description: 'Lock in a simulated rate for a fixed term when CDs arrive.',
-    milestone: 'v0.9.0',
+    description: 'Lock in a simulated rate for a fixed term — open a CD from Loans & CDs in your portal.',
   },
 ];
 

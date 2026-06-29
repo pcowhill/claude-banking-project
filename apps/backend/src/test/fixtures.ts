@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { SESSION_AUDIENCES, sessionCookieName, type SessionAudience } from '@simbank/shared';
+import { AUTH, SESSION_AUDIENCES, sessionCookieName, type SessionAudience } from '@simbank/shared';
 import { prisma } from '../db';
 import { applySeedPlan } from '../seed-apply';
 import { buildSeedPlan } from '../seed-plan';
@@ -45,13 +45,35 @@ export function sessionCookieValue(res: InjectLikeResponse): string | undefined 
   return res.cookies?.find((c) => SESSION_COOKIE_NAMES.includes(c.name))?.value;
 }
 
+/** The CSRF token cookie value from an inject() response, if one was set. */
+export function csrfCookieValue(res: InjectLikeResponse): string | undefined {
+  return res.cookies?.find((c) => c.name === AUTH.csrfCookieName)?.value;
+}
+
 /**
- * Build a Cookie header carrying a session token. Defaults to the customer
- * surface's cookie name (requests via `app.inject` have no Origin, so the
- * backend reads the customer cookie); pass an audience to target the ops surface.
+ * Build a Cookie header carrying a session token (and, if given, the CSRF token
+ * cookie too). Defaults to the customer surface's cookie name (requests via
+ * `app.inject` have no Origin, so the backend reads the customer cookie); pass an
+ * audience to target the ops surface.
  */
-export function cookieHeader(value: string, audience: SessionAudience = 'customer'): string {
-  return `${sessionCookieName(audience)}=${value}`;
+export function cookieHeader(value: string, audience: SessionAudience = 'customer', csrf?: string): string {
+  const base = `${sessionCookieName(audience)}=${value}`;
+  return csrf ? `${base}; ${AUTH.csrfCookieName}=${csrf}` : base;
+}
+
+/**
+ * Headers for a STATE-CHANGING (POST/PUT/PATCH/DELETE) request: the session +
+ * CSRF cookies plus the matching `x-meridian-csrf` header (v1.0.0 double-submit).
+ * Pass the `cookie` string returned by {@link loginAs} (it carries `mer_csrf`); the
+ * token is parsed from it so the request satisfies the global CSRF hook.
+ */
+export function mutatingHeaders(cookie?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (!cookie) return headers;
+  headers.cookie = cookie;
+  const match = new RegExp(`(?:^|;\\s*)${AUTH.csrfCookieName}=([^;]+)`).exec(cookie);
+  if (match) headers[AUTH.csrfHeader] = match[1];
+  return headers;
 }
 
 /** Log in via the API and return the Cookie header for authenticated requests. */
@@ -59,12 +81,15 @@ export async function loginAs(
   app: FastifyInstance,
   email: string,
   password: string,
-): Promise<{ statusCode: number; cookie: string | undefined; value: string | undefined }> {
+): Promise<{ statusCode: number; cookie: string | undefined; value: string | undefined; csrf: string | undefined }> {
   const res = await app.inject({
     method: 'POST',
     url: '/api/auth/login',
     payload: { email, password },
   });
   const value = sessionCookieValue(res);
-  return { statusCode: res.statusCode, cookie: value ? cookieHeader(value) : undefined, value };
+  const csrf = csrfCookieValue(res);
+  // The returned cookie header carries BOTH the session and the CSRF token, so it
+  // works for GETs as-is and for POSTs together with `mutatingHeaders`.
+  return { statusCode: res.statusCode, cookie: value ? cookieHeader(value, 'customer', csrf) : undefined, value, csrf };
 }

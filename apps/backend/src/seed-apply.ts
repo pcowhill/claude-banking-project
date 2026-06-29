@@ -1,11 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
-import { isTerminalOpsStatus, type OpsRequestStatus } from '@simbank/shared';
+import { addMonthsClamped, isTerminalOpsStatus, type OpsRequestStatus } from '@simbank/shared';
 import { hashPassword } from './auth/password';
 import {
   assertSeedAccessIntegrity,
   assertSeedCardIntegrity,
   assertSeedInvariants,
+  assertSeedLendingIntegrity,
   assertSeedMovementIntegrity,
   assertSeedOnboardingIntegrity,
   assertSeedOpsIntegrity,
@@ -32,6 +33,7 @@ export interface SeedResult {
   invitations: number;
   cards: number;
   schedules: number;
+  lending: number;
 }
 
 export async function applySeedPlan(
@@ -46,9 +48,11 @@ export async function applySeedPlan(
   assertSeedMovementIntegrity(plan);
   assertSeedCardIntegrity(plan);
   assertSeedScheduleIntegrity(plan);
+  assertSeedLendingIntegrity(plan);
 
   await prisma.loginEvent.deleteMany();
   await prisma.session.deleteMany();
+  await prisma.lendingProduct.deleteMany();
   await prisma.paymentSchedule.deleteMany();
   await prisma.accountInvitation.deleteMany();
   await prisma.cardTravelNotice.deleteMany();
@@ -306,6 +310,58 @@ export async function applySeedPlan(
     });
   }
 
+  // Lending & deposit products (v1.0.0). Each opens a NEW `cd`/`loan` account and
+  // moves the principal as a NET-ZERO `transfer` pair — the same discipline the
+  // live service uses (a loan account carries the negative owed balance). Interest
+  // accrues later via the clock-driven accrual driver; no money is minted here.
+  for (const l of plan.lending) {
+    const ownerId = userIdByEmail.get(l.ownerEmail.toLowerCase());
+    const counterpartyId = accountIdByKey.get(l.counterpartyAccountKey);
+    if (!ownerId) throw new Error(`Seed references an unknown lending owner: ${l.ownerEmail}`);
+    if (!counterpartyId) throw new Error(`Seed references an unknown lending counterparty key: ${l.counterpartyAccountKey}`);
+
+    const product = await prisma.account.create({
+      data: { userId: ownerId, type: l.kind, name: l.name, openedAt: now, createdAt: now },
+    });
+    accountIdByKey.set(l.accountKey, product.id);
+    await prisma.accountAccess.create({
+      data: { userId: ownerId, accountId: product.id, relationship: 'owner', createdAt: now },
+    });
+
+    // CD: debit the funding account, credit the CD. Loan: debit the loan account
+    // (it goes negative — the amount owed), credit the disbursement account.
+    const debitAccountId = l.kind === 'cd' ? counterpartyId : product.id;
+    const creditAccountId = l.kind === 'cd' ? product.id : counterpartyId;
+    const debitDesc = l.kind === 'cd' ? `CD opening deposit` : `Loan principal (amount financed)`;
+    const creditDesc = l.kind === 'cd' ? `CD opening deposit` : `Loan disbursement`;
+    await prisma.ledgerEntry.create({
+      data: { accountId: debitAccountId, amountMinor: l.principalMinor, direction: 'debit', status: 'posted', origin: 'transfer', description: debitDesc, postedAt: now, createdAt: now },
+    });
+    await prisma.ledgerEntry.create({
+      data: { accountId: creditAccountId, amountMinor: l.principalMinor, direction: 'credit', status: 'posted', origin: 'transfer', description: creditDesc, postedAt: now, createdAt: now },
+    });
+
+    await prisma.lendingProduct.create({
+      data: {
+        accountId: product.id,
+        kind: l.kind,
+        status: 'active',
+        principalMinor: l.principalMinor,
+        apyBps: l.apyBps,
+        termMonths: l.termMonths,
+        paymentMinor: l.paymentMinor,
+        openedAt: now,
+        maturesAt: addMonthsClamped(now, l.termMonths),
+        lastAccruedAt: now,
+      },
+    });
+  }
+
+  // Savings accounts accrue interest FORWARD ONLY from seed time (no back-accrual
+  // of the dated seed history). The clock-driven accrual driver advances this
+  // bookmark as the simulation clock passes monthly anniversaries.
+  await prisma.account.updateMany({ where: { type: 'savings' }, data: { interestAccruedThrough: now } });
+
   // The simulation clock starts at seed time. Reset it on every seed so the demo
   // (and tests) get a deterministic "now" aligned with the seeded history.
   await prisma.simulationClock.upsert({
@@ -335,6 +391,7 @@ export async function applySeedPlan(
     invitations,
     cards,
     schedules,
+    lending,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.account.count(),
@@ -346,6 +403,7 @@ export async function applySeedPlan(
     prisma.accountInvitation.count(),
     prisma.card.count(),
     prisma.paymentSchedule.count(),
+    prisma.lendingProduct.count(),
   ]);
   return {
     users,
@@ -358,5 +416,6 @@ export async function applySeedPlan(
     invitations,
     cards,
     schedules,
+    lending,
   };
 }

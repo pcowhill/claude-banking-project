@@ -9,6 +9,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../auth/guards';
 import { getAccountRelationship } from '../auth/access';
+import { simulationNow } from '../clock/clock';
 import { submitApplication } from '../ops/onboarding';
 import {
   acceptInvitation,
@@ -57,7 +58,7 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please correct the highlighted fields.', result.errors as Record<string, string>);
     }
 
-    const submitted = await submitApplication(result.value, new Date());
+    const submitted = await submitApplication(result.value, await simulationNow(prisma));
     // Feed the live operations queue + simulated-event feed (operators room only).
     app.opsRealtime.requestChanged('created', submitted.request);
     for (const event of submitted.events) app.opsRealtime.externalEvent(event);
@@ -110,7 +111,7 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
         inviteeEmail: check.value.inviteeEmail,
         relationship: check.value.relationship,
       },
-      new Date(),
+      await simulationNow(prisma),
     );
     app.opsRealtime.externalEvent(event); // the simulated "invitation sent" email
     return reply.code(201).send({ invitation });
@@ -125,7 +126,7 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/invitations/:id/accept', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
-      const invitation = await acceptInvitation(id, req.user!, new Date());
+      const invitation = await acceptInvitation(id, req.user!, await simulationNow(prisma));
       return reply.send({ invitation } satisfies { invitation: AccountInvitationDTO });
     } catch (err) {
       return handleInvitationError(reply, err);
@@ -135,7 +136,7 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/invitations/:id/decline', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
-      const invitation = await declineInvitation(id, req.user!, new Date());
+      const invitation = await declineInvitation(id, req.user!, await simulationNow(prisma));
       return reply.send({ invitation } satisfies { invitation: AccountInvitationDTO });
     } catch (err) {
       return handleInvitationError(reply, err);

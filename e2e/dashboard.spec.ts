@@ -18,16 +18,29 @@ async function customerLogin(page: Page, email: string, password: string): Promi
 // transactions (pending vs posted) with search/filter, plus the statements
 // placeholder. Requires the seeded demo data (CI resets+seeds before the run).
 test.describe('customer banking dashboard', () => {
-  test('overview lists accounts with a combined total and links into detail', async ({ page }) => {
+  test('overview shows the cash headline, the Loans & CDs section, and links into detail', async ({ page }) => {
     await customerLogin(page, DEMO.customer.email, DEMO.customer.password);
 
     await expect(page.getByRole('heading', { name: /welcome back, avery/i })).toBeVisible();
-    await expect(page.getByText(/total available across your accounts/i)).toBeVisible();
+    // v1.0.0: the headline sums spendable CASH (checking + savings) only, so a
+    // loan's negative balance can't distort it.
+    await expect(page.getByText(/total available cash/i)).toBeVisible();
 
-    // Both accounts appear as cards that link into their detail page.
+    // The cash accounts appear as cards that link into their detail page.
     const checking = page.getByRole('link', { name: /everyday checking/i });
     await expect(checking).toBeVisible();
     await expect(page.getByRole('link', { name: /goal savings/i })).toBeVisible();
+    // The savings card carries the simulated APY note (v1.0.0).
+    await expect(page.getByText(/earns 1\.50% apy \(simulated\)/i)).toBeVisible();
+
+    // v1.0.0: the seeded 6-month CD and Personal loan render in their own
+    // "Loans & CDs" section, separate from the cash total.
+    await expect(page.getByRole('heading', { name: /loans & cds/i })).toBeVisible();
+    const loanCard = page.getByRole('link', { name: /personal loan/i });
+    await expect(loanCard).toBeVisible();
+    // A loan is presented as the amount owed, not a confusing negative available.
+    await expect(loanCard.getByText(/balance owed/i)).toBeVisible();
+    await expect(page.getByRole('link', { name: /6-month cd/i })).toBeVisible();
 
     await checking.click();
     await expect(page).toHaveURL(/\/accounts\/[^/]+$/);

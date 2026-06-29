@@ -6,6 +6,83 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 12 — v1.0.0 Polish, hardening, loans/CDs/interest, final retrospective — 2026-06-29
+
+**Goal:** the human's v0.9.0 review approved moving to v1.0.0 and, in the same message,
+(1) reported stale "coming soon" marketing placeholders for Cards/Loans&CDs, (2) reported
+a time-travel **date bug** (a clock-fired bill pay approved on the wall-clock date, not
+the simulated date), and (3) **pulled loans / CDs / interest accrual into v1.0.0** now
+that the clock exists ("If so, do them"). So v1.0.0 — the **final** milestone — became a
+combined **feature + hardening + polish** capstone, on top of the already-planned
+hardening (SEC-1 CSRF, dev-tooling audit, ledger TOCTOU disposition) + the first frontend
+tests + the experiment retrospective.
+
+**Branch:** `claude/elegant-pascal-lg8lcr`.
+
+**Key decision — the simulation clock is now the SINGLE money "now" (supersedes ADR-0002
+#2).** The reported bug was a direct consequence of v0.9.0's deliberate choice to keep
+immediate/ops actions on wall-clock (to avoid collapsing same-session entries onto one
+`createdAt`). v1.0.0 reverses that: every money/business route threads
+`simulationNow(prisma)` (transfers, movements, **ops approvals/reversals** — the bug —
+disputes/fraud, cards, onboarding/admin funding, scheduled fires, interest accrual), and
+the "same-instant ordering" concern is solved instead with a deterministic `id` tiebreak
+in `toTransactionDTOs` (cuid is timestamp-prefixed → newest-first within a shared
+instant). Auth/operational timestamps (session expiry, lockout, login history,
+heartbeat/status `serverTime`) stay wall-clock by design — tying session lifetime to a
+manually-advanced clock would break login. A regression test reproduces the exact City
+Power and Light scenario. Recorded in **ADR-0003**.
+
+**Loans / CDs / interest accrual — on the existing ledger, no new money mechanics.** A CD
+and a loan are each a dedicated `cd`/`loan` Account (both already in `ACCOUNT_TYPES`) with
+a 1:1 `LendingProduct` row holding only the TERMS. Opening/paying/withdrawing post
+**net-zero** `transfer` leg pairs; a loan account carries a NEGATIVE (owed) balance;
+interest is the only new money and is **bank-originated** (`origin:'interest'`, already
+allowed to move the system total), accrued **on clock advance** (monthly, bounded,
+idempotent via a per-target bookmark; dated at the simulated accrual date), right after the
+scheduler. One **additive** migration (`lending`: the `LendingProduct` table + a nullable
+`Account.interestAccruedThrough`). Shared pure math (`amortizedPaymentMinor`,
+`monthlyAccrualMinor`, `projectCdMaturityMinor`) + validators are unit-tested.
+
+**CSRF (SEC-1) finally enforced.** A global double-submit hook sets a non-httpOnly
+`mer_csrf` cookie on safe GETs + login and requires a matching `x-meridian-csrf` header
+on mutating requests **that carry a session cookie** (the only forgeable case;
+unauthenticated mutating requests fall through to the honest 401; login/logout/public
+onboarding exempt). Both frontends echo the token from their `lib/csrf.ts`. The security
+reviewer confirmed the session-presence gate is sound (session cookies are the only auth
+mechanism). Acted on its Low/Info findings: constant-time token compare, a symmetric CD
+accrual guard, and logging the (isolated) accrual failures.
+
+**Execution mode (serialized risky areas, then parallelized frontends):** date fix →
+shared lending contract + math → additive schema migration → lending services + accrual +
+routes (+ seed) → backend integration tests (money invariants: net-zero opens/payments,
+correct monthly accrual, idempotency, maturity) — all green BEFORE any UI. Then the two
+frontends (customer lending portal + marketing cleanup; ops lending view + accrual
+summary) were built in parallel against the locked contract, then both wired to send the
+CSRF token. A read-only security review (PASS-with-findings) ran in parallel on the locked
+backend; the testing role added the first frontend unit tests + extended e2e last.
+
+**Hardening dispositions (ADR-0003 + QUALITY_REPORT):** dev-tooling npm-audit — runtime
+`--omit=dev` = 0; the dev-only vite/vitest/esbuild advisories have no non-breaking fix, so
+documented acceptance + upgrade path rather than a destabilizing major bump at the tag.
+Ledger/scheduler TOCTOU (L-2/L-3/F-2) — accepted residual risk for a single-user local
+sim (derived balances; SQLite serializes writers; worst case a transient auditable
+negative-available; never a lost/created dollar).
+
+**Surprises / environment friction (sandbox only):** same Prisma engine-download block as
+Sessions 1–11 — resolved the documented way (curl-mirror the query + schema engines for
+`debian-openssl-3.0.x`, engine `605197351a3c8bdd595af2d2a9bc3025bca48ea2`, set the
+`PRISMA_*` env + `NODE_EXTRA_CA_CERTS`); created the `lending` migration through the
+mirrored schema engine; Playwright used the pre-installed Chromium via
+`PLAYWRIGHT_CHROMIUM_PATH`. None of this affects normal machines or CI.
+
+**Outcome:** `npm run verify` passes; loans/CDs/interest + the simulated-date fix + the
+marketing cleanup + CSRF all shipped; security review PASS-with-findings (no
+Critical/High/Medium). Exact gate counts in `MILESTONE_REPORT_v1.0.0.md` /
+`QUALITY_REPORT.md`. Final milestone — annotated tag `v1.0.0` created locally (tag push
+blocked by env policy; human pushes on merge). Stopped at the gate.
+
+---
+
 ## Session 11 — v0.9.0 Simulation clock & scheduled payments — 2026-06-27
 
 **Goal:** the human approved v0.8.0 and the recurring/scheduled-payments item carried
