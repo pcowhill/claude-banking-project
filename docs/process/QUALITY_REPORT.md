@@ -5,6 +5,112 @@ issues. Updated at every milestone (and whenever status materially changes).
 
 ---
 
+## v1.0.0 — Polish, hardening, loans/CDs/interest, final retrospective — 2026-06-29
+
+The **final** milestone: loans / CDs / interest accrual (pulled in by the human now that
+the clock exists), the simulated-date correctness fix, the marketing-placeholder cleanup,
+and the planned hardening (CSRF/SEC-1, dev-tooling audit, ledger TOCTOU disposition) +
+the project's first frontend unit tests. One **additive** Prisma migration (`lending`).
+Decisions in `decisions/ADR-0003-...md`.
+
+### Gate: `npm run verify` ✅ PASS
+- **Lint** (ESLint 9 flat) — pass, **0 errors, 0 warnings**.
+- **Typecheck** (`tsc -p` × 4 workspaces) — pass (incl. the new customer test files +
+  the jsdom/Testing-Library setup).
+- **Unit/integration tests** (Vitest) — **398 passed / 398** across **34** files (was
+  332 at v0.9.0; **368** before the frontend tests, **+30** this task). New since v0.9.0:
+  shared lending math/validators (`lending.test.ts`), backend lending + accrual
+  integration (`routes/lending.test.ts`, 10), CSRF (`csrf.test.ts`, 8), the simulated-date
+  regression in `clock-schedules.test.ts`, **and the project's FIRST frontend unit tests
+  (Q-01)** — a new `apps/customer` Vitest workspace with **30** tests: pure presentational
+  helpers (`lib/account-display.test.ts` 14, `lib/cta.test.ts` 8 — no DOM, no new deps)
+  plus the **first real component test** (`components/TransactionList.test.tsx` 8) under
+  **jsdom + @testing-library/react**, exercising the pending/posted/other grouping, the
+  running-balance display, and the search + status/category filters.
+- **e2e** (Playwright) — **48 passed / 48** (was 44 at v0.9.0; **+4**, two consecutive
+  clean-DB runs green). **Updated for the v1.0.0 UI:** `dashboard.spec.ts` (the headline
+  is now "Total available cash"; asserts the savings APY note + the new **Loans & CDs**
+  section with the seeded CD + the loan's "Balance owed"); `public-site.spec.ts` (Cards
+  and Loans&CDs are presented as shipped/live + clearly simulated — the old "not built
+  yet"/"v0.8.0" copy assertions are gone). **Added:** `lending.spec.ts` (4) — the customer
+  portal lists the seeded CD/loan, a customer opens a new CD and sees it listed, an
+  operator advances the clock and sees the interest-accrual summary, and a customer sees
+  posted savings interest after an advance. `scheduled-payments.spec.ts`'s operator
+  clock-firing assertion was made **order-independent** (the simulation clock is a single
+  forward-only resource now stepped by two parallel specs) — it still proves the seeded
+  transfer fires via a schedule, asserted on the persistent run count rather than one
+  advance's delta; its customer create→cancel test now uses a far-future (300-day) first
+  run so no parallel advance fires it before cancellation.
+- **Build** (tsup + vite × 2) — pass (the test files are dev-only; not bundled).
+
+### Dependency audit (H-03)
+- **Runtime**: `npm audit --omit=dev` = **0** vulnerabilities. v1.0.0 added no runtime
+  dependencies (lending rides existing libs; CSRF uses `node:crypto`).
+- **Dev-tooling**: 5 advisories remain (3 moderate, 1 high, 1 critical) — all in
+  `vite`/`vitest`/`esbuild`/`vite-node`/`@vitest/mocker` (the local dev server + test
+  runner, **never shipped**). The only fix is a breaking `vite@8` / `vitest@3` major.
+  **Disposition: accepted for the simulation, documented upgrade path.** Forcing the
+  major bump at the 1.0 tag risks destabilizing the toolchain for advisories that do not
+  affect the shipped artifact, CI's verify correctness, or a local single-user sim. The
+  customer-test addition pulled `@testing-library/*` + `jsdom` (dev-only) — re-checked:
+  no NEW runtime advisories. Re-run `npm audit` after a future Vite/Vitest upgrade.
+
+### Security review — PASS-with-findings (no Critical/High/Medium)
+Full read-only audit of the v1.0.0 surface (CSRF, lending RBAC/IDOR + the owner-scoped
+firing boundary, money discipline, the simulated-date change, no-regression). **The two
+subtle new boundaries were confirmed SOUND:** (a) the **CSRF session-presence gate** —
+session cookies are the only auth mechanism in the codebase (grep-verified), so "no
+session cookie" genuinely means "cannot change anyone's state," and every mutating route
+is `requireAuth`/`requireRole` or a deliberate exempt; (b) the **lending owner-scoped
+boundary** — every action resolves access via `getAccountRelationship` (owner/joint/
+authorized, viewer excluded), the principal is always `req.user!` (IDOR closed), pay/
+withdraw independently re-check the counter-account, and the ops list is role-gated.
+Findings (all Low/Info), acted on or accepted:
+- **Acted on:** constant-time CSRF token compare (`timingSafeEqual`); a symmetric
+  `from >= upTo` guard on the CD accrual branch; logging the (isolated, per-target)
+  accrual failures for operability.
+- **Accepted for the sim:** CSRF tokens are not rotated on login (double-submit token the
+  page already exposes; a deploy would add rotation + HTTPS `secure`); the loan-payment
+  `owed` read just outside its write transaction (bounded by `min(requested, owed)` +
+  the funds check; worst case a harmless over-credit, never minted money).
+
+### Ledger/scheduler TOCTOU + bookkeeping (H-02 — L-2/L-3/F-2)
+**Disposition: accepted residual risk, documented** (ADR-0003 #8). The available-funds
+check is read just outside the write transaction in the money service (and now the
+scheduler + lending). For a single-user local simulation this is benign: balances are
+DERIVED (never corrupted), SQLite serializes writers, catch-up is bounded, and the worst
+case is a transient, auditable negative-available — never a lost or created dollar.
+Tightening the locked v0.7.0 write path carries more regression risk than the residual
+risk it removes, so it is not changed at the 1.0 capstone.
+
+### Money discipline (re-asserted + tested)
+Loans/CDs/interest move money ONLY via `LedgerEntry` rows. Open/pay/withdraw post
+**net-zero** `transfer` pairs (tested: the system settled total is unchanged); the only
+new money is **bank-originated `interest`** (a credit on savings/CDs, a debit on loans),
+dated at the simulated accrual date; a loan is a NEGATIVE derived balance; accrual is
+idempotent (per-target bookmark) + bounded. Balances stay DERIVED. The simulation
+disclaimer stays visible; no regression to v0.2.0→v0.9.0.
+
+### Known issues / watch items (carried)
+- Dev-tooling npm-audit advisories — accepted, upgrade path above. The Q-01 frontend
+  test deps (`@testing-library/*`, `jsdom`) are **dev-only**; re-checked, no NEW runtime
+  advisory.
+- Ledger/scheduler TOCTOU — accepted residual risk (above).
+- Frontend unit tests now EXIST (Q-01, first set this milestone: 30 tests — pure helpers
+  + one component test) but coverage is a **starter**, not comprehensive — broaden in any
+  future UI-heavy work (the `apps/customer` jsdom/Testing-Library scaffold is now in place;
+  `apps/operations` is still test-free and can be added to `vitest.workspace.ts` the same
+  way when its UI logic warrants it).
+- **E2E + the shared simulation clock:** the clock is one forward-only global resource and
+  Playwright runs specs in parallel. Two specs now advance it (`scheduled-payments`,
+  `lending`), so their clock-dependent assertions are written **order-independently**
+  (assert on persistent accrued/fired state, not a single advance's delta) and the
+  schedule create→cancel test pins a far-future first run. New clock-advancing e2e should
+  follow the same pattern (or the suite should serialize clock mutators) to stay
+  deterministic under parallelism.
+
+---
+
 ## v0.9.0 — Simulation clock & scheduled payments — 2026-06-27
 
 A controllable **simulation clock** + a **clock-driven scheduler** for recurring/

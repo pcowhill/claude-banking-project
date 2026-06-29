@@ -134,5 +134,7 @@ emulate the same plan → implement → test → review → scribe steps in sequ
 ---
 
 _Current milestone: see `docs/PROJECT_STATE.md`. As of this writing the project
-is at **v0.6.1 — Operations console fixes** (a patch on v0.6.0, complete); next is
-v0.7.0._
+is at **v1.0.0 — Polish, hardening, loans/CDs/interest, final retrospective**
+(complete) — the final planned milestone. The full v0.1.0 → v1.0.0 roadmap is
+delivered; any further work is the deferred set (clock auto-advance, a credit-card
+account product, login 2FA, the Vite/Vitest upgrade) at the human's direction._

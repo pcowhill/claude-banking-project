@@ -1,6 +1,6 @@
 {
   "name": "@simbank/customer",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Customer-facing web app for the Meridian banking simulation (public site + authenticated portal shell). Local simulation only.",

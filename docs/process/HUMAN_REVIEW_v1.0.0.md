@@ -134,8 +134,8 @@ audit. Balances stay DERIVED.
 
 ## Gate
 
-<!-- GATE-NUMBERS: finalized at tag time -->
-`npm run verify` ✅ passes (lint 0 warnings, typecheck, unit/integration, build). One
-**additive** migration (`lending`). Runtime `npm audit` = 0. Security review
-PASS-with-findings. Playwright e2e green. Exact counts are in
-`docs/process/MILESTONE_REPORT_v1.0.0.md` and `QUALITY_REPORT.md`.
+`npm run verify` ✅ passes (lint 0 warnings, typecheck ×4, build ×4) — **398**
+unit/integration tests (34 files; was 332, incl. the first frontend unit tests) +
+**48** Playwright e2e (was 44), all green. One **additive** migration (`lending`).
+Runtime `npm audit` = 0. Security review **PASS-with-findings** (no Critical/High/Medium).
+Details in `docs/process/MILESTONE_REPORT_v1.0.0.md` and `QUALITY_REPORT.md`.

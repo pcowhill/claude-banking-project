@@ -107,7 +107,7 @@ auth/CSRF) that were serialized and reviewed first.
   distorts the headline total.
 - The simulation-safety rules (no real money/providers/lenders, derived balances,
   reason + audit on money-affecting admin actions, visible disclaimer) are preserved
-  and test-backed (368 → final unit/integration; lending + accrual + CSRF + the
-  date-regression all covered).
+  and test-backed (**398** unit/integration across 34 files, was 332 — lending +
+  accrual + CSRF + the date-regression + the first frontend unit tests; plus 48 e2e).
 - Out of scope (unchanged): wall-clock auto-advance by `speed`; a dedicated
   credit-card account product; customer-facing login 2FA.

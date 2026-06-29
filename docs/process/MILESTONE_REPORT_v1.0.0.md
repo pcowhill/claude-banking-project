@@ -76,9 +76,12 @@ tags on Savings/Checking/About). Simulation framing kept throughout.
   marketing; new lending coverage.
 
 ## Gate
-<!-- GATE_TBD: fill exact counts at tag time -->
-`npm run verify` ✅ **PASS** — lint (0 warnings), typecheck (×4), unit/integration
-(Vitest), build (×4). Playwright e2e ✅ green. One additive migration (`lending`).
+`npm run verify` ✅ **PASS** — lint (0 warnings), typecheck (×4), **398** unit/integration
+tests (34 files; was 332 at v0.9.0 — +shared lending math, backend lending/accrual, CSRF,
+the simulated-date regression, and the **first frontend unit tests** = pure customer
+helpers + a `TransactionList` component test under jsdom), build (×4). Playwright e2e ✅
+**48 passed** (was 44 — +lending; dashboard/public-site specs updated). One additive
+migration (`lending`).
 Runtime `npm audit` = 0. **Security review: PASS-with-findings** (no Critical/High/Medium;
 the CSRF session-presence gate + the lending owner-scoped boundary confirmed sound; Low/
 Info acted on or accepted). Exact counts: see `QUALITY_REPORT.md` (v1.0.0 section).

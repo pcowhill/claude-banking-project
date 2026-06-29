@@ -72,10 +72,10 @@
 - **Working branch (this session):** `claude/elegant-pascal-lg8lcr` (the Claude Code
   Cloud session branch; intended milestone name `milestone/v1.0.0-polish-hardening-lending`).
 - **Gate status:** `npm run verify` ✅ passes (lint 0 warnings, typecheck ×4,
-  unit/integration, build ×4) + Playwright e2e green. <!-- GATE_TBD: exact counts
-  finalized at tag (332 → +shared lending + backend lending/accrual + CSRF + date
-  regression + first frontend component tests; e2e 44 → +lending, dashboard/marketing
-  updated). See QUALITY_REPORT.md / MILESTONE_REPORT_v1.0.0.md. --> One **additive**
+  unit/integration, build ×4) + Playwright e2e green. **398** unit/integration tests
+  (34 files; was 332 — +shared lending math, backend lending/accrual, CSRF, the
+  simulated-date regression, and the first frontend unit tests) + **48** Playwright e2e
+  (was 44 — +lending; dashboard/marketing specs updated). One **additive**
   migration (`lending`); **runtime `npm audit` = 0** (dev-tooling advisories accepted with
   an upgrade path). Security review **PASS-with-findings** (no Critical/High/Medium; the
   CSRF session-presence gate + the lending owner-scoped boundary confirmed sound; Low/Info
