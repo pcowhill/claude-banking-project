@@ -7,7 +7,7 @@ import {
   type OpsRequestChangedPayload,
   type SimHeartbeatPayload,
 } from '@simbank/shared';
-import { API_URL } from './api';
+import { WS_URL } from './api';
 
 export interface OpsSocketHandlers {
   onRequestChanged?: (payload: OpsRequestChangedPayload) => void;
@@ -34,7 +34,10 @@ export function useOpsSocket(handlers: OpsSocketHandlers): { connected: boolean 
   handlersRef.current = handlers;
 
   useEffect(() => {
-    const socket: Socket = io(API_URL, {
+    // WS_URL is the localhost backend in dev and the page's own origin in a
+    // production build (the reverse proxy forwards `/socket.io/*`), so the
+    // operations session cookie + surface header reach the same backend.
+    const socket: Socket = io(WS_URL, {
       withCredentials: true,
       path: '/socket.io',
       // Declare the surface on the (polling) handshake so the backend admits this

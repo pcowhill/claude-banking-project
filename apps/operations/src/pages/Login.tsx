@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Logo } from '../components/Logo';
 import { SimulationBanner } from '../components/SimulationBanner';
+import { PublicDemoNotice } from '../components/PublicDemoNotice';
 import { ApiError } from '../lib/api';
 import { isOperatorRole, useAuth } from '../lib/auth-context';
 import { cn } from '../lib/cn';
@@ -40,6 +41,8 @@ function messageForCode(code: string): string {
       return 'Enter a valid email and password.';
     case 'not_operator':
       return 'This console is for bank staff only. Customers use the customer app.';
+    case 'rate_limited':
+      return 'Too many sign-in attempts from your connection on this shared demo. Wait a minute and try again.';
     default:
       return 'Could not sign in. Check that the simulated backend is running and try again.';
   }
@@ -118,6 +121,7 @@ export function Login() {
           )}
 
           <Card>
+            <PublicDemoNotice variant="form" className="mb-4" />
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-slate-300">

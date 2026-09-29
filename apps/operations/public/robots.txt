@@ -1,0 +1,4 @@
+# Meridian Ops is the operator console of a SIMULATED bank (a portfolio demo).
+# Do not index it. The page also carries <meta name="robots" content="noindex, nofollow">.
+User-agent: *
+Disallow: /

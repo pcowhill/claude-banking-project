@@ -1,7 +1,38 @@
-import { AUTH, type AuthResponse, type SessionUser, type StatusResponse } from '@simbank/shared';
+import {
+  AUTH,
+  LOCAL_URLS,
+  resolveApiBaseUrl,
+  type AuthResponse,
+  type SessionUser,
+  type StatusResponse,
+} from '@simbank/shared';
 import { csrfHeaders } from './csrf';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+/**
+ * Where this console talks to the backend: `http://localhost:3000` in local
+ * development; the page's OWN origin in a production build (the eventual
+ * deployment reverse-proxies `/api/*`, `/health`, `/status` and `/socket.io/*`
+ * on `banking-ops.cowhill.dev` itself — no separate API host); `VITE_API_URL` /
+ * `VITE_WS_URL` override explicitly. Shared rule: `resolveApiBaseUrl`.
+ */
+const API_URL = resolveApiBaseUrl({
+  explicit: import.meta.env.VITE_API_URL,
+  mode: import.meta.env.MODE,
+  origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+  fallback: LOCAL_URLS.backend,
+});
+
+/** Socket.IO base (falls back to the API base, i.e. same origin in production). */
+const WS_URL = resolveApiBaseUrl({
+  explicit: import.meta.env.VITE_WS_URL,
+  mode: import.meta.env.MODE,
+  origin: undefined,
+  fallback: API_URL,
+});
+
+/** Share one in-flight/recent `/status` fetch across the components that read it. */
+let statusCache: { at: number; promise: Promise<StatusResponse | null> } | null = null;
+const STATUS_CACHE_MS = 15_000;
 
 /** HTTP methods that mutate state and therefore require the CSRF header (SEC-1). */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -20,15 +51,21 @@ function isMutating(method: string | undefined): boolean {
  */
 const SURFACE_HEADERS: Record<string, string> = { [AUTH.surfaceHeader]: 'operations' };
 
-/** Fetch backend status; returns null when the API is unreachable. */
+/** Fetch backend status; returns null when the API is unreachable. Briefly cached. */
 export async function fetchStatus(): Promise<StatusResponse | null> {
-  try {
-    const res = await fetch(`${API_URL}/status`);
-    if (!res.ok) return null;
-    return (await res.json()) as StatusResponse;
-  } catch {
-    return null;
-  }
+  const now = Date.now();
+  if (statusCache && now - statusCache.at < STATUS_CACHE_MS) return statusCache.promise;
+  const promise = (async () => {
+    try {
+      const res = await fetch(`${API_URL}/status`);
+      if (!res.ok) return null;
+      return (await res.json()) as StatusResponse;
+    } catch {
+      return null;
+    }
+  })();
+  statusCache = { at: now, promise };
+  return promise;
 }
 
 // ---- Auth (v0.2.0) ----------------------------------------------------------
@@ -187,4 +224,4 @@ export async function fetchOpsSummary(): Promise<OpsSummary> {
   return (await res.json()) as OpsSummary;
 }
 
-export { API_URL };
+export { API_URL, WS_URL };

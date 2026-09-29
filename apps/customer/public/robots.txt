@@ -1,0 +1,4 @@
+# Meridian is a SIMULATED bank (a portfolio demo), not a real banking site.
+# Do not index it. The pages also carry <meta name="robots" content="noindex, nofollow">.
+User-agent: *
+Disallow: /

@@ -4,8 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Never present this simulated console to search engines as a real banking
+         site (every build; the reverse proxy may add X-Robots-Tag as well). -->
     <meta name="robots" content="noindex, nofollow" />
-    <title>Meridian Ops — Bank Operations Simulator (Local)</title>
+    <meta
+      name="description"
+      content="Meridian Ops — the operator console of a SIMULATED bank demo. Not a real bank system."
+    />
+    <title>Meridian Ops — Bank Operations Simulator (Demo)</title>
   </head>
   <body>
     <div id="root"></div>
