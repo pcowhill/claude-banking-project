@@ -1,5 +1,6 @@
 import type { Account, LendingProduct } from '@prisma/client';
 import {
+  RESOURCE_CAPS,
   addMonthsClamped,
   deriveBalances,
   formatMinor,
@@ -45,7 +46,8 @@ export type LendingErrorCode =
   | 'insufficient_funds'
   | 'inactive_account'
   | 'invalid_state'
-  | 'not_matured';
+  | 'not_matured'
+  | 'limit_reached';
 
 export class LendingError extends Error {
   readonly code: LendingErrorCode;
@@ -180,6 +182,24 @@ export async function toLendingProductDTO(
   };
 }
 
+/**
+ * Resource cap (all modes): bounded OPEN lending products per user. Each open
+ * creates an account + two ledger legs + a product row, and a loan needs no
+ * funds, so without a bound one user could mint rows indefinitely. Matured /
+ * paid-off / closed products do not count.
+ */
+async function assertLendingCapacity(userId: string): Promise<void> {
+  const open = await prisma.lendingProduct.count({
+    where: { status: 'active', account: { userId } },
+  });
+  if (open >= RESOURCE_CAPS.openLendingProductsPerUser) {
+    throw new LendingError(
+      'limit_reached',
+      `You already have ${RESOURCE_CAPS.openLendingProductsPerUser} open CDs/loans (the simulated maximum). Pay off or withdraw one to open another.`,
+    );
+  }
+}
+
 // ---- Open a CD --------------------------------------------------------------
 
 export async function openCd(
@@ -191,6 +211,7 @@ export async function openCd(
   if ((await availableMinor(prisma, funding.id)) < input.principalMinor) {
     throw new LendingError('insufficient_funds', 'That deposit exceeds the available balance.');
   }
+  await assertLendingCapacity(user.id);
 
   const maturesAt = addMonthsClamped(now, input.termMonths);
   const name = `${input.termMonths}-month CD`;
@@ -247,6 +268,7 @@ export async function openLoan(
   now: Date,
 ): Promise<LendingProductDTO> {
   const disbursement = await requireMovable(user.id, input.disbursementAccountId);
+  await assertLendingCapacity(user.id);
 
   const maturesAt = addMonthsClamped(now, input.termMonths);
   const name = `Personal loan`;

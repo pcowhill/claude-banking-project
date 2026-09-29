@@ -14,6 +14,9 @@ export async function statusRoutes(app: FastifyInstance): Promise<void> {
       milestoneName: PLATFORM_META.milestoneName,
       isSimulation: true,
       environment: config.environment,
+      // Lets the frontends show the shared-public-demo warning even when they
+      // were built without `VITE_PUBLIC_DEMO` (the backend flag is authoritative).
+      publicDemo: config.publicDemo,
       database,
       serverTime: new Date().toISOString(),
     };

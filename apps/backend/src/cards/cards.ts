@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import type { Card, CardTravelNotice } from '@prisma/client';
 import {
+  RESOURCE_CAPS,
   canAddTravelNotice,
   canFreezeCard,
   canReportCard,
@@ -32,7 +33,7 @@ import { getAccountRelationship } from '../auth/access';
  * fake; there is never a real PAN, network, or issuer.
  */
 
-export type CardErrorCode = 'not_found' | 'forbidden' | 'inactive_account' | 'invalid_state';
+export type CardErrorCode = 'not_found' | 'forbidden' | 'inactive_account' | 'invalid_state' | 'limit_reached';
 
 export class CardError extends Error {
   readonly code: CardErrorCode;
@@ -168,6 +169,15 @@ export async function issueCard(
   now: Date = new Date(),
 ): Promise<CardDTO> {
   await requireCardAccount(user.id, accountId);
+  // Resource cap (all modes): bounded LIVE cards per account (terminal cards —
+  // lost / stolen / replaced / cancelled — do not count).
+  const live = await prisma.card.count({ where: { accountId, status: { in: ['active', 'frozen'] } } });
+  if (live >= RESOURCE_CAPS.liveCardsPerAccount) {
+    throw new CardError(
+      'limit_reached',
+      `This account already has ${RESOURCE_CAPS.liveCardsPerAccount} live cards (the simulated maximum).`,
+    );
+  }
   const { expMonth, expYear } = simulatedExpiry(now);
   const last4 = simulatedLast4();
 
@@ -313,6 +323,14 @@ export async function addTravelNotice(
   const card = await requireOwnedCard(user.id, cardId);
   if (!canAddTravelNotice(card.status as CardStatus)) {
     throw new CardError('invalid_state', 'You can only add a travel notice to an active or frozen card.');
+  }
+  // Resource cap (all modes): bounded ACTIVE notices per card (cancelled ones free capacity).
+  const active = await prisma.cardTravelNotice.count({ where: { cardId, status: 'active' } });
+  if (active >= RESOURCE_CAPS.activeTravelNoticesPerCard) {
+    throw new CardError(
+      'limit_reached',
+      `This card already has ${RESOURCE_CAPS.activeTravelNoticesPerCard} active travel notices (the simulated maximum). Cancel one to add another.`,
+    );
   }
   await prisma.cardTravelNotice.create({
     data: {

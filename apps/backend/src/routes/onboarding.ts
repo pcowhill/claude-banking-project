@@ -8,9 +8,10 @@ import {
 } from '@simbank/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import { getAccountRelationship } from '../auth/access';
 import { simulationNow } from '../clock/clock';
-import { submitApplication } from '../ops/onboarding';
+import { ApplicationLimitError, submitApplication } from '../ops/onboarding';
 import {
   acceptInvitation,
   declineInvitation,
@@ -41,7 +42,9 @@ function invalid(reply: FastifyReply, error: string, fields?: Record<string, str
 
 export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
   // ---- Public: submit an account-opening application ------------------------
-  app.post('/api/onboarding/applications', async (req, reply) => {
+  // Public + unauthenticated → keyed by client IP in public-demo mode; a small
+  // budget because every application costs a bcrypt hash and several rows.
+  app.post('/api/onboarding/applications', { preHandler: rateLimit('onboarding') }, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const result = validateOpenAccount({
       fullName: typeof body.fullName === 'string' ? body.fullName.slice(0, MAX_FIELD) : undefined,
@@ -58,7 +61,15 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please correct the highlighted fields.', result.errors as Record<string, string>);
     }
 
-    const submitted = await submitApplication(result.value, await simulationNow(prisma));
+    let submitted;
+    try {
+      submitted = await submitApplication(result.value, await simulationNow(prisma));
+    } catch (err) {
+      if (err instanceof ApplicationLimitError) {
+        return reply.code(409).send({ error: err.message, code: err.code } satisfies ApiErrorResponse);
+      }
+      throw err;
+    }
     // Feed the live operations queue + simulated-event feed (operators room only).
     app.opsRealtime.requestChanged('created', submitted.request);
     for (const event of submitted.events) app.opsRealtime.externalEvent(event);
@@ -74,7 +85,9 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Owner: invite a joint owner to an account ----------------------------
-  app.post('/api/accounts/:id/invitations', { preHandler: requireAuth }, async (req, reply) => {
+  const guarded = { preHandler: [requireAuth, rateLimit('risk')] };
+
+  app.post('/api/accounts/:id/invitations', guarded, async (req, reply) => {
     const user = req.user!;
     const { id } = req.params as { id: string };
 
@@ -103,18 +116,22 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
       return invalid(reply, 'Please enter a valid email to invite.', check.errors as Record<string, string>);
     }
 
-    const { invitation, event } = await inviteJoint(
-      {
-        accountId: id,
-        accountName: account.name,
-        inviter: user,
-        inviteeEmail: check.value.inviteeEmail,
-        relationship: check.value.relationship,
-      },
-      await simulationNow(prisma),
-    );
-    app.opsRealtime.externalEvent(event); // the simulated "invitation sent" email
-    return reply.code(201).send({ invitation });
+    try {
+      const { invitation, event } = await inviteJoint(
+        {
+          accountId: id,
+          accountName: account.name,
+          inviter: user,
+          inviteeEmail: check.value.inviteeEmail,
+          relationship: check.value.relationship,
+        },
+        await simulationNow(prisma),
+      );
+      app.opsRealtime.externalEvent(event); // the simulated "invitation sent" email
+      return reply.code(201).send({ invitation });
+    } catch (err) {
+      return handleInvitationError(reply, err); // e.g. the pending-invitation cap (409)
+    }
   });
 
   // ---- Auth: my pending invitations -----------------------------------------
@@ -123,7 +140,7 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ invitations });
   });
 
-  app.post('/api/invitations/:id/accept', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/invitations/:id/accept', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const invitation = await acceptInvitation(id, req.user!, await simulationNow(prisma));
@@ -133,7 +150,7 @@ export async function onboardingRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/invitations/:id/decline', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/invitations/:id/decline', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const invitation = await declineInvitation(id, req.user!, await simulationNow(prisma));
@@ -151,7 +168,7 @@ function handleInvitationError(reply: FastifyReply, err: unknown): FastifyReply 
         ? 404
         : err.code === 'wrong_invitee' || err.code === 'forbidden'
           ? 403
-          : 409;
+          : 409; // already_responded | limit_reached
     return reply.code(code).send({ error: err.message, code: err.code } satisfies ApiErrorResponse);
   }
   throw err;

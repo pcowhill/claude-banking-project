@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import {
   AUTH,
+  EMAIL_MAX_LENGTH,
+  LOGIN_PASSWORD_MAX_LENGTH,
   type ApiErrorResponse,
   type AuthResponse,
   type LoginEventDTO,
@@ -8,7 +10,10 @@ import {
   type SessionUser,
   type UserRole,
 } from '@simbank/shared';
+import { config } from '../config';
 import { prisma } from '../db';
+import { rateLimit } from '../abuse/rate-limit';
+import { isSeededShowcaseEmail } from '../seed-plan';
 import { DECOY_PASSWORD_HASH, verifyPassword } from '../auth/password';
 import { isLocked, normalizeForAttempt, registerFailure, registerSuccess } from '../auth/lockout';
 import { createSession, revokeSession } from '../auth/sessions';
@@ -44,13 +49,33 @@ function send401(reply: FastifyReply, body: ApiErrorResponse): FastifyReply {
 }
 
 /**
+ * Whether an account is EXEMPT from the persistent lockout policy.
+ *
+ * PUBLIC-DEMO ONLY: the seeded showcase accounts (Avery, Jordan, Sam, Riley, the
+ * seeded applicant) have intentionally public passwords, so locking them after
+ * five bad guesses protects nothing — it only lets one anonymous visitor make
+ * the whole demo unusable for everyone else by looping wrong passwords. For
+ * those accounts, in public-demo mode, a failed attempt is still verified
+ * against the real bcrypt hash, still recorded in login history, and still
+ * counted — it just never sets `lockedUntil`. Brute-force pressure on the
+ * login endpoint as a whole is handled by the per-client login rate limit
+ * instead. Every other account (visitor-created applicants, admin-created demo
+ * users) keeps the normal lockout, and NOTHING changes when PUBLIC_DEMO is off.
+ */
+function lockoutExempt(email: string): boolean {
+  return config.publicDemo && isSeededShowcaseEmail(email);
+}
+
+/**
  * Authentication endpoints: login (with lockout + login history + audit),
  * logout, the current-user probe, and the customer's login history.
  *
  * SIMULATION: all credentials are non-secret demo passwords for fake users.
  */
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/auth/login', async (req, reply) => {
+  // Login is rate-limited per client (public-demo mode) BEFORE any DB or bcrypt
+  // work, so a scripted loop cannot burn CPU on hashing.
+  app.post('/api/auth/login', { preHandler: rateLimit('login') }, async (req, reply) => {
     const body = req.body as Partial<LoginRequest> | undefined;
     const email = typeof body?.email === 'string' ? normalizeEmail(body.email) : '';
     const password = typeof body?.password === 'string' ? body.password : '';
@@ -58,6 +83,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply
         .code(400)
         .send({ error: 'Email and password are required.', code: 'invalid_request' });
+    }
+    // Server-side bounds (never rely on the form): an over-long email cannot
+    // match any user and an over-long password cannot be a demo password, so
+    // reject cheaply instead of running a lookup + bcrypt compare on it.
+    if (email.length > EMAIL_MAX_LENGTH || password.length > LOGIN_PASSWORD_MAX_LENGTH) {
+      return reply
+        .code(400)
+        .send({ error: 'Email or password is too long.', code: 'invalid_request' } satisfies ApiErrorResponse);
     }
 
     const ctx = requestContext(req);
@@ -91,12 +124,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         .send({ error: 'This account is disabled.', code: 'account_disabled' });
     }
 
-    // Clear an expired lock, then reject if a live lock remains.
+    // Clear an expired lock, then reject if a live lock remains (unless this is
+    // a seeded showcase account in public-demo mode — see `lockoutExempt`).
+    const exempt = lockoutExempt(email);
     const state = normalizeForAttempt(
       { failedLoginAttempts: user.failedLoginAttempts, lockedUntil: user.lockedUntil },
       now,
     );
-    if (isLocked(state, now)) {
+    if (!exempt && isLocked(state, now)) {
       await recordLoginEvent(prisma, {
         userId: user.id,
         email,
@@ -112,7 +147,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const passwordOk = await verifyPassword(password, user.passwordHash);
     if (!passwordOk) {
-      const next = registerFailure(state, now);
+      const counted = registerFailure(state, now);
+      // An exempt showcase account keeps its failure COUNT (visible to admins)
+      // but never acquires a lock, so it can never be denied to other visitors.
+      const next = exempt ? { failedLoginAttempts: counted.failedLoginAttempts, lockedUntil: null } : counted;
       await prisma.user.update({
         where: { id: user.id },
         data: { failedLoginAttempts: next.failedLoginAttempts, lockedUntil: next.lockedUntil },

@@ -18,6 +18,7 @@ import {
 } from '@simbank/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import {
   applyOperatorAction,
   createSimulatedEvent,
@@ -51,6 +52,11 @@ const MAX_NOTE_LENGTH = 500;
 
 /** A reusable role gate for every operations route (ops_agent / admin only). */
 const opsOnly = { preHandler: [requireAuth, requireRole('ops_agent', 'admin')] };
+/** The same gate + the per-operator rate limit for MUTATIONS (public-demo mode). */
+const opsMutation = { preHandler: [requireAuth, requireRole('ops_agent', 'admin'), rateLimit('operations')] };
+
+/** Bound for short free-form labels (event kind, request id) that were previously unbounded. */
+const MAX_LABEL_LENGTH = 64;
 
 function badRequest(reply: FastifyReply, error: string): void {
   reply.code(400).send({ error, code: 'bad_request' } satisfies ApiErrorResponse);
@@ -113,7 +119,7 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ request });
   });
 
-  app.post('/api/ops/requests/:id/action', opsOnly, async (req, reply) => {
+  app.post('/api/ops/requests/:id/action', opsMutation, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as { action?: unknown; note?: unknown };
     if (!isOpsAction(body.action)) {
@@ -154,7 +160,7 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
 
   // ---- Simulated external events --------------------------------------------
 
-  app.post('/api/ops/simulate/event', opsOnly, async (req, reply) => {
+  app.post('/api/ops/simulate/event', opsMutation, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     if (!isSimEventChannel(body.channel)) {
       return badRequest(reply, 'A valid channel (sms | email | mfa | identity) is required.');
@@ -168,8 +174,8 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
 
     const input: SimulateEventRequest = {
       channel: body.channel,
-      kind: typeof body.kind === 'string' ? body.kind : undefined,
-      requestId: typeof body.requestId === 'string' ? body.requestId : undefined,
+      kind: typeof body.kind === 'string' ? body.kind.trim().slice(0, MAX_LABEL_LENGTH) || undefined : undefined,
+      requestId: typeof body.requestId === 'string' ? body.requestId.slice(0, MAX_LABEL_LENGTH) : undefined,
       outcome: body.outcome as SimEventStatus | undefined,
       direction: body.direction as SimEventDirection | undefined,
       summary: typeof body.summary === 'string' ? body.summary.slice(0, MAX_NOTE_LENGTH) : undefined,
@@ -191,7 +197,7 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
   // `reversed` (removing the balance effect — never editing a balance). Requires
   // a reason (audited), mirroring the admin-adjustment discipline. Emits a live
   // queue update so every console re-syncs.
-  app.post('/api/ops/movements/:requestId/reverse', opsOnly, async (req, reply) => {
+  app.post('/api/ops/movements/:requestId/reverse', opsMutation, async (req, reply) => {
     const { requestId } = req.params as { requestId: string };
     const body = (req.body ?? {}) as { reason?: unknown };
     const reason =
@@ -221,6 +227,7 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
   // ---- Admin ----------------------------------------------------------------
 
   const adminOnly = { preHandler: [requireAuth, requireRole('admin')] };
+  const adminMutation = { preHandler: [requireAuth, requireRole('admin'), rateLimit('adminUsers')] };
 
   app.get('/api/admin/users', adminOnly, async (_req, reply) => {
     const users = await prisma.user.findMany({
@@ -250,7 +257,7 @@ export async function opsRoutes(app: FastifyInstance): Promise<void> {
   // Admin-created demo users (v0.6.0). Optionally opens + funds an account;
   // funding is an AUDITED bank-originated adjustment requiring a reason (enforced
   // by the shared validator + the service). Balances stay derived.
-  app.post('/api/admin/users', adminOnly, async (req, reply) => {
+  app.post('/api/admin/users', adminMutation, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateAdminCreateUser({
       email: typeof body.email === 'string' ? body.email.slice(0, MAX_NOTE_LENGTH) : undefined,

@@ -1,5 +1,6 @@
 import type { PaymentSchedule } from '@prisma/client';
 import {
+  RESOURCE_CAPS,
   formatMinor,
   isActiveSchedule,
   SCHEDULE_KIND_LABELS,
@@ -29,7 +30,8 @@ export type ScheduleErrorCode =
   | 'forbidden'
   | 'inactive_account'
   | 'invalid'
-  | 'already_inactive';
+  | 'already_inactive'
+  | 'limit_reached';
 
 export class ScheduleError extends Error {
   readonly code: ScheduleErrorCode;
@@ -105,6 +107,17 @@ export async function createSchedule(
       throw new ScheduleError('invalid', 'Choose two different accounts.');
     }
     await requireSchedulableAccount(user.id, input.toAccountId);
+  }
+
+  // Resource cap (all modes): bounded live schedules per user so one account
+  // cannot grow the shared database without limit. Cancelled/completed rows
+  // do not count, so capacity comes back.
+  const active = await prisma.paymentSchedule.count({ where: { userId: user.id, status: 'active' } });
+  if (active >= RESOURCE_CAPS.activeSchedulesPerUser) {
+    throw new ScheduleError(
+      'limit_reached',
+      `You already have ${RESOURCE_CAPS.activeSchedulesPerUser} active schedules (the simulated maximum). Cancel one to add another.`,
+    );
   }
 
   const nextRunAt = new Date(now.getTime() + input.firstRunInDays * DAY_MS);

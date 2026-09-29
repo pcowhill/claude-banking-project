@@ -58,6 +58,8 @@ export interface StatusResponse {
   milestoneName: string;
   isSimulation: true;
   environment: string;
+  /** True when the backend runs as a SHARED, DISPOSABLE public demo (`PUBLIC_DEMO=true`). */
+  publicDemo: boolean;
   database: {
     connected: boolean;
     users: number;

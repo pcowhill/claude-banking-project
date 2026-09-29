@@ -1,10 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import { MAX_REQUEST_BODY_BYTES } from '@simbank/shared';
 import { config } from './config';
 import { registerRoutes } from './routes/index';
 import { noopOpsRealtime, type OpsRealtime } from './ops/realtime';
 import { csrfHook } from './auth/csrf';
+import { mutationValveHook } from './abuse/rate-limit';
 
 // Make the ops real-time publisher available to route handlers in a typed way.
 declare module 'fastify' {
@@ -31,10 +33,31 @@ export interface BuildServerOptions {
  */
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: config.isTest ? false : { level: process.env.LOG_LEVEL ?? 'info' },
-    // Trust the proxy hop in local dev so req.ip reflects the real client for
-    // session/audit context (still a local simulation — no real network).
+    logger: config.isTest
+      ? false
+      : {
+          level: process.env.LOG_LEVEL ?? 'info',
+          // PUBLIC-DEMO PRIVACY: the default request serializer logs the client's
+          // remote address on every request. In public-demo mode log only the
+          // method + URL so visitor IPs are neither persisted (see
+          // `auth/guards.ts`) nor written to the process log.
+          ...(config.publicDemo
+            ? {
+                serializers: {
+                  req: (req: { method?: string; url?: string }) => ({ method: req.method, url: req.url }),
+                },
+              }
+            : {}),
+        },
+    // Trust the proxy hop: in the eventual deployment a same-origin reverse proxy
+    // on the same host forwards to this process on loopback, so `req.ip` is the
+    // forwarded client address (used ONLY for the in-memory rate limiter in
+    // public-demo mode; never persisted there). Harmless in local dev.
     trustProxy: true,
+    // Every legitimate JSON body this API accepts is a few hundred bytes; cap the
+    // whole body well below Fastify's 1 MiB default so a visitor cannot post
+    // multi-megabyte payloads at a ~500 MB host.
+    bodyLimit: MAX_REQUEST_BODY_BYTES,
   });
 
   await app.register(cors, {
@@ -52,6 +75,19 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   // requests; rejects a mutating request whose `x-meridian-csrf` header does not
   // match the `mer_csrf` cookie (login/logout/public-onboarding are exempt).
   app.addHook('onRequest', csrfHook);
+
+  // Coarse abuse valve (public-demo mode only): caps state-changing requests
+  // per client IP in memory. Route-specific buckets are added per route.
+  app.addHook('onRequest', mutationValveHook);
+
+  // PUBLIC DEMO: tell crawlers not to index API responses either (the HTML
+  // entry points carry `<meta name="robots" content="noindex, nofollow">`; the
+  // reverse proxy may add the same header for the static sites later).
+  if (config.publicDemo) {
+    app.addHook('onSend', async (_req, reply) => {
+      reply.header('x-robots-tag', 'noindex, nofollow');
+    });
+  }
 
   // Ops real-time publisher (no-op unless the runtime binds a Socket.IO server).
   app.decorate('opsRealtime', options.opsRealtime ?? noopOpsRealtime);

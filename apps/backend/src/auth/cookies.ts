@@ -19,8 +19,13 @@ import { config } from '../config';
  * - sameSite 'lax': the customer/ops apps and the API are same-site (all
  *   localhost), so the cookie is sent on their requests while cross-site POSTs
  *   are blocked — a basic CSRF mitigation for this local simulation.
- * - secure: off for local http; a real deployment (out of scope for this
- *   simulation) would serve HTTPS and set this true.
+ * - secure: OFF for plain-http local development, ON for a production (HTTPS)
+ *   build — `config.secureCookies`, which defaults to `NODE_ENV=production` and
+ *   can be forced either way with `COOKIE_SECURE`. Browsers refuse a `Secure`
+ *   cookie over http, so local `npm run dev` keeps working unchanged, while the
+ *   public demo (served over HTTPS behind a same-origin reverse proxy) never
+ *   sends a session token in clear text. The CSRF cookie (`auth/csrf.ts`) uses
+ *   the same base attributes minus httpOnly.
  */
 
 export { sessionCookieName };
@@ -80,16 +85,27 @@ export function sessionCookieNameForRequest(req: FastifyRequest): string {
   return sessionCookieName(sessionAudienceForRequest(req));
 }
 
-export function sessionCookieOptions(): CookieSerializeOptions {
-  return {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: false,
-    path: '/',
-    maxAge: AUTH.sessionTtlMinutes * 60,
-  };
+/**
+ * Attributes shared by EVERY cookie this backend sets (session + CSRF). `Lax`
+ * is right for both deployment shapes: in local dev the apps and the API are
+ * same-site (all `localhost`), and in production each app is served from the
+ * very origin that proxies its API, so first-party requests carry the cookie
+ * while cross-site POSTs do not. `secure` follows the runtime config (see the
+ * module note above) and is read per call so tests can exercise both postures.
+ */
+export function baseCookieOptions(secure: boolean = config.secureCookies): CookieSerializeOptions {
+  return { sameSite: 'lax', secure, path: '/' };
 }
 
-export function clearedCookieOptions(): CookieSerializeOptions {
-  return { httpOnly: true, sameSite: 'lax', secure: false, path: '/' };
+/** Options for SETTING the session cookie (httpOnly; idle-TTL max-age). */
+export function sessionCookieOptions(secure: boolean = config.secureCookies): CookieSerializeOptions {
+  return { ...baseCookieOptions(secure), httpOnly: true, maxAge: AUTH.sessionTtlMinutes * 60 };
+}
+
+/**
+ * Options for CLEARING the session cookie. Must match the attributes it was set
+ * with (path / sameSite / secure) or browsers keep the old cookie.
+ */
+export function clearedCookieOptions(secure: boolean = config.secureCookies): CookieSerializeOptions {
+  return { ...baseCookieOptions(secure), httpOnly: true };
 }

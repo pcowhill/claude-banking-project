@@ -23,3 +23,4 @@ export * from './clock';
 export * from './schedules';
 export * from './statements';
 export * from './lending';
+export * from './public-demo';

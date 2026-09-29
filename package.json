@@ -33,6 +33,9 @@
     "db:migrate": "npm run db:migrate -w @simbank/backend",
     "db:reset": "npm run db:reset -w @simbank/backend",
     "db:seed": "npm run db:seed -w @simbank/backend",
+    "db:deploy": "npm run db:deploy -w @simbank/backend",
+    "db:baseline": "npm run db:baseline -w @simbank/backend --",
+    "start:backend": "npm run start -w @simbank/backend",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "clean": "node ./scripts/clean.mjs"
   },

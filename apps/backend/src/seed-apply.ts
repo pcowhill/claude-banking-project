@@ -34,6 +34,7 @@ export interface SeedResult {
   cards: number;
   schedules: number;
   lending: number;
+  loginEvents: number;
 }
 
 export async function applySeedPlan(
@@ -357,6 +358,23 @@ export async function applySeedPlan(
     });
   }
 
+  // Fictional sign-in history (documentation-range addresses only; see the plan).
+  for (const ev of plan.loginEvents) {
+    const userId = userIdByEmail.get(ev.userEmail.toLowerCase());
+    if (!userId) throw new Error(`Seed references an unknown login-event user: ${ev.userEmail}`);
+    await prisma.loginEvent.create({
+      data: {
+        userId,
+        email: ev.userEmail.toLowerCase(),
+        success: ev.success,
+        reason: ev.reason,
+        ip: ev.ip,
+        userAgent: ev.userAgent,
+        createdAt: new Date(now.getTime() - ev.minutesAgo * MINUTE_MS),
+      },
+    });
+  }
+
   // Savings accounts accrue interest FORWARD ONLY from seed time (no back-accrual
   // of the dated seed history). The clock-driven accrual driver advances this
   // bookmark as the simulation clock passes monthly anniversaries.
@@ -392,6 +410,7 @@ export async function applySeedPlan(
     cards,
     schedules,
     lending,
+    loginEvents,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.account.count(),
@@ -404,6 +423,7 @@ export async function applySeedPlan(
     prisma.card.count(),
     prisma.paymentSchedule.count(),
     prisma.lendingProduct.count(),
+    prisma.loginEvent.count(),
   ]);
   return {
     users,
@@ -417,5 +437,6 @@ export async function applySeedPlan(
     cards,
     schedules,
     lending,
+    loginEvents,
   };
 }

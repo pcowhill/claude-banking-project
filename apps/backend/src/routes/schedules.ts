@@ -8,6 +8,7 @@ import {
 } from '@simbank/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import { simulationNow } from '../clock/clock';
 import {
   cancelSchedule,
@@ -37,6 +38,7 @@ function scheduleHttpStatus(code: ScheduleErrorCode): number {
     case 'forbidden':
       return 403;
     case 'already_inactive':
+    case 'limit_reached':
       return 409;
     default:
       return 400; // inactive_account | invalid
@@ -59,7 +61,9 @@ function invalid(reply: FastifyReply, error: string, fields?: Record<string, str
 }
 
 export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/schedules', { preHandler: requireAuth }, async (req, reply) => {
+  const guarded = { preHandler: [requireAuth, rateLimit('schedules')] };
+
+  app.post('/api/schedules', guarded, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateCreateSchedule({
       kind: typeof body.kind === 'string' ? body.kind : undefined,
@@ -93,7 +97,7 @@ export async function scheduleRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ schedules } satisfies ScheduleListResponse);
   });
 
-  app.post('/api/schedules/:id/cancel', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/schedules/:id/cancel', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const now = await simulationNow(prisma);

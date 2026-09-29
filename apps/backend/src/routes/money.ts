@@ -7,6 +7,7 @@ import {
   type TransferResponse,
 } from '@simbank/shared';
 import { requireAuth } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import { createExternalMovement, createTransfer, MovementError, type MovementErrorCode } from '../money/movements';
 import { prisma } from '../db';
 import { simulationNow } from '../clock/clock';
@@ -35,6 +36,7 @@ function movementHttpStatus(code: MovementErrorCode): number {
     case 'forbidden':
       return 403;
     case 'nothing_to_reverse':
+    case 'limit_reached':
       return 409;
     default:
       return 400; // insufficient_funds | inactive_account | invalid | not_a_movement
@@ -58,7 +60,10 @@ function invalid(reply: FastifyReply, error: string, fields?: Record<string, str
 
 export async function moneyRoutes(app: FastifyInstance): Promise<void> {
   // ---- Internal transfer (immediate; both legs) -----------------------------
-  app.post('/api/transfers', { preHandler: requireAuth }, async (req, reply) => {
+  // Money-movement creation is rate-limited per user in public-demo mode.
+  const guarded = { preHandler: [requireAuth, rateLimit('money')] };
+
+  app.post('/api/transfers', guarded, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateTransfer({
       fromAccountId: typeof body.fromAccountId === 'string' ? body.fromAccountId.slice(0, MAX_FIELD) : undefined,
@@ -84,7 +89,7 @@ export async function moneyRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- External reviewable movement (queues for operator review) ------------
-  app.post('/api/movements', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/movements', guarded, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateExternalMovement({
       accountId: typeof body.accountId === 'string' ? body.accountId.slice(0, MAX_FIELD) : undefined,

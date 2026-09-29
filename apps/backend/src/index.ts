@@ -20,8 +20,19 @@ opsRealtime.bind(io);
 try {
   await app.listen({ port: config.port, host: config.host });
   app.log.info(
-    `Meridian SIMULATED banking API on http://localhost:${config.port} — local simulation only, not a real bank`,
+    `Meridian SIMULATED banking API on http://${config.host}:${config.port} — a simulation only, not a real bank`,
   );
+  // Make the deployment posture unmistakable in the log (no secrets involved):
+  // which mode we are in and where the (only) mutable state lives.
+  const databaseUrl = process.env.DATABASE_URL ?? 'file:./dev.db';
+  app.log.info(
+    `posture: NODE_ENV=${config.environment} PUBLIC_DEMO=${config.publicDemo} secureCookies=${config.secureCookies} rateLimits=${config.rateLimitsEnabled} DATABASE_URL=${databaseUrl}`,
+  );
+  if (config.publicDemo && !/^file:(\/|[A-Za-z]:)/.test(databaseUrl)) {
+    app.log.warn(
+      'PUBLIC_DEMO is on but DATABASE_URL is not an absolute file: URL — the live database should live OUTSIDE the release directory (e.g. file:/srv/apps/meridian/data/meridian.db).',
+    );
+  }
 } catch (err) {
   app.log.error(err);
   process.exit(1);

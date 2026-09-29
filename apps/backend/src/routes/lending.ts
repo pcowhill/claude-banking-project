@@ -10,6 +10,7 @@ import {
 } from '@simbank/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import { simulationNow } from '../clock/clock';
 import {
   LendingError,
@@ -38,6 +39,8 @@ function lendingHttpStatus(code: LendingErrorCode): number {
       return 404;
     case 'forbidden':
       return 403;
+    case 'limit_reached':
+      return 409;
     default:
       return 400; // insufficient_funds | inactive_account | invalid_state | not_matured
   }
@@ -57,6 +60,9 @@ function invalid(reply: FastifyReply, fields: Record<string, string>): void {
 }
 
 export async function lendingRoutes(app: FastifyInstance): Promise<void> {
+  // Every lending MUTATION shares one per-user rate-limit bucket (public-demo mode).
+  const guarded = { preHandler: [requireAuth, rateLimit('lending')] };
+
   // ---- List the caller's lending products -----------------------------------
   app.get('/api/lending', { preHandler: requireAuth }, async (req, reply) => {
     const products = await listLendingForUser(req.user!);
@@ -64,7 +70,7 @@ export async function lendingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Open a CD ------------------------------------------------------------
-  app.post('/api/lending/cds', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/lending/cds', guarded, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateOpenCd({
       fundingAccountId: typeof body.fundingAccountId === 'string' ? body.fundingAccountId : undefined,
@@ -81,7 +87,7 @@ export async function lendingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Open a loan ----------------------------------------------------------
-  app.post('/api/lending/loans', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/lending/loans', guarded, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateOpenLoan({
       disbursementAccountId: typeof body.disbursementAccountId === 'string' ? body.disbursementAccountId : undefined,
@@ -98,7 +104,7 @@ export async function lendingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Make a loan payment --------------------------------------------------
-  app.post('/api/lending/loans/:id/pay', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/lending/loans/:id/pay', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateLoanPayment({
@@ -115,7 +121,7 @@ export async function lendingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Withdraw a matured CD ------------------------------------------------
-  app.post('/api/lending/cds/:id/withdraw', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/lending/cds/:id/withdraw', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateWithdrawCd({ toAccountId: typeof body.toAccountId === 'string' ? body.toAccountId : undefined });

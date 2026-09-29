@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { CookieSerializeOptions } from '@fastify/cookie';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AUTH, type ApiErrorResponse } from '@simbank/shared';
+import { baseCookieOptions } from './cookies';
 
 /**
  * CSRF protection (v1.0.0 / SEC-1) — a double-submit token.
@@ -43,13 +44,16 @@ export function generateCsrfToken(): string {
   return randomBytes(32).toString('hex');
 }
 
-/** Cookie options for the CSRF token — readable by page JS (NOT httpOnly). */
-export function csrfCookieOptions(): CookieSerializeOptions {
+/**
+ * Cookie options for the CSRF token — readable by page JS (NOT httpOnly: the
+ * double-submit design needs `document.cookie` to see it). Every other
+ * attribute (`SameSite=Lax`, `Secure` in production/HTTPS, path) is shared with
+ * the session cookie via {@link baseCookieOptions}, so the two can never drift.
+ */
+export function csrfCookieOptions(secure?: boolean): CookieSerializeOptions {
   return {
+    ...baseCookieOptions(secure),
     httpOnly: false, // page JS must read it to echo it back in the header
-    sameSite: 'lax',
-    secure: false, // local http simulation; a real HTTPS deploy would set true
-    path: '/',
     maxAge: AUTH.sessionTtlMinutes * 60,
   };
 }

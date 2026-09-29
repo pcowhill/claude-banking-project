@@ -12,6 +12,7 @@ const targets = [
   'apps/backend/src/generated',
   'apps/backend/prisma/dev.db',
   'apps/backend/prisma/dev.db-journal',
+  'apps/backend/prisma/baseline',
   'apps/customer/dist',
   'apps/operations/dist',
   'packages/shared/dist',

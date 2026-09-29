@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { OnboardingApplication, OperationsRequest } from '@prisma/client';
 import {
+  RESOURCE_CAPS,
   ONBOARDING_PRODUCT_LABELS,
   type NormalizedOpenAccount,
   type OnboardingApplicationSummary,
@@ -97,10 +98,32 @@ export interface SubmittedApplication {
  * audit row, and generate the onboarding identity/MFA/email SIMULATED events.
  * Creates no user/account/money — provisioning happens only on operator approval.
  */
+/** Thrown when an applicant already has the maximum number of unreviewed applications. */
+export class ApplicationLimitError extends Error {
+  readonly code = 'limit_reached' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApplicationLimitError';
+  }
+}
+
 export async function submitApplication(
   input: NormalizedOpenAccount,
   now: Date = new Date(),
 ): Promise<SubmittedApplication> {
+  // Resource cap (all modes): bounded UNREVIEWED applications per e-mail. The
+  // public form is unauthenticated, so this (plus the public-demo rate limit)
+  // is what keeps a scripted loop from filling the operator queue and the
+  // application table with bcrypt-hashed rows.
+  const unreviewed = await prisma.onboardingApplication.count({
+    where: { email: input.email, status: 'submitted' },
+  });
+  if (unreviewed >= RESOURCE_CAPS.pendingApplicationsPerEmail) {
+    throw new ApplicationLimitError(
+      `That e-mail already has ${RESOURCE_CAPS.pendingApplicationsPerEmail} applications awaiting review (the simulated maximum). Please wait for an operator decision.`,
+    );
+  }
+
   const reference = generateReference();
   const passwordHash = await hashPassword(input.password);
   const productLabel = ONBOARDING_PRODUCT_LABELS[input.product];
