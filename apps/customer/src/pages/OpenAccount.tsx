@@ -14,6 +14,7 @@ import {
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Icon, PageHero, Section, SectionHeading } from '../components/marketing';
+import { PublicDemoNotice } from '../components/PublicDemoNotice';
 import { cn } from '../lib/cn';
 import { submitApplication } from '../lib/onboarding';
 
@@ -197,6 +198,9 @@ function ApplicationForm({ onSuccess }: { onSuccess: (result: OpenAccountRespons
   return (
     <Card className="mx-auto max-w-2xl">
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {/* Public-demo only: the shared-demo warning sits ABOVE the first field so a
+            visitor reads it before entering a name, email, or password. */}
+        <PublicDemoNotice variant="form" />
         <div>
           <label htmlFor="fullName" className={labelClass}>
             Full name

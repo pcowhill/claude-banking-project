@@ -15,6 +15,7 @@
  * stored or echoed (only a bcrypt hash, server-side, never in any DTO here).
  */
 import type { AccountRelationship } from './auth';
+import { EMAIL_MAX_LENGTH } from './public-demo';
 import type { UserRole } from './types';
 
 // ---- Products & lifecycle ---------------------------------------------------
@@ -67,10 +68,16 @@ export const DEMO_DEFAULT_PASSWORD = 'Demo1234!';
 
 // ---- Lightweight validation primitives -------------------------------------
 
-/** A loose, dependency-free email check — good enough for a simulation (not RFC). */
+/**
+ * A loose, dependency-free email check — good enough for a simulation (not RFC).
+ * Also bounds the length ({@link EMAIL_MAX_LENGTH}) so no route can persist an
+ * arbitrarily long "address".
+ */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function isLikelyEmail(value: unknown): value is string {
-  return typeof value === 'string' && EMAIL_RE.test(value.trim());
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return trimmed.length <= EMAIL_MAX_LENGTH && EMAIL_RE.test(trimmed);
 }
 
 export function isOnboardingProduct(value: unknown): value is OnboardingProduct {
@@ -261,7 +268,8 @@ export type AdminCreateUserField =
   | 'role'
   | 'product'
   | 'initialFundingMinor'
-  | 'reason';
+  | 'reason'
+  | 'password';
 
 /** Roles an admin may provision through the console. */
 export const ADMIN_CREATABLE_ROLES = [
@@ -346,10 +354,13 @@ export function validateAdminCreateUser(
     }
   }
 
-  const password =
-    typeof input.password === 'string' && input.password.length >= ONBOARDING_PASSWORD.minLength
-      ? input.password
-      : DEMO_DEFAULT_PASSWORD;
+  // An omitted / too-short password falls back to the documented demo default;
+  // an over-long one is rejected rather than silently hashed (server-side bound).
+  let password = DEMO_DEFAULT_PASSWORD;
+  if (typeof input.password === 'string' && input.password.length >= ONBOARDING_PASSWORD.minLength) {
+    if (input.password.length > ONBOARDING_PASSWORD.maxLength) errors.password = 'That password is too long.';
+    else password = input.password;
+  }
 
   const ok = Object.keys(errors).length === 0;
   return {

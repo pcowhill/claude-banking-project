@@ -7,6 +7,7 @@ import {
   type FraudAlertListResponse,
 } from '@simbank/shared';
 import { requireAuth } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import { prisma } from '../db';
 import { simulationNow } from '../clock/clock';
 import { createDispute, DisputeError, type DisputeErrorCode } from '../risk/disputes';
@@ -33,7 +34,9 @@ function fraudHttpStatus(code: FraudErrorCode): number {
 
 export async function riskRoutes(app: FastifyInstance): Promise<void> {
   // ---- File a dispute against a posted transaction --------------------------
-  app.post('/api/disputes', { preHandler: requireAuth }, async (req, reply) => {
+  const guarded = { preHandler: [requireAuth, rateLimit('risk')] };
+
+  app.post('/api/disputes', guarded, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateDispute({
       ledgerEntryId: typeof body.ledgerEntryId === 'string' ? body.ledgerEntryId.slice(0, MAX_FIELD) : undefined,
@@ -72,7 +75,7 @@ export async function riskRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Confirm / deny a fraud alert -----------------------------------------
-  app.post('/api/fraud-alerts/:id/respond', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/fraud-alerts/:id/respond', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
     if (!isFraudResponse(body.response)) {

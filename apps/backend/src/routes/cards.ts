@@ -9,6 +9,7 @@ import {
   type ReplaceCardResponse,
 } from '@simbank/shared';
 import { requireAuth } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import { prisma } from '../db';
 import { simulationNow } from '../clock/clock';
 import {
@@ -38,6 +39,8 @@ function cardHttpStatus(code: CardErrorCode): number {
       return 404;
     case 'forbidden':
       return 403;
+    case 'limit_reached':
+      return 409;
     default:
       return 400; // inactive_account | invalid_state
   }
@@ -57,6 +60,9 @@ function invalid(reply: FastifyReply, error: string, fields?: Record<string, str
 }
 
 export async function cardRoutes(app: FastifyInstance): Promise<void> {
+  // Every card MUTATION shares one per-user rate-limit bucket (public-demo mode).
+  const guarded = { preHandler: [requireAuth, rateLimit('cards')] };
+
   // ---- List the caller's cards ----------------------------------------------
   app.get('/api/cards', { preHandler: requireAuth }, async (req, reply) => {
     const cards = await listCards(req.user!);
@@ -75,7 +81,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Issue a card on an account -------------------------------------------
-  app.post('/api/accounts/:id/cards', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/accounts/:id/cards', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateIssueCard({
@@ -94,7 +100,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Freeze / unfreeze ----------------------------------------------------
-  app.post('/api/cards/:id/freeze', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/cards/:id/freeze', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const card = await freezeCard(req.user!, id, await simulationNow(prisma));
@@ -104,7 +110,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/cards/:id/unfreeze', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/cards/:id/unfreeze', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
       const card = await unfreezeCard(req.user!, id, await simulationNow(prisma));
@@ -115,7 +121,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Report lost / stolen → replacement -----------------------------------
-  app.post('/api/cards/:id/report', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/cards/:id/report', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateReportCard({ reason: typeof body.reason === 'string' ? body.reason : undefined });
@@ -131,7 +137,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // ---- Travel notices -------------------------------------------------------
-  app.post('/api/cards/:id/travel-notices', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/cards/:id/travel-notices', guarded, async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateTravelNotice({
@@ -151,7 +157,7 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.post('/api/cards/:id/travel-notices/:noticeId/cancel', { preHandler: requireAuth }, async (req, reply) => {
+  app.post('/api/cards/:id/travel-notices/:noticeId/cancel', guarded, async (req, reply) => {
     const { id, noticeId } = req.params as { id: string; noticeId: string };
     try {
       const card = await cancelTravelNotice(req.user!, id, noticeId);

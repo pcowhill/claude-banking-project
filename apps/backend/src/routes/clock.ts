@@ -8,6 +8,7 @@ import {
 } from '@simbank/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../auth/guards';
+import { rateLimit } from '../abuse/rate-limit';
 import { advanceClock, ClockError, getClockState } from '../clock/clock';
 import { runDueSchedules } from '../scheduler/scheduler';
 import { listAllSchedules } from '../scheduler/schedules';
@@ -35,7 +36,11 @@ export async function clockRoutes(app: FastifyInstance): Promise<void> {
 
   const opsOnly = { preHandler: [requireAuth, requireRole('ops_agent', 'admin')] };
 
-  app.post('/api/ops/clock/advance', opsOnly, async (req, reply) => {
+  // Advancing fires schedules + accrues interest (real work per call), so it
+  // shares the operator mutation budget in public-demo mode.
+  const opsMutation = { preHandler: [requireAuth, requireRole('ops_agent', 'admin'), rateLimit('operations')] };
+
+  app.post('/api/ops/clock/advance', opsMutation, async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const check = validateAdvance({
       minutes: typeof body.minutes === 'number' ? body.minutes : undefined,

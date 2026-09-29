@@ -4,6 +4,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { cn } from '../lib/cn';
 import { useAuth } from '../lib/auth-context';
+import { PublicDemoNotice } from '../components/PublicDemoNotice';
 
 /**
  * Simulated sign-in. Posts the credentials through the auth context, then on
@@ -39,6 +40,8 @@ function messageForCode(code: string, fallback: string): string {
       return 'This account has been disabled. Contact support (simulated) for help.';
     case 'invalid_request':
       return 'Please enter both your email and password.';
+    case 'rate_limited':
+      return 'Too many sign-in attempts from your connection on this shared demo. Please wait a minute and try again.';
     case 'network_error':
       return 'Cannot reach the banking service. Make sure the backend is running (npm run dev).';
     default:
@@ -147,6 +150,7 @@ export function Login() {
       <p className="mt-1 text-sm text-slate-600">Simulated sign-in. No real credentials, ever.</p>
 
       <Card className="mt-6">
+        <PublicDemoNotice variant="form" className="mb-4" />
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-slate-700">

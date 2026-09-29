@@ -107,10 +107,29 @@ to wait on); `/status` reports version + DB readiness and degrades gracefully.
 
 ### Frontend ↔ backend wiring
 
-Apps read `VITE_API_URL` (default `http://localhost:3000`) and show a live
-backend-status indicator. All API calls degrade gracefully so the UI renders
+Apps resolve their API/Socket.IO base with the shared `resolveApiBaseUrl`
+(`packages/shared/src/public-demo.ts`): an explicit `VITE_API_URL` / `VITE_WS_URL`
+wins; otherwise a **production build** uses the page's own origin (the eventual
+deployment reverse-proxies `/api/*`, `/health`, `/status`, `/socket.io/*` on the same
+hostname — no separate API host); otherwise `http://localhost:3000`. Both apps show
+a live backend-status indicator. All API calls degrade gracefully so the UI renders
 even when the backend is offline. Brand colors are defined once in
 `packages/shared/src/brand.ts` and mirrored into each app's `tailwind.config.js`.
+
+### Deployment postures (local · production · public demo)
+
+Two independent backend flags (`apps/backend/src/config.ts`): `NODE_ENV=production`
+turns on `Secure` cookies (overridable via `COOKIE_SECURE`); `PUBLIC_DEMO=true` is the
+explicit, opt-in **shared, disposable public demo** posture — the shared-demo warning
+in both apps, no real visitor IP/user-agent persisted (constant placeholder), seeded
+showcase accounts exempt from the persistent lockout, an in-memory bounded rate
+limiter (`apps/backend/src/abuse/rate-limit.ts`, HTTP 429), a 64 KiB body ceiling and
+`X-Robots-Tag`. Per-user/per-resource caps on live rows apply in every mode. All
+mutable state is one SQLite file addressed by an absolute `DATABASE_URL`; the unit of
+reset is the whole file, built by `npm run db:baseline` (`migrate deploy` + seed,
+`SEED_NOW`-pinned). The full contract is `docs/PUBLIC_DEMO_DEPLOYMENT.md`; the
+infrastructure itself (reverse proxy, process manager, DNS, deploy workflow) is
+deliberately outside this repository.
 
 ### Drop-in marketing images
 

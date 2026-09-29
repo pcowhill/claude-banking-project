@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import type { OperationsRequest } from '@prisma/client';
 import {
+  RESOURCE_CAPS,
+  REVIEWABLE_MOVEMENT_OPS_TYPE,
   asMovementPayload,
   deriveBalances,
   formatMinor,
@@ -50,7 +52,8 @@ export type MovementErrorCode =
   | 'inactive_account'
   | 'invalid'
   | 'not_a_movement'
-  | 'nothing_to_reverse';
+  | 'nothing_to_reverse'
+  | 'limit_reached';
 
 export class MovementError extends Error {
   readonly code: MovementErrorCode;
@@ -285,6 +288,23 @@ export async function createExternalMovement(
   const ledgerDirection: LedgerDirection = direction === 'inbound' ? 'credit' : 'debit';
   if (direction === 'outbound' && availableMinor(account) < input.amountMinor) {
     throw new MovementError('insufficient_funds', 'That movement exceeds the available balance.');
+  }
+
+  // Resource cap (all modes): bounded movements AWAITING REVIEW per user. Each
+  // one is a pending ledger entry + a queue item; an operator decision (approve
+  // / reject) frees capacity, so a normal demo never meets this.
+  const awaitingReview = await prisma.operationsRequest.count({
+    where: {
+      status: 'pending',
+      subjectEmail: user.email,
+      type: { in: Object.values(REVIEWABLE_MOVEMENT_OPS_TYPE) },
+    },
+  });
+  if (awaitingReview >= RESOURCE_CAPS.pendingMovementsPerUser) {
+    throw new MovementError(
+      'limit_reached',
+      `You already have ${RESOURCE_CAPS.pendingMovementsPerUser} movements awaiting operator review (the simulated maximum).`,
+    );
   }
 
   const reference = generateMovementReference();

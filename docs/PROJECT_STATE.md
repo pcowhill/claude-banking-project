@@ -6,6 +6,18 @@
 
 ## At a glance
 
+- **Post-v1.0.0 (2026-09-29): public-demo readiness — application level, awaiting review.**
+  The simulation can now be hosted as a **shared, disposable public demo** via two explicit
+  flags: `NODE_ENV=production` (Secure cookies; production builds call their own origin —
+  `/api/*`, `/status`, `/health`, `/socket.io`) and `PUBLIC_DEMO=true` (shared-demo warning
+  in both apps, no real visitor IP/user-agent persisted, seeded showcase accounts exempt
+  from lockout, in-memory rate limits → 429, `X-Robots-Tag`). Per-user resource caps and a
+  64 KiB body ceiling apply in every mode. `npm run db:baseline` builds a pristine seeded
+  SQLite file for whole-database resets (`SEED_NOW` pins the seed instant). **No
+  infrastructure is in the repo** — contract in `docs/PUBLIC_DEMO_DEPLOYMENT.md`. Local
+  development is unchanged. Branch `claude/brave-meitner-bfg6b5`, PR open, **not merged**.
+  Version stays **1.0.0**.
+
 - **Current version / tag:** `v1.0.0` — Polish, hardening, loans/CDs/interest, final
   retrospective (the **final** milestone; re-scoped by the human at the v0.9.0 review
   into a combined feature + hardening + polish capstone). An annotated tag `v1.0.0` is

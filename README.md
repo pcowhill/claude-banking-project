@@ -1,9 +1,14 @@
-# Meridian — Simulated Banking Platform (local demo)
+# Meridian — Simulated Banking Platform (demo)
 
-> ⚠️ **This is a LOCAL SIMULATION. It is not a real bank.** No real money, real
+> ⚠️ **This is a SIMULATION. It is not a real bank.** No real money, real
 > accounts, real cards, or real banking/SMS/email integrations are involved.
 > Do not use it for anything financial. It exists to explore great banking UX
 > and to run a multi-session, milestone-gated AI development experiment.
+>
+> When hosted as a **shared public demo** (`PUBLIC_DEMO=true`), it is also a shared,
+> disposable environment: use fictional information and a unique demo password —
+> other visitors may modify it, and demo data is periodically reset. See
+> [`docs/PUBLIC_DEMO_DEPLOYMENT.md`](docs/PUBLIC_DEMO_DEPLOYMENT.md).
 
 Meridian is a TypeScript monorepo with three runnable pieces:
 
@@ -76,7 +81,28 @@ Run `npm run db:reset` first to seed these users.
 
 Sign in repeatedly with the wrong password and the account temporarily locks
 (after 5 tries) — that's the lockout policy, not a bug. Every sign-in attempt is
-recorded; the customer dashboard shows recent sign-in activity.
+recorded; the customer dashboard shows recent sign-in activity (the seed includes a
+few fictional entries for Avery). In **public-demo mode** the seeded showcase accounts
+above are exempt from the lock (so one visitor cannot lock them for everyone), the
+sign-in endpoint is rate-limited instead, and real visitor IPs / user-agents are never
+stored.
+
+### Public-demo mode (preparing for a shared, public portfolio deployment)
+
+The app was written as a local simulation; it can now also run as an explicitly
+opt-in **shared, disposable public demo**. Nothing changes for local development unless
+you set the flags.
+
+| Setting | Effect |
+| --- | --- |
+| `NODE_ENV=production` | Production build; cookies gain `Secure` (HTTPS). Frontend builds talk to their **own origin** (`/api/*`, `/status`, `/health`, `/socket.io`) — no separate API host. |
+| `PUBLIC_DEMO=true` | Shared-demo warning in both apps; no real visitor IP/user-agent persisted; seeded accounts exempt from lockout; in-memory rate limits (HTTP 429); `X-Robots-Tag` on API responses. Distinct from `NODE_ENV` on purpose. |
+| `VITE_PUBLIC_DEMO=true` | (build-time, both apps) show the shared-demo warning from the first paint. |
+| `npm run db:baseline` | Build a pristine seeded SQLite baseline for whole-database resets (`--out <file>`, `SEED_NOW=<iso>` for deterministic content). |
+
+Full contract — hostnames, proxy paths, cookies, privacy, limits, resets, SPA fallback —
+in [`docs/PUBLIC_DEMO_DEPLOYMENT.md`](docs/PUBLIC_DEMO_DEPLOYMENT.md). No infrastructure
+(Caddy, systemd, AWS, deploy workflow) lives in this repository.
 
 ### New in v1.0.0 (loans, CDs, interest accrual, CSRF, simulated-date fix, corrected marketing)
 
@@ -294,8 +320,10 @@ recorded; the customer dashboard shows recent sign-in activity.
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Run backend + customer + operations concurrently. |
-| `npm run db:reset` | Drop & recreate the SQLite DB, apply migrations, seed demo data. |
-| `npm run db:seed` | Re-seed demo data. |
+| `npm run db:reset` | **Destructive dev reset:** drop & recreate the local SQLite DB, apply migrations, seed demo data. |
+| `npm run db:seed` | Re-seed demo data (honours `SEED_NOW=<iso>` for a pinned seed instant). |
+| `npm run db:deploy` | Apply committed migrations to `DATABASE_URL` (`prisma migrate deploy`; the production migration path). |
+| `npm run db:baseline` | Build a **pristine seeded baseline** DB file (`-- --out <file>`); used for public-demo resets. |
 | `npm run verify` | **The gate:** lint + typecheck + unit/integration tests + build. |
 | `npm run test` | Vitest unit/integration tests. |
 | `npm run test:e2e` | Playwright smoke tests (run `npm run test:e2e:install` once first). |

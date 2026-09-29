@@ -1,4 +1,5 @@
 import {
+  type LoginReason,
   ACCOUNT_RELATIONSHIPS,
   BANK_ORIGINATED_ORIGINS,
   INVITATION_STATUSES,
@@ -226,6 +227,23 @@ export interface SeedSchedule {
  * (it carries the negative owed balance) and the disbursement account credited.
  * Interest accrues later via the clock-driven accrual driver. No money is minted.
  */
+/**
+ * A seeded, FICTIONAL sign-in history row for the customer dashboard's "recent
+ * sign-in activity" panel. Addresses come from the RFC 5737 documentation
+ * ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) — they can never be a
+ * real visitor — and the user-agent is an obviously made-up label. Useful in
+ * PUBLIC-DEMO mode, where real visitor IPs/user-agents are NOT persisted, so
+ * the feature still has something to show.
+ */
+export interface SeedLoginEvent {
+  userEmail: string;
+  minutesAgo: number;
+  success: boolean;
+  reason: LoginReason;
+  ip: string;
+  userAgent: string;
+}
+
 export interface SeedLending {
   key: string;
   /** The new `cd`/`loan` account's key (addressable for assertions). */
@@ -253,6 +271,29 @@ export interface SeedPlan {
   invitations: SeedInvitation[];
   schedules: SeedSchedule[];
   lending: SeedLending[];
+  loginEvents: SeedLoginEvent[];
+}
+
+/**
+ * The e-mail addresses of every SEEDED showcase account: the demo users (whose
+ * non-secret passwords are printed in the README and on both sign-in pages)
+ * plus the seeded onboarding applicant (whose demo password is documented too).
+ * Derived from the plan itself so the list can never drift from the seed. Used
+ * by the login route's public-demo lockout exemption (see `routes/auth.ts`).
+ */
+export function seededShowcaseEmails(plan: SeedPlan = buildSeedPlan()): Set<string> {
+  const emails = new Set<string>();
+  for (const user of plan.users) emails.add(user.email.toLowerCase());
+  for (const app of plan.onboardingApplications) emails.add(app.email.toLowerCase());
+  return emails;
+}
+
+let showcaseEmailCache: Set<string> | null = null;
+
+/** Is this (normalized) e-mail one of the seeded showcase accounts? Cached after first use. */
+export function isSeededShowcaseEmail(email: string): boolean {
+  showcaseEmailCache ??= seededShowcaseEmails();
+  return showcaseEmailCache.has(email.trim().toLowerCase());
 }
 
 export function buildSeedPlan(): SeedPlan {
@@ -751,6 +792,35 @@ export function buildSeedPlan(): SeedPlan {
     },
   ];
 
+  // Fictional recent sign-in activity for Avery (RFC 5737 documentation
+  // addresses; never a real visitor). Oldest first; the API lists newest-first.
+  const loginEvents: SeedLoginEvent[] = [
+    {
+      userEmail: 'avery.customer@example.com',
+      minutesAgo: 3 * 24 * 60,
+      success: true,
+      reason: 'ok',
+      ip: '203.0.113.42',
+      userAgent: 'Example Browser 1.0 (seeded demo data)',
+    },
+    {
+      userEmail: 'avery.customer@example.com',
+      minutesAgo: 26 * 60,
+      success: false,
+      reason: 'invalid_credentials',
+      ip: '198.51.100.7',
+      userAgent: 'Example Mobile Browser 2.0 (seeded demo data)',
+    },
+    {
+      userEmail: 'avery.customer@example.com',
+      minutesAgo: 25 * 60,
+      success: true,
+      reason: 'ok',
+      ip: '198.51.100.7',
+      userAgent: 'Example Mobile Browser 2.0 (seeded demo data)',
+    },
+  ];
+
   return {
     users,
     entries,
@@ -762,6 +832,7 @@ export function buildSeedPlan(): SeedPlan {
     invitations,
     schedules,
     lending,
+    loginEvents,
   };
 }
 

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { AccountInvitation } from '@prisma/client';
+import { RESOURCE_CAPS } from '@simbank/shared';
 import type {
   AccountInvitationDTO,
   AccountRelationship,
@@ -19,7 +20,12 @@ import { toSimulatedEventDTO } from './requests';
  * email is ever sent, and accepting moves NO money.
  */
 
-export type InvitationErrorCode = 'not_found' | 'forbidden' | 'already_responded' | 'wrong_invitee';
+export type InvitationErrorCode =
+  | 'not_found'
+  | 'forbidden'
+  | 'already_responded'
+  | 'wrong_invitee'
+  | 'limit_reached';
 
 export class InvitationError extends Error {
   readonly code: InvitationErrorCode;
@@ -102,6 +108,17 @@ export async function inviteJoint(
   },
   now: Date = new Date(),
 ): Promise<CreatedInvitation> {
+  // Resource cap (all modes): bounded PENDING invitations per account (a
+  // responded/revoked invitation frees capacity).
+  const pending = await prisma.accountInvitation.count({
+    where: { accountId: input.accountId, status: 'pending' },
+  });
+  if (pending >= RESOURCE_CAPS.pendingInvitationsPerAccount) {
+    throw new InvitationError(
+      'limit_reached',
+      `This account already has ${RESOURCE_CAPS.pendingInvitationsPerAccount} pending invitations (the simulated maximum).`,
+    );
+  }
   const row = await createInvitationRecord(
     prisma,
     {

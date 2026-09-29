@@ -8,6 +8,51 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
+### Public-demo readiness (application-level preparation for a shared portfolio deployment)
+
+Prepares the simulation to be hosted publicly as a **shared, disposable public demo**
+(`banking.cowhill.dev` / `banking-ops.cowhill.dev`) while keeping local development
+exactly as it was. No infrastructure (reverse proxy, process manager, DNS, cloud, deploy
+workflow, Docker) is added — the contract is `docs/PUBLIC_DEMO_DEPLOYMENT.md`.
+
+- **Explicit `PUBLIC_DEMO=true` posture** (distinct from `NODE_ENV=production`; parsed
+  by `resolveConfig`), reported on `GET /status` as `publicDemo`.
+- **Secure cookies in production:** session + CSRF cookies gain `Secure` when
+  `NODE_ENV=production` (`COOKIE_SECURE` overrides); httpOnly split, `SameSite=Lax`, the
+  per-surface session isolation and the double-submit CSRF design are unchanged.
+- **Same-origin API/WebSocket routing:** shared `resolveApiBaseUrl` — production builds
+  call their own origin (`/api/*`, `/health`, `/status`, `/socket.io`); dev still
+  defaults to `http://localhost:3000`; `VITE_API_URL` / `VITE_WS_URL` override.
+- **Shared-demo warning** (`PublicDemoNotice`, both apps; public-demo mode only): a
+  banner line on every page and a prominent callout before the open-account and sign-in
+  forms. The always-on "not a real bank / no real money" messaging is unchanged.
+- **Visitor privacy:** in public-demo mode `Session`/`LoginEvent` `ip` + `userAgent`
+  are written as the constant `public-demo` placeholder (no hashing, no fingerprint);
+  request logs drop the remote address. The seed adds three fictional sign-in events.
+- **Seeded-account lockout protection:** in public-demo mode the seeded showcase
+  accounts (derived from the seed plan) never acquire `lockedUntil`; password
+  verification, login history and failure counting are unchanged; other accounts keep
+  the normal lockout; nothing changes with the flag off.
+- **In-memory bounded rate limiter** (public-demo mode; HTTP 429 + `Retry-After`):
+  login 20/5 min per IP, onboarding 5/15 min per IP, money 30, schedules 20, cards 30,
+  lending 20, risk 20, operations 60 (per user / 5 min), admin users 10/15 min, and a
+  coarse 200/5 min valve over all mutations per IP.
+- **Input bounds + growth caps (all modes):** 64 KiB body ceiling; email ≤ 254 and
+  login password ≤ 200; admin password max; event `kind`/`requestId` ≤ 64; search `q`
+  ≤ 100; per-user caps on live rows (25 active schedules, 10 open CDs/loans, 8 live
+  cards per account, 10 active travel notices per card, 10 pending invitations per
+  account, 25 movements awaiting review, 3 unreviewed applications per email) → 409
+  `limit_reached`.
+- **Whole-database reset support:** `npm run db:baseline` (`prisma migrate deploy` +
+  seed + self-verification into an explicit file; `SEED_NOW` pins the seed instant),
+  `npm run db:deploy`, `npm run start:backend`; start-up logs the posture and warns
+  when a public demo uses a relative `DATABASE_URL`.
+- **No-index:** `robots.txt` (both apps), the existing `noindex, nofollow` meta kept,
+  `X-Robots-Tag` on API responses in public-demo mode.
+- **Tests:** +50 (config, cookie security in both postures, privacy, lockout exemption,
+  rate limiter unit + routes, resource caps, deterministic baseline build, shared
+  helpers, the notice component). `.env.example` documents every flag.
+
 - **v1.0.0 is the final planned milestone.** Future work would be the explicitly
   deferred items, at the human's direction: wall-clock auto-advance by a speed
   multiplier, a dedicated credit-card account product, customer-facing login 2FA, and

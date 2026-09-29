@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   LEDGER_ORIGINS,
+  SEARCH_QUERY_MAX_LENGTH,
   type AccountStatementsResponse,
   type AccountTransactionsResponse,
   type ApiErrorResponse,
@@ -23,7 +24,8 @@ const TRANSACTION_GROUPS: readonly TransactionGroup[] = ['pending', 'posted', 'o
 /** Parse + validate the `?q=&group=&origin=` query into a safe TransactionQuery. */
 function parseTransactionQuery(raw: { q?: string; group?: string; origin?: string }): TransactionQuery {
   const query: TransactionQuery = {};
-  if (typeof raw.q === 'string' && raw.q.trim()) query.q = raw.q.trim();
+  // Bounded: the search runs in memory over the account's rows, so cap the needle.
+  if (typeof raw.q === 'string' && raw.q.trim()) query.q = raw.q.trim().slice(0, SEARCH_QUERY_MAX_LENGTH);
   if (raw.group && (TRANSACTION_GROUPS as readonly string[]).includes(raw.group)) {
     query.group = raw.group as TransactionGroup;
   }

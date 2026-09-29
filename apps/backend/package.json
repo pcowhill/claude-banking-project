@@ -16,6 +16,7 @@
     "db:deploy": "node prisma/prisma-cli.mjs migrate deploy",
     "db:reset": "node prisma/prisma-cli.mjs migrate reset --force --skip-seed && npm run db:seed",
     "db:seed": "tsx prisma/seed.ts",
+    "db:baseline": "node prisma/baseline.mjs",
     "db:studio": "node prisma/prisma-cli.mjs studio"
   },
   "dependencies": {
