@@ -6,6 +6,50 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 13 — Public-demo readiness (post-v1.0.0, application-level) — 2026-09-29
+
+**Goal:** the human's post-v1.0.0 brief (saved verbatim in
+`feedback/FEEDBACK_v1.0.1_2026-09-29_1640.md`): make the finished simulation safe to host
+as a **shared, disposable public portfolio demo** on a tiny host — explicit
+`PUBLIC_DEMO` posture, Secure cookies, same-origin API/WS, shared-demo warning, no
+persisted visitor identifiers, seeded-account lockout protection, in-memory rate limits,
+input/growth caps, a pristine-baseline DB command, no-index, SPA-fallback contract, docs,
+tests, and a PR for review — **without** adding infrastructure or changing local dev.
+
+**Branch:** `claude/brave-meitner-bfg6b5` (intended name `feature/public-demo-hardening`).
+
+**Key decisions.**
+- **Two flags, not one.** `NODE_ENV=production` only means "built + HTTPS" (Secure
+  cookies); `PUBLIC_DEMO=true` is the shared-demo posture. `resolveConfig(env)` is pure
+  and the live `config` object can be patched by tests (`overrideConfigForTests`) so the
+  same built server is exercised in both postures — no module re-import tricks.
+- **Lockout exemption over lockout tuning.** For the seeded showcase accounts in
+  public-demo mode, failures are still verified, recorded and counted but never set
+  `lockedUntil`; the exempt set is derived from the seed plan (cannot drift). A shorter
+  lock would still let one loop deny the demo; per-IP lockout state would be a tracking
+  mechanism. Brute-force pressure is bounded by the per-client login rate limit instead —
+  safe because those passwords are public by design.
+- **Rate limiter keyed by user where authenticated, by IP only where anonymous**, in
+  RAM only, bounded (5 000 keys/bucket, oldest evicted, stale swept). Off unless
+  `PUBLIC_DEMO` (or `RATE_LIMITS=true`).
+- **Resource caps apply in every mode** (generous; live rows only) — they are ordinary
+  server-side bounds, not demo behaviour; they surface as 409 `limit_reached`.
+- **Whole-file resets.** `npm run db:baseline` = `migrate deploy` + seed + self-check
+  into an explicit path; `SEED_NOW` pins the seed instant (content-deterministic; ids and
+  bcrypt salts stay random by design).
+
+**Surprises.** (1) The pre-installed Playwright Chromium (1194) did not match the repo's
+Playwright (1228) — the existing `PLAYWRIGHT_CHROMIUM_PATH` escape hatch handled it. (2)
+Prettier flags 186 pre-existing files; `verify` does not run `format:check`, so
+formatting was left untouched to keep the diff reviewable. (3) The invitation route did
+not catch `InvitationError` on create — the new cap surfaced as a 500 until it did.
+
+**Outcome:** `npm run verify` green (lint 0 warnings, typecheck ×4, **458**
+unit/integration tests in 42 files — was 398/34 — build ×4); Playwright **48/48**;
+`npm run db:baseline` verified. PR opened for review; not merged.
+
+---
+
 ## Session 12 — v1.0.0 Polish, hardening, loans/CDs/interest, final retrospective — 2026-06-29
 
 **Goal:** the human's v0.9.0 review approved moving to v1.0.0 and, in the same message,

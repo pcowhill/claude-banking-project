@@ -5,6 +5,15 @@
 
 ## Where we are
 
+> **Update 2026-09-29 — public-demo readiness (post-v1.0.0) is implemented and awaiting
+> the human's PR review.** See `docs/PUBLIC_DEMO_DEPLOYMENT.md` (the application contract
+> for the eventual `banking.cowhill.dev` / `banking-ops.cowhill.dev` deployment),
+> `docs/process/TASK_BOARD.md` (`P-01…P-12`), and `feedback/FEEDBACK_v1.0.1_…md`. The
+> most likely next session is the **infrastructure task** (Lightsail, Caddy, systemd +
+> daily whole-DB reset, Route 53, deploy workflow) — which this repository deliberately
+> does **not** contain — or follow-ups from the review. Everything below about v1.0.0
+> still holds.
+
 `v1.0.0 — Polish, hardening, loans/CDs/interest, final retrospective` is **complete**
 and tagged locally (annotated tag on the milestone commit; the human pushes it on merge
 to `main` — tag push is blocked in this environment, HTTP 403). **v1.0.0 is the FINAL
