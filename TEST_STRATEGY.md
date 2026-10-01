@@ -35,6 +35,21 @@ plan:
   asserts each app loads, shows its simulation disclaimer, and renders core
   shell content (e.g. derived dashboard balances; operations overview).
 
+### 4. Deployment pipeline (Vitest project `deploy`, `scripts/deploy/test/`)
+
+- Drive the real deployment scripts against temporary directories — a fake `ssh`
+  on `PATH` (real rsync over it), a fake service helper that records whether the
+  server lock was held, a fake public verifier, a local HTTP/HTTPS stand-in for
+  Caddy. Release validation, publication/reruns, rollback target, locked
+  compare-and-swap switch, reset-after-unlock, rollback paths, stale runs,
+  pruning, SSH config (`ssh -G`), archive integrity, and the workflows' gates and
+  secret exposure (YAML evaluated). **Never** contact a server. Need bash,
+  util-linux `flock`, rsync and OpenSSH: skipped where missing, required in CI
+  (`REQUIRE_DEPLOY_TESTS=1`).
+- The packaged release itself is built and smoke-tested (packaged backend +
+  packaged `node_modules`) by the `package-release` CI job on every PR and `main`
+  push, and locally by `npm run release:dry-run`.
+
 ## What runs where
 
 | Command | Layers | In `verify`? | In CI? |
@@ -42,6 +57,8 @@ plan:
 | `npm run test` | unit + integration | ✅ | ✅ (verify job) |
 | `npm run build` | compile-time safety net | ✅ | ✅ |
 | `npm run test:e2e` | smoke | ❌ (kept fast) | ✅ (separate job) |
+| `npm run lint:deploy` | shellcheck of `scripts/deploy` | ❌ | ✅ (verify job) |
+| `npm run release:dry-run` | build + packaged smoke test + archive round-trip | ❌ | ✅ (`package-release` job) |
 
 `verify` deliberately excludes Playwright so it stays fast and dependency-light
 (no browser download needed to run the gate). CI runs Playwright in its own job

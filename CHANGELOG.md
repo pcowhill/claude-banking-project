@@ -8,6 +8,44 @@ milestone-based [Semantic Versioning](https://semver.org/) tags (`vX.Y.0`).
 
 ## [Unreleased]
 
+### Production deployment pipeline (GitHub Actions → AWS Lightsail)
+
+Deploys the public demo (`banking.cowhill.dev` / `banking-ops.cowhill.dev`) to the
+server foundation installed by `pcowhill/cowhill-infrastructure` (contract version 1).
+Application deployment lives here; infrastructure stays there. Still a simulation.
+
+- **CI-gated deployment** in `ci.yml`: `verify` + `e2e` → `package-release` → `deploy`.
+  Deploys only for a push / manual run on `main` after every prerequisite succeeded; pull
+  requests run a packaging dry run but never deploy or see a secret; `contents: read`;
+  CI on Node.js 22; production jobs serialised in `meridian-production` (never
+  cancelled); stale runs (target ≠ current `main`) exit 0 without switching.
+- **Immutable release** built in Actions (`scripts/deploy/build-release.sh`):
+  `customer/`, `operations/` (`VITE_PUBLIC_DEMO=true`, same-origin API), `backend/`,
+  production `node_modules` (`collect-runtime-deps.mjs`: the backend's lockfile-checked
+  production closure incl. the generated Prisma client + engine; no symlinks / `.bin` /
+  dev packages), `baseline/meridian-baseline.db` (`SEED_NOW` = commit time, checked
+  through the release's own Prisma client), `package.json` (`"type": "module"`),
+  `REVISION`.
+- **Smoke test of the exact artifact** (`smoke-release.sh`): packaged backend +
+  `node_modules` on a copy of the packaged baseline in the production posture.
+- **Checksummed hand-over** (`archive-release.sh` / `extract-release.sh`), **pinned SSH**
+  (`ssh-setup.sh`: strict host key, `BatchMode`, secrets via env only, `always()`
+  cleanup), **server-side release script** streamed over SSH
+  (`remote/meridian-release.sh`: preflight, validate, publish with `.release-ready` last,
+  rollback target, locked compare-and-swap switch, reset via the infrastructure helper
+  after the lock is released, verify, prune).
+- **Public verification** (`verify-public.mjs`): DNS + verified TLS before any change;
+  after the switch `/status` (ok, DB connected, `publicDemo`, `revision`), `/health`,
+  SPA routes, `X-Robots-Tag`, the demo warning in the bundle, `robots.txt`, an Engine.IO
+  handshake. **Rollback** to the previous release (fresh baseline) on failure; `stop` if
+  the rollback fails.
+- **Manual "Reset demo data" workflow** (`reset-demo.yml`): only the helper's `reset`,
+  same concurrency group, public verification.
+- **`GET /status` reports `revision`** (the release's `REVISION`; `null` in development).
+- **Tests:** +132 (129 deployment tests driving the real scripts with a fake `ssh`,
+  service helper and verifier; workflow gate/secret checks; 3 revision tests).
+  `npm run release:dry-run`, `npm run lint:deploy`.
+
 ### Public-demo readiness (application-level preparation for a shared portfolio deployment)
 
 Prepares the simulation to be hosted publicly as a **shared, disposable public demo**

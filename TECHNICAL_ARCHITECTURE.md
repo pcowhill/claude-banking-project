@@ -127,9 +127,15 @@ limiter (`apps/backend/src/abuse/rate-limit.ts`, HTTP 429), a 64 KiB body ceilin
 `X-Robots-Tag`. Per-user/per-resource caps on live rows apply in every mode. All
 mutable state is one SQLite file addressed by an absolute `DATABASE_URL`; the unit of
 reset is the whole file, built by `npm run db:baseline` (`migrate deploy` + seed,
-`SEED_NOW`-pinned). The full contract is `docs/PUBLIC_DEMO_DEPLOYMENT.md`; the
-infrastructure itself (reverse proxy, process manager, DNS, deploy workflow) is
-deliberately outside this repository.
+`SEED_NOW`-pinned). The full contract is `docs/PUBLIC_DEMO_DEPLOYMENT.md`. The
+**application deployment** lives here: `.github/workflows/ci.yml` packages an
+immutable release after verify + e2e pass on `main`, smoke-tests it, and deploys it
+over SSH with `scripts/deploy/` (locked `current` switch, reset onto the release's
+baseline, public verification, rollback, pruning); `reset-demo.yml` resets the demo
+on demand. The **server infrastructure** (Caddy, systemd units, the root-owned
+reset helper and daily timer, accounts, DNS) is deliberately outside this repository,
+in `pcowhill/cowhill-infrastructure`. `GET /status` also reports the deployed
+`revision` (the release's `REVISION` file; `null` in local development).
 
 ### Drop-in marketing images
 
