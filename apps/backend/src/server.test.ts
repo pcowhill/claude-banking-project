@@ -31,6 +31,8 @@ describe('backend server', () => {
     expect(body.version).toBe(APP_VERSION);
     expect(body.isSimulation).toBe(true);
     expect(['ok', 'degraded']).toContain(body.status);
+    // Not running from a packaged release → no REVISION file → null.
+    expect(body.revision).toBeNull();
   });
 
   it('GET /api/meta returns the simulation disclaimer', async () => {

@@ -20,6 +20,7 @@ function statusWith(publicDemo: boolean): StatusResponse {
     environment: 'test',
     publicDemo,
     database: { connected: true, users: 4, accounts: 4 },
+    revision: null,
     serverTime: new Date().toISOString(),
   };
 }
