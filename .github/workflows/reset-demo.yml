@@ -1,0 +1,73 @@
+# Reset the shared Meridian public demo to the CURRENT release's pristine
+# baseline — without deploying code. Manual only ("Run workflow" on main).
+#
+# The only state-changing operation is the root-owned infrastructure helper:
+#
+#   sudo -n /usr/local/sbin/cowhill-meridian-service reset
+#
+# which takes the shared server lock itself (so this workflow never does),
+# stops the backend, replaces the whole live SQLite database with the release's
+# baseline, starts the backend and checks its local /health and /status.
+# Afterwards the public sites are verified. The daily 04:00 America/New_York
+# reset stays owned by the infrastructure (meridian-reset.timer).
+#
+# Shares the `meridian-production` concurrency group with the deploy job in
+# ci.yml, so a reset and a deployment never overlap (queued, never cancelled).
+name: Reset demo data
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reset:
+    name: Reset the public demo data
+    # Only the reviewed workflow on main may touch production.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: meridian-production
+      cancel-in-progress: false
+    env:
+      LIGHTSAIL_HOST: ${{ vars.LIGHTSAIL_HOST }}
+      LIGHTSAIL_USER: ${{ vars.LIGHTSAIL_USER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The ONLY step that sees the secrets (environment variables → files).
+      - name: Prepare the pinned SSH configuration
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
+        run: scripts/deploy/ssh-setup.sh "${RUNNER_TEMP}/meridian-ssh"
+
+      - name: SSH preflight (deploy-meridian, restricted sudo contract)
+        run: |
+          set -Eeuo pipefail
+          cfg="${RUNNER_TEMP}/meridian-ssh/config"
+          user="$(timeout 60 ssh -F "${cfg}" meridian 'id -un')"
+          [[ "${user}" == "deploy-meridian" ]] || { echo "::error::connected as '${user}', expected deploy-meridian"; exit 1; }
+          echo "connected as ${user}"
+          timeout 60 ssh -F "${cfg}" meridian 'sudo -n /usr/local/sbin/cowhill-meridian-service status'
+
+      - name: Reset (infrastructure helper; takes the server lock itself)
+        run: |
+          set -Eeuo pipefail
+          timeout --kill-after=15 900 ssh -F "${RUNNER_TEMP}/meridian-ssh/config" meridian \
+            'sudo -n /usr/local/sbin/cowhill-meridian-service reset'
+
+      - name: Public verification
+        run: node scripts/deploy/verify-public.mjs live
+
+      - name: Remove SSH files from the runner
+        if: ${{ always() }}
+        run: scripts/deploy/ssh-cleanup.sh "${RUNNER_TEMP}/meridian-ssh"
