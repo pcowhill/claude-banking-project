@@ -1047,7 +1047,7 @@ All 30 points accepted. Shape: `verify` + `e2e` → `package-release` → `deplo
 `ci.yml` (no separate push workflow); `reset-demo.yml`; scripts in `scripts/deploy/`
 (build, runtime-dependency collection, baseline check, smoke test, validation, archive /
 extract, SSH setup / cleanup, the orchestrator with rollback, the HTTP verifier, the
-server-side release script) with 129 deployment tests; docs (§14–§20 of
+server-side release script) with 130 deployment tests; docs (§14–§20 of
 `docs/PUBLIC_DEMO_DEPLOYMENT.md`, README, architecture).
 
 ## Deferred feedback

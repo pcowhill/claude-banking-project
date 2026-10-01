@@ -2,7 +2,8 @@
 // scripts, checked statically: who can deploy, which job sees secrets, the
 // shared concurrency group, strict host keys, no ssh-keyscan / gh /
 // pull_request_target, and no npm/build/Prisma on the server.
-import { readdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
@@ -318,6 +319,30 @@ describe('scripts and workflows: forbidden patterns', () => {
     expect(text).not.toMatch(
       /rejectUnauthorized:\s*false|NODE_TLS_REJECT_UNAUTHORIZED|curl[^\n]*\s(-k|--insecure)\b/,
     );
+  });
+
+  it('every script a workflow invokes directly is executable (git mode 100755)', () => {
+    const invoked = new Set<string>();
+    for (const file of allWorkflowFiles) {
+      for (const m of readText(join(WORKFLOWS_DIR, file)).matchAll(
+        /(?:^|[\s|&;])(scripts\/deploy\/[\w./-]+\.(?:sh|mjs))/gm,
+      )) {
+        invoked.add(m[1]);
+      }
+    }
+    expect(invoked.size).toBeGreaterThan(5);
+    const modes = spawnSync('git', ['ls-files', '-s', 'scripts/deploy'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    }).stdout;
+    for (const script of invoked) {
+      // `node scripts/deploy/x.mjs` does not need the bit, but keep them uniform.
+      expect(statSync(join(REPO_ROOT, script)).mode & 0o111, script).not.toBe(0);
+      if (modes)
+        expect(modes, script).toMatch(
+          new RegExp(`^100755 \\S+ \\d\\s+${script.replace(/\./g, '\\.')}$`, 'm'),
+        );
+    }
   });
 
   it('pins StrictHostKeyChecking yes in the generated SSH config', () => {

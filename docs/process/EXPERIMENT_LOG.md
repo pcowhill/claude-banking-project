@@ -40,8 +40,11 @@ customer static root — the build drops `.gitkeep` explicitly; anything else fa
 (harmless, ≈2 MiB) because the lockfile marks them non-dev. (3) As in session 13 the
 sandbox's Chromium build differed from the pinned Playwright — `PLAYWRIGHT_CHROMIUM_PATH`
 handled it. (4) Prettier still flags pre-existing files; only new files were formatted.
+(5) Self-review caught `deploy-release.sh` committed without its executable bit (written
+after the bulk `chmod`), which would have failed the first `main` run; fixed, and a test
+now asserts every script a workflow invokes is mode 100755.
 
-**Outcome:** `npm run verify` green (lint, typecheck ×4, **590** unit/integration +
+**Outcome:** `npm run verify` green (lint, typecheck ×4, **591** unit/integration +
 deployment tests in 50 files — was 458/42 — build ×4); Playwright **48/48**;
 `npm run release:dry-run` (build, packaged smoke test, archive, checksum, extract,
 validate) green; shellcheck + actionlint clean. Nothing was run against the real server.

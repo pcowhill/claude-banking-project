@@ -15,7 +15,7 @@
   check, server validation, `.release-ready` last, locked compare-and-swap `current`
   switch, `reset` after the lock is released, server + public verification, rollback,
   pruning). `reset-demo.yml` resets on demand. `/status` reports `revision`. Server side
-  = `pcowhill/cowhill-infrastructure` (contract v1, unchanged). Scripts + 129 tests in
+  = `pcowhill/cowhill-infrastructure` (contract v1, unchanged). Scripts + 130 tests in
   `scripts/deploy/`; docs §14–§20 of `docs/PUBLIC_DEMO_DEPLOYMENT.md`. Branch
   `claude/nice-lovelace-i7sj6j`, PR open, **not merged — merging performs the first real
   deployment.** Version stays **1.0.0**.

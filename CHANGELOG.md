@@ -42,7 +42,7 @@ Application deployment lives here; infrastructure stays there. Still a simulatio
 - **Manual "Reset demo data" workflow** (`reset-demo.yml`): only the helper's `reset`,
   same concurrency group, public verification.
 - **`GET /status` reports `revision`** (the release's `REVISION`; `null` in development).
-- **Tests:** +132 (129 deployment tests driving the real scripts with a fake `ssh`,
+- **Tests:** +133 (130 deployment tests driving the real scripts with a fake `ssh`,
   service helper and verifier; workflow gate/secret checks; 3 revision tests).
   `npm run release:dry-run`, `npm run lint:deploy`.
 
