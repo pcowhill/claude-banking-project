@@ -87,11 +87,12 @@ above are exempt from the lock (so one visitor cannot lock them for everyone), t
 sign-in endpoint is rate-limited instead, and real visitor IPs / user-agents are never
 stored.
 
-### Public-demo mode (preparing for a shared, public portfolio deployment)
+### Public-demo mode and the live portfolio demo
 
-The app was written as a local simulation; it can now also run as an explicitly
-opt-in **shared, disposable public demo**. Nothing changes for local development unless
-you set the flags.
+The app was written as a local simulation; it can also run as an explicitly opt-in
+**shared, disposable public demo** — live at **https://banking.cowhill.dev** (customer)
+and **https://banking-ops.cowhill.dev** (operations), both still a SIMULATION. Nothing
+changes for local development unless you set the flags.
 
 | Setting | Effect |
 | --- | --- |
@@ -101,8 +102,20 @@ you set the flags.
 | `npm run db:baseline` | Build a pristine seeded SQLite baseline for whole-database resets (`--out <file>`, `SEED_NOW=<iso>` for deterministic content). |
 
 Full contract — hostnames, proxy paths, cookies, privacy, limits, resets, SPA fallback —
-in [`docs/PUBLIC_DEMO_DEPLOYMENT.md`](docs/PUBLIC_DEMO_DEPLOYMENT.md). No infrastructure
-(Caddy, systemd, AWS, deploy workflow) lives in this repository.
+in [`docs/PUBLIC_DEMO_DEPLOYMENT.md`](docs/PUBLIC_DEMO_DEPLOYMENT.md).
+
+**Deployment.** Every push to `main` whose CI (lint, typecheck, unit/integration tests,
+build **and** Playwright e2e) passes is packaged in GitHub Actions into an immutable
+release (both built SPAs, the bundled backend, its production `node_modules`, a pristine
+baseline database, `REVISION`), smoke-tested as packaged, and deployed to the AWS
+Lightsail VM over a pinned SSH connection — `current` is switched under the server's
+lock, the demo is reset onto the new release's fresh baseline, and the public sites are
+verified (with automatic rollback on failure). Pull requests never deploy. A manual
+**Reset demo data** workflow restores the pristine data without deploying. No Docker,
+no build or `npm` on the server, no separate API hostname. The server side (Caddy,
+systemd, the reset helper and timer, accounts) lives in the separate
+`pcowhill/cowhill-infrastructure` repository; this repository owns only the
+application release. Details: [`docs/PUBLIC_DEMO_DEPLOYMENT.md` §14–§20](docs/PUBLIC_DEMO_DEPLOYMENT.md#14-deployment-pipeline-github-actions--lightsail).
 
 ### New in v1.0.0 (loans, CDs, interest accrual, CSRF, simulated-date fix, corrected marketing)
 
@@ -330,6 +343,8 @@ in [`docs/PUBLIC_DEMO_DEPLOYMENT.md`](docs/PUBLIC_DEMO_DEPLOYMENT.md). No infras
 | `npm run build` | Build all three apps. |
 | `npm run lint` / `npm run format` | Lint / format the repo. |
 | `npm run clean` | Remove build artifacts, generated code, and the local DB. |
+| `npm run release:dry-run` | Build + smoke-test + archive the public-demo release for `HEAD` locally (Node.js 22; never contacts a server). |
+| `npm run lint:deploy` | Shellcheck the deployment scripts (`scripts/deploy/`). |
 
 ### Running one app at a time
 
@@ -348,6 +363,8 @@ apps/operations   Operations simulator React app
 packages/shared   Shared types, constants, brand tokens, money/ledger logic
 assets/           Brand SVGs and image-generation prompts
 docs/             Project state + the process/experiment framework
+scripts/deploy/   Release packaging + Lightsail deployment scripts (and their tests)
+.github/workflows CI + gated production deploy (ci.yml), manual demo reset (reset-demo.yml)
 ```
 
 ## The disciplined ledger (why balances are trustworthy)

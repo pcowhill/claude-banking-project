@@ -5,6 +5,17 @@
 
 ## Where we are
 
+> **Update 2026-10-01 — the production deployment pipeline is implemented and awaiting
+> the human's PR review** (branch `claude/nice-lovelace-i7sj6j`). Merging it to `main`
+> runs CI and then the **first real deployment** to `banking.cowhill.dev` /
+> `banking-ops.cowhill.dev`. Read `docs/PUBLIC_DEMO_DEPLOYMENT.md` §14–§20 (pipeline,
+> release, server procedure, verification, rollback, resets, troubleshooting),
+> `docs/process/TASK_BOARD.md` (`D-01…D-14`) and
+> `feedback/FEEDBACK_v1.0.2_2026-10-01_2058.md`. Likely next session: watch/fix the
+> first deployment run, or follow-ups from the review (e.g. moving the four Actions
+> settings into a `main`-restricted environment). Infrastructure changes belong in
+> `pcowhill/cowhill-infrastructure`, never here.
+>
 > **Update 2026-09-29 — public-demo readiness (post-v1.0.0) is implemented and awaiting
 > the human's PR review.** See `docs/PUBLIC_DEMO_DEPLOYMENT.md` (the application contract
 > for the eventual `banking.cowhill.dev` / `banking-ops.cowhill.dev` deployment),

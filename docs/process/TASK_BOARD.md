@@ -437,6 +437,33 @@ dependencies · status · result/outcome · related commit/tag.
 | R-02 | ADR-0003 (lending + simulated-date-everywhere) | Process Scribe + Backend | Record ADR-0003: the lending/CD/interest ledger model, and the decision to make the **simulation clock the single authoritative "now"** for all money/business dating (**superseding ADR-0002 #2**), with the auth/operational wall-clock exception + the ordering tiebreaker | V-01,L-03 | Done | `docs/process/decisions/ADR-0003-lending-and-simulated-date-everywhere.md` — the lending/CD/interest ledger model + the simulation clock as the single money "now" (supersedes ADR-0002 #2), the auth/operational wall-clock exception, the ordering tiebreak, CSRF + the TOCTOU/audit dispositions |
 | R-03 | Handoff docs + version 1.0.0 + tag | Process Scribe | Update ALL handoff docs (milestone report, human review **answering the placeholder + date + loans/CDs questions**, next prompt, PROJECT_STATE, NEXT_SESSION, CHANGELOG, QUALITY_REPORT, EXPERIMENT_LOG, ROADMAP, ROADMAP_HISTORY, README), bump version to **1.0.0**, annotated tag `v1.0.0`. Commit + push the session branch | R-01,R-02 | Done | All handoff docs updated (milestone report, human review, `NEXT_SESSION_PROMPT_v1.0.0`, PROJECT_STATE, NEXT_SESSION, CHANGELOG, QUALITY_REPORT, EXPERIMENT_LOG Session 12, ROADMAP/ROADMAP_HISTORY re-scope, README); version bumped to **1.0.0**; annotated tag `v1.0.0` created locally (push blocked by env policy HTTP 403 — human pushes on merge); session branch committed |
 
+## Production deployment pipeline (post-v1.0.0; GitHub Actions → Lightsail)  ✅ Done (PR for human review)
+
+> Requested by the human after the public-demo readiness work (see
+> `feedback/FEEDBACK_v1.0.2_2026-10-01_2058.md`): the server infrastructure
+> (`pcowhill/cowhill-infrastructure`, contract version 1 — read, **not** modified) is
+> installed; implement the application's deployment pipeline. Not a roadmap milestone;
+> version stays 1.0.0. Branch `claude/nice-lovelace-i7sj6j` (intended name
+> `feature/production-deployment-pipeline`). **Not merged — merging is the first real
+> deployment and awaits the human's review.**
+
+| ID | Title | Role | Acceptance criteria | Deps | Status | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| D-01 | Gated CI shape | CI (serial) | `verify` + `e2e` → `package-release` → `deploy` in `ci.yml`; deploy only for push/dispatch on `main` with every prerequisite succeeded; PRs never deploy or see secrets; `contents: read`; no `pull_request_target`/`gh`; Node 22 | — | Done | `ci.yml`; per-commit workflow concurrency (PRs still cancel); `workflows.test.ts` evaluates the `if:` gates |
+| D-02 | Production build + baseline | Release | `VITE_PUBLIC_DEMO=true`, no `VITE_API_URL`/`VITE_WS_URL`; `db:baseline --out` with `SEED_NOW` = committer time; baseline checked through the release's Prisma client | — | Done | `build-release.sh`, `check-baseline.mjs` |
+| D-03 | Production `node_modules` | Release | Backend's production closure from the installed tree, lockfile non-dev only, no workspace links / `.bin` / symlinks, Prisma client + engine kept with modes, bundle imports resolve | D-02 | Done | `collect-runtime-deps.mjs` (79 packages, ≈39 MiB) |
+| D-04 | Release shape + validation | Release | `customer/ operations/ backend/ node_modules/ baseline/ package.json REVISION`; no `.release-ready`; one validator shared by runner + server | D-02,D-03 | Done | `validate-release.sh` → `remote/meridian-release.sh validate`; `release-validation.test.ts` |
+| D-05 | Smoke test of the packaged artifact | Testing/QA | Node 22, packaged backend + `node_modules`, temp copy of the baseline, production env; `/health`, `/status` ok/connected/publicDemo/revision, Socket.IO, clean SIGTERM, release unmodified | D-04 | Done | `smoke-release.sh` (+ `verify-public.mjs backend`) |
+| D-06 | Artifact integrity | CI | Reproducible tarball + SHA-256 via job output; verified, safe extraction, re-validation before SSH; 3-day retention | D-04 | Done | `archive-release.sh`, `extract-release.sh`; `archive.test.ts` |
+| D-07 | Pinned SSH | Security (serial) | Key 0600 + `ssh-keygen` check, exact known_hosts with an entry for the host, `StrictHostKeyChecking yes`, `BatchMode`, no keyscan/accept-new, secrets via env only, `always()` cleanup | — | Done | `ssh-setup.sh`, `ssh-cleanup.sh`; `ssh-setup.test.ts` (`ssh -G`) |
+| D-08 | Preflights + stale protection | Deploy | `id -un` = deploy-meridian, helper `status`, dirs/lock/space/platform; public DNS + verified TLS before any change; target == `refs/heads/main` before contact and before the switch, else exit 0 | D-07 | Done | `deploy-release.sh`, `remote … preflight`, `verify-public.mjs preflight` |
+| D-09 | Upload + immutable publication | Deploy | rsync into `incoming/<sha>/` (no links); server validation; `releases/<sha>`; chmod; `.release-ready` last; safe reruns; never touch `current`'s release | D-04,D-08 | Done | `remote … publish`; `remote-server.test.ts` |
+| D-10 | Locked switch + reset-on-deploy | Deploy (serial) | Rollback target captured; `flock -w 300` read-only; compare-and-swap `mv -T`; lock released BEFORE `sudo -n … reset` | D-09 | Done | `remote … rollback-target / switch / reset`; fake helper proves the lock is free at reset |
+| D-11 | Verification + rollback + pruning | Deploy | Server revision + status; public checks (status/revision, SPA routes, X-Robots-Tag, notice, robots.txt, Socket.IO); rollback with fresh baseline, stop on failed rollback; prune after success only (current + previous) | D-10 | Done | `remote … verify / prune`, `verify-public.mjs live`; `deploy-flow.test.ts` |
+| D-12 | Manual reset workflow | CI | `workflow_dispatch` only, main only, same SSH setup + concurrency group, only the helper `reset`, public verification | D-07 | Done | `reset-demo.yml` |
+| D-13 | `/status.revision` | Backend/API | Additive: the release's `REVISION` (null in dev) | — | Done | `revision.ts` + test; shared `StatusResponse` |
+| D-14 | Docs + validation + PR | Process Scribe / QA | Deployment doc §14–§20, README, architecture; `npm ci`, `db:reset`, `verify`, `test:e2e`, dry run, shellcheck, actionlint; PR, not merged | all | Done | See the PR description / final report |
+
 ## Public-demo readiness (post-v1.0.0; application-level only)  ✅ Done (PR for human review)
 
 > Requested by the human after v1.0.0 (see

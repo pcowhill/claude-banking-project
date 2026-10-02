@@ -11,4 +11,7 @@ export default defineWorkspace([
   'packages/shared',
   'apps/backend',
   'apps/customer',
+  // Deployment pipeline (release validation, server-side release script, locking,
+  // rollback, workflow security) — shell scripts driven against temp dirs only.
+  'scripts/deploy',
 ]);

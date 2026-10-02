@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# TEST FIXTURE — stands in for `ssh` (first on PATH) in scripts/deploy/test.
+# Accepts `ssh -F <config> meridian <command…>` and runs the command LOCALLY
+# against the temporary server tree in MERIDIAN_TEST_ROOT, the way the real
+# server would: `id -un` answers deploy-meridian, the helper's sudo invocation
+# goes to MERIDIAN_TEST_HELPER, rsync's server side writes under the test root.
+set -Eeuo pipefail
+: "${MERIDIAN_TEST_ROOT:?}" "${MERIDIAN_TEST_HELPER:?}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -F | -o | -p | -l | -i) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+host="${1:?host}"
+shift
+[[ "${host}" == "meridian" ]] || { echo "fake-ssh: unexpected host ${host}" >&2; exit 255; }
+cmd="$*"
+printf '%s\n' "${cmd}" >> "${MERIDIAN_TEST_ROOT}/fake-ssh.log"
+if [[ -f "${MERIDIAN_TEST_ROOT}/fake-ssh-down" ]]; then
+  echo "ssh: connect to host meridian port 22: Connection refused" >&2
+  exit 255
+fi
+case "${cmd}" in
+  "id -un") echo deploy-meridian ;;
+  "sudo -n /usr/local/sbin/cowhill-meridian-service "*) exec "${MERIDIAN_TEST_HELPER}" "${cmd##* }" ;;
+  "rsync --server "*) exec bash -c "${cmd//\/srv\/apps\/meridian/${MERIDIAN_TEST_ROOT}/srv/apps/meridian}" ;;
+  "bash -s -- "*) exec bash -c "${cmd}" ;;
+  *) echo "fake-ssh: refusing unexpected remote command: ${cmd}" >&2; exit 254 ;;
+esac

@@ -6,6 +6,20 @@
 
 ## At a glance
 
+- **Post-v1.0.0 (2026-10-01): production deployment pipeline — awaiting review.**
+  `ci.yml` now runs `verify` + `e2e` → `package-release` → `deploy`: every `main` commit
+  whose CI passed is built into an immutable release (both SPAs with
+  `VITE_PUBLIC_DEMO=true`, the bundled backend, its production `node_modules` incl. the
+  Prisma engine, a `SEED_NOW`-pinned baseline, `REVISION`), smoke-tested as packaged,
+  checksummed, and deployed to Lightsail as `deploy-meridian` over pinned SSH (stale-main
+  check, server validation, `.release-ready` last, locked compare-and-swap `current`
+  switch, `reset` after the lock is released, server + public verification, rollback,
+  pruning). `reset-demo.yml` resets on demand. `/status` reports `revision`. Server side
+  = `pcowhill/cowhill-infrastructure` (contract v1, unchanged). Scripts + 130 tests in
+  `scripts/deploy/`; docs §14–§20 of `docs/PUBLIC_DEMO_DEPLOYMENT.md`. Branch
+  `claude/nice-lovelace-i7sj6j`, PR open, **not merged — merging performs the first real
+  deployment.** Version stays **1.0.0**.
+
 - **Post-v1.0.0 (2026-09-29): public-demo readiness — application level, awaiting review.**
   The simulation can now be hosted as a **shared, disposable public demo** via two explicit
   flags: `NODE_ENV=production` (Secure cookies; production builds call their own origin —

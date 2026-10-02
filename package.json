@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Meridian (Simulated) — a local-first simulated consumer banking platform with a companion bank-operations simulator. NOT a real bank. No real money, accounts, or financial integrations.",
+  "description": "Meridian (Simulated) \u2014 a local-first simulated consumer banking platform with a companion bank-operations simulator. NOT a real bank. No real money, accounts, or financial integrations.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20.0.0",
@@ -22,6 +22,7 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:deploy": "shellcheck scripts/deploy/*.sh scripts/deploy/lib/*.sh scripts/deploy/remote/*.sh scripts/deploy/test/fixtures/*.sh scripts/deploy/test/fixtures/bin/ssh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -36,6 +37,7 @@
     "db:deploy": "npm run db:deploy -w @simbank/backend",
     "db:baseline": "npm run db:baseline -w @simbank/backend --",
     "start:backend": "npm run start -w @simbank/backend",
+    "release:dry-run": "bash scripts/deploy/dry-run.sh",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "clean": "node ./scripts/clean.mjs"
   },
@@ -55,6 +57,7 @@
     "tsx": "^4.19.2",
     "typescript": "~5.6.3",
     "typescript-eslint": "^8.13.0",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "yaml": "^2.9.1"
   }
 }

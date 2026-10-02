@@ -65,6 +65,11 @@ export interface StatusResponse {
     users: number;
     accounts: number;
   };
+  /**
+   * Full commit SHA of the deployed release (from the release's `REVISION` file),
+   * or `null` when not running from a packaged release (local development).
+   */
+  revision: string | null;
   serverTime: string;
 }
 

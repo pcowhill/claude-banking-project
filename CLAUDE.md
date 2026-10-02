@@ -97,8 +97,15 @@ docs/
   PROJECT_STATE.md, NEXT_SESSION.md
   process/      Experiment logs, task board, reviews, ADRs, feedback, blockers
 .claude/agents/ Controlled subagent role definitions
-.github/workflows/ci.yml  GitHub Actions CI
+scripts/deploy/ Release packaging + Lightsail deployment scripts and their tests
+.github/workflows/ci.yml          CI + gated production deploy (main only)
+.github/workflows/reset-demo.yml  Manual public-demo data reset
 ```
+
+Production deployment (public demo) happens **only** from `main` after CI passes; see
+`docs/PUBLIC_DEMO_DEPLOYMENT.md` §14–§20. Never run the deploy scripts against the real
+server from a feature branch; server infrastructure lives in
+`pcowhill/cowhill-infrastructure`.
 
 ## Controlled multi-agent workflow
 

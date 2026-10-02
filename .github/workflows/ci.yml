@@ -1,3 +1,24 @@
+# CI + production deployment of the Meridian SIMULATED banking public demo.
+#
+#   verify ──┐
+#            ├──> package-release ──> deploy      (push to main / manual run on main ONLY)
+#   e2e ─────┘
+#
+# - Pull requests (and manual runs on any other ref) run verify + e2e and, once
+#   both pass, build + smoke-test the release as a dry run. They never upload a
+#   release, never deploy and never see a production secret.
+# - A push to main (or "Run workflow" on main) packages the exact commit only
+#   after BOTH verify and e2e succeeded for it, smoke-tests the packaged
+#   release, and hands it (tarball + SHA-256) to the deploy job.
+# - Only the deploy job receives the SSH secrets. It runs in the
+#   `meridian-production` concurrency group (shared with reset-demo.yml), never
+#   cancelled, and refuses a stale commit (target != current main) before it
+#   changes anything on the server.
+#
+# Required repository configuration (Settings → Secrets and variables → Actions),
+# used ONLY by the deploy job: variables LIGHTSAIL_HOST, LIGHTSAIL_USER
+# (= deploy-meridian); secrets LIGHTSAIL_SSH_PRIVATE_KEY, LIGHTSAIL_KNOWN_HOSTS.
+# See docs/PUBLIC_DEMO_DEPLOYMENT.md ("Deployment pipeline").
 name: CI
 
 on:
@@ -6,20 +27,33 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# Pull requests: one run per PR, superseded runs cancelled. Everything else
+# (main pushes, manual runs): one group per commit and NEVER cancelled, so a new
+# push can never kill a deployment that is already switching the server.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || format('sha-{0}', github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The server runs Node.js 22 (infrastructure contract); CI builds and tests on it.
+  NODE_VERSION: 22
 
 jobs:
   verify:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       # `npm ci` runs the root postinstall, which generates the Prisma client.
@@ -29,18 +63,29 @@ jobs:
       - name: Set up local database (migrate + seed)
         run: npm run db:reset
 
+      - name: Shellcheck the deployment scripts
+        run: npm run lint:deploy
+
+      # Includes the deployment tests (scripts/deploy/test): release validation,
+      # the server-side release script against a temporary tree, locking,
+      # rollback, the workflows' security properties. Nothing contacts a server.
       - name: Verify (lint + typecheck + unit/integration tests + build)
+        env:
+          REQUIRE_DEPLOY_TESTS: '1'
         run: npm run verify
 
   e2e:
     name: Playwright smoke tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
@@ -62,3 +107,151 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # Runs for EVERY event once verify + e2e succeeded, so a pull request proves
+  # that its release still packages and boots (merging to main deploys). No
+  # secrets here; the artifact is only uploaded for main.
+  package-release:
+    name: Package and smoke-test the release
+    needs: [verify, e2e]
+    if: needs.verify.result == 'success' && needs.e2e.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+      archive: ${{ steps.archive.outputs.archive }}
+      archive_sha256: ${{ steps.archive.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Resolve the target commit
+        id: meta
+        run: |
+          set -Eeuo pipefail
+          sha="$(git rev-parse HEAD)"
+          [[ "${sha}" == "${GITHUB_SHA}" ]] || { echo "::error::checkout ${sha} != GITHUB_SHA ${GITHUB_SHA}"; exit 1; }
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Production builds (VITE_PUBLIC_DEMO=true, no VITE_API_URL/VITE_WS_URL),
+      # the pristine baseline (SEED_NOW = commit timestamp), the backend's
+      # production node_modules, REVISION, package.json — then validation.
+      - name: Build the release
+        env:
+          TARGET_SHA: ${{ steps.meta.outputs.sha }}
+        run: scripts/deploy/build-release.sh --sha "${TARGET_SHA}" --out "${RUNNER_TEMP}/meridian/release"
+
+      # The EXACT directory that is archived below: packaged backend + packaged
+      # node_modules + a copy of the packaged baseline, production posture.
+      - name: Smoke-test the packaged release
+        env:
+          TARGET_SHA: ${{ steps.meta.outputs.sha }}
+        run: scripts/deploy/smoke-release.sh "${RUNNER_TEMP}/meridian/release" "${TARGET_SHA}"
+
+      - name: Re-validate after the smoke test
+        env:
+          TARGET_SHA: ${{ steps.meta.outputs.sha }}
+        run: scripts/deploy/validate-release.sh "${RUNNER_TEMP}/meridian/release" "${TARGET_SHA}"
+
+      - name: Archive the release
+        id: archive
+        env:
+          TARGET_SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          set -Eeuo pipefail
+          out="${RUNNER_TEMP}/meridian/artifact"
+          scripts/deploy/archive-release.sh "${RUNNER_TEMP}/meridian/release" "${out}" "${TARGET_SHA}"
+          echo "archive=meridian-release-${TARGET_SHA}.tar.gz" >> "${GITHUB_OUTPUT}"
+          echo "sha256=$(cut -d' ' -f1 "${out}/meridian-release-${TARGET_SHA}.tar.gz.sha256")" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload the release artifact (main only)
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@v4
+        with:
+          name: meridian-release-${{ steps.meta.outputs.sha }}
+          path: ${{ runner.temp }}/meridian/artifact/
+          retention-days: 3
+          if-no-files-found: error
+          compression-level: 0
+
+  deploy:
+    name: Deploy to production (Lightsail)
+    needs: [verify, e2e, package-release]
+    # Same gate as packaging, plus every prerequisite must have SUCCEEDED (a
+    # skipped or failed job never deploys).
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      needs.verify.result == 'success' && needs.e2e.result == 'success' &&
+      needs.package-release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Serialised with every other deployment and with the manual reset; queued,
+    # never cancelled mid-flight.
+    concurrency:
+      group: meridian-production
+      cancel-in-progress: false
+    env:
+      TARGET_SHA: ${{ needs.package-release.outputs.sha }}
+      ARCHIVE_NAME: ${{ needs.package-release.outputs.archive }}
+      ARCHIVE_SHA256: ${{ needs.package-release.outputs.archive_sha256 }}
+      LIGHTSAIL_HOST: ${{ vars.LIGHTSAIL_HOST }}
+      LIGHTSAIL_USER: ${{ vars.LIGHTSAIL_USER }}
+    steps:
+      - name: Check the deployment target
+        run: |
+          set -Eeuo pipefail
+          [[ "${TARGET_SHA}" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad target SHA '${TARGET_SHA}'"; exit 1; }
+          [[ "${TARGET_SHA}" == "${GITHUB_SHA}" ]] || { echo "::error::package-release built ${TARGET_SHA}, this run is for ${GITHUB_SHA}"; exit 1; }
+          [[ "${ARCHIVE_NAME}" == "meridian-release-${TARGET_SHA}.tar.gz" ]] || { echo "::error::unexpected archive name"; exit 1; }
+          [[ "${ARCHIVE_SHA256}" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad archive SHA-256"; exit 1; }
+
+      # Credentials are kept (contents: read only) so the stale check can read
+      # refs/heads/main with `git ls-remote` — no gh, no extra token.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download the release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: meridian-release-${{ env.TARGET_SHA }}
+          path: ${{ runner.temp }}/meridian/artifact
+
+      - name: Verify the checksum, extract and re-validate
+        run: |
+          set -Eeuo pipefail
+          scripts/deploy/extract-release.sh \
+            "${RUNNER_TEMP}/meridian/artifact/${ARCHIVE_NAME}" "${ARCHIVE_SHA256}" "${RUNNER_TEMP}/meridian/release"
+          scripts/deploy/validate-release.sh "${RUNNER_TEMP}/meridian/release" "${TARGET_SHA}"
+
+      # The ONLY step that sees the secrets; they arrive as environment
+      # variables and are written to files, never echoed or passed as arguments.
+      - name: Prepare the pinned SSH configuration
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.LIGHTSAIL_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
+        run: scripts/deploy/ssh-setup.sh "${RUNNER_TEMP}/meridian-ssh"
+
+      - name: Deploy (preflight, upload, publish, switch, reset, verify, prune; rollback on failure)
+        run: |
+          set -Eeuo pipefail
+          export MERIDIAN_SSH_CONFIG="${RUNNER_TEMP}/meridian-ssh/config"
+          scripts/deploy/deploy-release.sh --sha "${TARGET_SHA}" --release "${RUNNER_TEMP}/meridian/release"
+
+      - name: Remove SSH files from the runner
+        if: ${{ always() }}
+        run: scripts/deploy/ssh-cleanup.sh "${RUNNER_TEMP}/meridian-ssh"

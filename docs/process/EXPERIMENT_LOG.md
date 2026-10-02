@@ -6,6 +6,52 @@ the top within each milestone. **Append; do not rewrite history.**
 
 ---
 
+## Session 14 — Production deployment pipeline (post-v1.0.0) — 2026-10-01
+
+**Goal:** the human's brief (saved verbatim in
+`feedback/FEEDBACK_v1.0.2_2026-10-01_2058.md`): deploy the public demo to the
+already-installed Lightsail infrastructure from GitHub Actions — gated on CI, immutable
+releases, a smoke-tested artifact, pinned SSH, stale-main protection, a locked
+`current` switch, reset on deploy, verification, rollback, pruning, a manual reset
+workflow, tests and docs — and open a PR **without** deploying from the branch.
+
+**Branch:** `claude/nice-lovelace-i7sj6j` (intended name `feature/production-deployment-pipeline`).
+
+**Key decisions.**
+- **Extend `ci.yml`, don't add a push workflow:** `deploy` `needs` verify + e2e +
+  package-release in the same run, so it can only ever deploy a commit whose CI passed.
+- **Runtime dependencies by walking the installed tree**, not `npm prune`: exact,
+  offline, lockfile-checked (non-dev only), no workspace symlinks or `.bin`; the Prisma
+  generated client + engine are copied with their modes; bundle imports must resolve.
+- **One validator for runner and server** (`remote/meridian-release.sh validate`), and
+  one server-side script streamed over SSH from the deployed commit — fixed actions,
+  SHA-only arguments, nothing installed on the server.
+- **Compare-and-swap switch:** inside the lock `current` must still be what the
+  deployment captured; staleness against `main` is re-checked on the runner just before.
+- **Tests drive the real scripts:** a fake `ssh` on PATH (real rsync over it), a fake
+  helper that records whether the lock is held at `reset`, a fake public verifier —
+  first deploy, upgrade, stale runs, pre-/post-switch failures, rollback, failed
+  rollback, reruns, pruning; plus YAML-level gate evaluation of the workflows.
+- **`/status.revision`** (additive) so public verification proves the new process serves.
+
+**Surprises.** (1) `public/images/.gitkeep` would have shipped as a dotfile under the
+customer static root — the build drops `.gitkeep` explicitly; anything else fails. (2)
+`socket.io`'s `engine.io` lists `@types/*` as production dependencies; they ship
+(harmless, ≈2 MiB) because the lockfile marks them non-dev. (3) As in session 13 the
+sandbox's Chromium build differed from the pinned Playwright — `PLAYWRIGHT_CHROMIUM_PATH`
+handled it. (4) Prettier still flags pre-existing files; only new files were formatted.
+(5) Self-review caught `deploy-release.sh` committed without its executable bit (written
+after the bulk `chmod`), which would have failed the first `main` run; fixed, and a test
+now asserts every script a workflow invokes is mode 100755.
+
+**Outcome:** `npm run verify` green (lint, typecheck ×4, **591** unit/integration +
+deployment tests in 50 files — was 458/42 — build ×4); Playwright **48/48**;
+`npm run release:dry-run` (build, packaged smoke test, archive, checksum, extract,
+validate) green; shellcheck + actionlint clean. Nothing was run against the real server.
+PR opened for review; not merged.
+
+---
+
 ## Session 13 — Public-demo readiness (post-v1.0.0, application-level) — 2026-09-29
 
 **Goal:** the human's post-v1.0.0 brief (saved verbatim in
